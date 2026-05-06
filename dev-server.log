@@ -1,0 +1,155 @@
+
+> solar-race-dashboard@0.1.0 dev
+> next dev -p 3001
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.1.145:3001
+✓ Ready in 803ms
+Creating turbopack project {
+  dir: 'C:\\Users\\tomta\\Desktop\\Pl project\\solar-race-dashboard',
+  testMode: true
+}
+
+ GET / 200 in 2.5s (next.js: 2.2s, application-code: 264ms)
+ GET / 200 in 98ms (next.js: 13ms, application-code: 85ms)
+ GET /day/1 200 in 1241ms (next.js: 1172ms, generate-params: 779ms, application-code: 69ms)
+ GET / 200 in 41ms (next.js: 6ms, application-code: 36ms)
+✓ Compiled in 42ms
+ GET / 200 in 355ms (next.js: 140ms, application-code: 216ms)
+ GET / 200 in 152ms (next.js: 7ms, application-code: 145ms)
+ GET / 200 in 102ms (next.js: 8ms, application-code: 94ms)
+ GET / 200 in 102ms (next.js: 52ms, application-code: 50ms)
+✓ Compiled in 61ms
+✓ Compiled in 97ms
+ GET / 200 in 430ms (next.js: 8ms, application-code: 422ms)
+ GET / 200 in 211ms (next.js: 43ms, application-code: 168ms)
+ GET / 200 in 120ms (next.js: 9ms, application-code: 112ms)
+ GET / 200 in 120ms (next.js: 70ms, application-code: 50ms)
+ GET / 200 in 192ms (next.js: 6ms, application-code: 186ms)
+ GET / 200 in 71ms (next.js: 5ms, application-code: 66ms)
+ GET /day/1 200 in 240ms (next.js: 156ms, generate-params: 10ms, application-code: 85ms)
+ GET / 200 in 42ms (next.js: 6ms, application-code: 36ms)
+ GET /day/5 200 in 982ms (next.js: 928ms, generate-params: 923ms, application-code: 53ms)
+ GET / 200 in 41ms (next.js: 5ms, application-code: 36ms)
+✓ Compiled in 62ms
+✓ Compiled in 96ms
+ GET / 200 in 335ms (next.js: 77ms, application-code: 258ms)
+ GET / 200 in 187ms (next.js: 6ms, application-code: 181ms)
+ GET / 200 in 144ms (next.js: 7ms, application-code: 138ms)
+ GET / 200 in 145ms (next.js: 52ms, application-code: 93ms)
+ GET / 200 in 145ms (next.js: 92ms, application-code: 53ms)
+ GET / 200 in 177ms (next.js: 6ms, application-code: 171ms)
+ GET /day/1 200 in 229ms (next.js: 155ms, generate-params: 7ms, application-code: 74ms)
+✓ Compiled in 104ms
+ GET /day/1 200 in 536ms (next.js: 180ms, generate-params: 7ms, application-code: 356ms)
+ GET /day/1 200 in 256ms (next.js: 7ms, generate-params: 44µs, application-code: 249ms)
+ GET /day/1 200 in 183ms (next.js: 11ms, generate-params: 40µs, application-code: 172ms)
+ GET /day/1 200 in 183ms (next.js: 116ms, generate-params: 35µs, application-code: 67ms)
+ GET /day/1 200 in 185ms (next.js: 63ms, generate-params: 36µs, application-code: 122ms)
+ GET / 200 in 57ms (next.js: 15ms, application-code: 41ms)
+ GET /day/1 200 in 59ms (next.js: 11ms, generate-params: 7ms, application-code: 48ms)
+ GET / 200 in 39ms (next.js: 6ms, application-code: 33ms)
+ GET /day/1 200 in 57ms (next.js: 10ms, generate-params: 6ms, application-code: 47ms)
+✓ Compiled in 65ms
+✓ Compiled in 79ms
+ GET /day/1 200 in 503ms (next.js: 178ms, generate-params: 7ms, application-code: 325ms)
+ GET /day/1 200 in 241ms (next.js: 6ms, generate-params: 37µs, application-code: 235ms)
+ GET /day/1 200 in 169ms (next.js: 109ms, generate-params: 28µs, application-code: 61ms)
+ GET /day/1 200 in 171ms (next.js: 57ms, generate-params: 28µs, application-code: 115ms)
+ GET /day/1 200 in 173ms (next.js: 6ms, generate-params: 27µs, application-code: 166ms)
+ GET /day/1 200 in 272ms (next.js: 12ms, generate-params: 7ms, application-code: 260ms)
+ GET / 200 in 65ms (next.js: 19ms, application-code: 46ms)
+ GET /day/2 200 in 59ms (next.js: 11ms, generate-params: 7ms, application-code: 48ms)
+ GET / 200 in 40ms (next.js: 4ms, application-code: 36ms)
+ GET /day/4 200 in 57ms (next.js: 11ms, generate-params: 6ms, application-code: 46ms)
+ GET / 200 in 38ms (next.js: 5ms, application-code: 34ms)
+ GET /day/5 200 in 57ms (next.js: 10ms, generate-params: 6ms, application-code: 46ms)
+ GET /day/3 200 in 66ms (next.js: 12ms, generate-params: 7ms, application-code: 54ms)
+✓ Compiled in 68ms
+ GET /day/3 200 in 285ms (next.js: 167ms, generate-params: 27µs, application-code: 117ms)
+ GET /day/3 200 in 398ms (next.js: 7ms, generate-params: 47µs, application-code: 391ms)
+ GET /day/3 200 in 1429ms (next.js: 921ms, generate-params: 7ms, application-code: 508ms)
+ GET /day/3 200 in 311ms (next.js: 214ms, generate-params: 39µs, application-code: 97ms)
+ GET /day/3 200 in 358ms (next.js: 8ms, generate-params: 29µs, application-code: 350ms)
+ GET /day/1 200 in 278ms (next.js: 16ms, generate-params: 7ms, application-code: 261ms)
+ GET / 200 in 598ms (next.js: 137ms, application-code: 461ms)
+ GET /day/2 200 in 126ms (next.js: 6ms, generate-params: 30µs, application-code: 121ms)
+ GET /day/3 200 in 366ms (next.js: 9ms, generate-params: 30µs, application-code: 357ms)
+ GET /day/4 200 in 264ms (next.js: 13ms, generate-params: 28µs, application-code: 251ms)
+ GET /day/5 200 in 265ms (next.js: 58ms, generate-params: 28µs, application-code: 207ms)
+✓ Compiled in 45ms
+ GET /day/3 200 in 412ms (next.js: 190ms, generate-params: 7ms, application-code: 222ms)
+ GET /day/3 200 in 147ms (next.js: 6ms, generate-params: 33µs, application-code: 141ms)
+ GET /day/3 200 in 63ms (next.js: 7ms, generate-params: 28µs, application-code: 56ms)
+✓ Compiled in 86ms
+✓ Compiled in 71ms
+ GET / 200 in 187ms (next.js: 138ms, application-code: 50ms)
+ GET / 200 in 43ms (next.js: 5ms, application-code: 37ms)
+ GET /day/3 200 in 331ms (next.js: 151ms, generate-params: 6ms, application-code: 180ms)
+ GET /day/3 200 in 125ms (next.js: 11ms, generate-params: 6ms, application-code: 114ms)
+ GET / 200 in 92ms (next.js: 5ms, application-code: 87ms)
+✓ Compiled in 75ms
+ GET /day/4 200 in 67ms (next.js: 13ms, generate-params: 7ms, application-code: 54ms)
+✓ Compiled in 78ms
+ GET /day/4 200 in 372ms (next.js: 197ms, generate-params: 6ms, application-code: 175ms)
+ GET /day/4 200 in 92ms (next.js: 7ms, generate-params: 31µs, application-code: 85ms)
+ GET / 200 in 51ms (next.js: 13ms, application-code: 38ms)
+ GET /day/1 200 in 60ms (next.js: 10ms, generate-params: 6ms, application-code: 50ms)
+✓ Compiled in 87ms
+ GET /day/1 200 in 337ms (next.js: 182ms, generate-params: 7ms, application-code: 155ms)
+ GET /day/1 200 in 81ms (next.js: 6ms, generate-params: 34µs, application-code: 75ms)
+✓ Compiled in 75ms
+✓ Compiled in 97ms
+✓ Compiled in 49ms
+ GET / 200 in 201ms (next.js: 141ms, application-code: 60ms)
+ GET / 200 in 208ms (next.js: 5ms, application-code: 204ms)
+ GET /day/3 200 in 87ms (next.js: 28ms, generate-params: 8ms, application-code: 59ms)
+✓ Compiled in 76ms
+✓ Compiled in 87ms
+✓ Compiled in 143ms
+ GET /day/1 200 in 276ms (next.js: 148ms, generate-params: 6ms, application-code: 129ms)
+ GET / 200 in 354ms (next.js: 136ms, application-code: 218ms)
+ GET /day/1 200 in 39ms (next.js: 12ms, generate-params: 7ms, application-code: 27ms)
+ GET /day/2 200 in 35ms (next.js: 11ms, generate-params: 5ms, application-code: 24ms)
+ GET / 200 in 98ms (next.js: 5ms, application-code: 93ms)
+ GET /day/3 200 in 37ms (next.js: 12ms, generate-params: 6ms, application-code: 25ms)
+ GET / 200 in 91ms (next.js: 5ms, application-code: 86ms)
+ GET /day/5 200 in 40ms (next.js: 10ms, generate-params: 6ms, application-code: 29ms)
+ GET / 200 in 88ms (next.js: 5ms, application-code: 83ms)
+ GET /day/1 200 in 40ms (next.js: 12ms, generate-params: 6ms, application-code: 29ms)
+ GET / 200 in 90ms (next.js: 5ms, application-code: 86ms)
+ GET / 200 in 90ms (next.js: 6ms, application-code: 84ms)
+ GET /day/1 200 in 137ms (next.js: 14ms, generate-params: 6ms, application-code: 123ms)
+ GET /day/2 200 in 73ms (next.js: 6ms, generate-params: 29µs, application-code: 67ms)
+ GET / 200 in 349ms (next.js: 6ms, application-code: 342ms)
+ GET /day/3 200 in 184ms (next.js: 5ms, generate-params: 30µs, application-code: 178ms)
+ GET /day/4 200 in 127ms (next.js: 6ms, generate-params: 27µs, application-code: 122ms)
+ GET /day/5 200 in 62ms (next.js: 5ms, generate-params: 27µs, application-code: 56ms)
+ GET /day/2 200 in 31ms (next.js: 10ms, generate-params: 6ms, application-code: 22ms)
+ GET / 200 in 84ms (next.js: 4ms, application-code: 80ms)
+ GET /day/3 200 in 33ms (next.js: 10ms, generate-params: 6ms, application-code: 23ms)
+ GET / 200 in 90ms (next.js: 5ms, application-code: 85ms)
+ GET / 200 in 135ms (next.js: 74ms, application-code: 61ms)
+ GET /day/2 200 in 216ms (next.js: 173ms, generate-params: 10ms, application-code: 42ms)
+ GET / 200 in 148ms (next.js: 5ms, application-code: 143ms)
+ GET /day/1 200 in 39ms (next.js: 15ms, generate-params: 6ms, application-code: 24ms)
+ GET /day/1 200 in 88ms (next.js: 11ms, generate-params: 6ms, application-code: 77ms)
+ GET / 200 in 83ms (next.js: 5ms, application-code: 78ms)
+ GET /day/1 200 in 35ms (next.js: 11ms, generate-params: 6ms, application-code: 24ms)
+ GET /day/3 200 in 33ms (next.js: 10ms, generate-params: 5ms, application-code: 24ms)
+ GET / 200 in 144ms (next.js: 9ms, application-code: 135ms)
+ GET /day/1 200 in 96ms (next.js: 15ms, generate-params: 9ms, application-code: 80ms)
+ GET / 200 in 219ms (next.js: 7ms, application-code: 213ms)
+ GET /day/2 200 in 262ms (next.js: 6ms, generate-params: 40µs, application-code: 255ms)
+ GET /day/3 200 in 179ms (next.js: 6ms, generate-params: 45µs, application-code: 173ms)
+ GET /day/4 200 in 180ms (next.js: 79ms, generate-params: 44µs, application-code: 101ms)
+ GET /day/5 200 in 77ms (next.js: 6ms, generate-params: 33µs, application-code: 71ms)
+ GET /day/2 200 in 50ms (next.js: 13ms, generate-params: 7ms, application-code: 37ms)
+ GET / 200 in 98ms (next.js: 5ms, application-code: 92ms)
+✓ Compiled in 79ms
+ GET / 200 in 341ms (next.js: 176ms, application-code: 165ms)
+ GET / 200 in 104ms (next.js: 6ms, application-code: 98ms)
+ GET /day/1 200 in 51ms (next.js: 19ms, generate-params: 6ms, application-code: 32ms)
+ GET / 200 in 199ms (next.js: 7ms, application-code: 192ms)
+ GET /day/3 200 in 35ms (next.js: 11ms, generate-params: 6ms, application-code: 24ms)
