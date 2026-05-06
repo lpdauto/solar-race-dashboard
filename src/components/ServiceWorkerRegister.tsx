@@ -9,6 +9,22 @@ export default function ServiceWorkerRegister() {
       return
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) =>
+          Promise.all(registrations.map((registration) => registration.unregister()))
+        )
+        .then(() => caches.delete('solar-race-dashboard-v1'))
+        .then(() => {
+          console.info('Solar Race service worker disabled for local development.')
+        })
+        .catch((error) => {
+          console.error('Could not disable local service worker:', error)
+        })
+      return
+    }
+
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
