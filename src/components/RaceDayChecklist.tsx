@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 
@@ -73,7 +73,7 @@ export default function RaceDayChecklist() {
         <button
           type="button"
           onClick={resetChecklist}
-          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
           Reset checklist
         </button>
@@ -81,7 +81,7 @@ export default function RaceDayChecklist() {
 
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
         <div
-          className="h-full rounded-full bg-teal-300 transition-all"
+          className="h-full rounded-full bg-[#ff3ea5] transition-all"
           style={{
             width: `${(completedCount / checklistItems.length) * 100}%`,
           }}
@@ -98,7 +98,7 @@ export default function RaceDayChecklist() {
               type="checkbox"
               checked={Boolean(checkedItems[item])}
               onChange={(event) => updateItem(item, event.target.checked)}
-              className="h-5 w-5 accent-teal-300"
+              className="h-5 w-5 accent-[#ff3ea5]"
             />
             <span>{item}</span>
           </label>
@@ -121,3 +121,5 @@ function readChecklist(): ChecklistState {
     return {}
   }
 }
+
+

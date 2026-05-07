@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 type TelemetryGaugeProps = {
   label: string
@@ -57,5 +57,7 @@ function gaugeColor(
   if (value === null) return 'bg-slate-600'
   if (dangerThreshold !== undefined && value >= dangerThreshold) return 'bg-red-400'
   if (warningThreshold !== undefined && value >= warningThreshold) return 'bg-yellow-300'
-  return 'bg-teal-300'
+  return 'bg-[#ff3ea5]'
 }
+
+

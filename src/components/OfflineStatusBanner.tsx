@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -29,7 +29,7 @@ export default function OfflineStatusBanner() {
     <div
       className={`border-b px-4 py-2 text-sm font-semibold ${
         isOnline
-          ? 'border-teal-300/20 bg-teal-300/10 text-teal-100'
+          ? 'border-[#ff3ea5]/20 bg-[#ff3ea5]/10 text-[#ff8fcb]'
           : 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100'
       }`}
     >
@@ -53,3 +53,5 @@ export default function OfflineStatusBanner() {
     </div>
   )
 }
+
+

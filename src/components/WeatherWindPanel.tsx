@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import type { RoutePoint } from '@/data/raceRoute'
 import { useRouteWeather } from '@/hooks/useRouteWeather'
@@ -16,7 +16,7 @@ const riskStyles: Record<WeatherRisk, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 export default function WeatherWindPanel({
@@ -63,7 +63,7 @@ export default function WeatherWindPanel({
           <button
             type="button"
             onClick={refreshWeather}
-            className="h-9 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+            className="h-9 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
           >
             Refresh weather
           </button>
@@ -71,7 +71,7 @@ export default function WeatherWindPanel({
       </div>
 
       {loading ? (
-        <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm font-semibold text-teal-100">
+        <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm font-semibold text-[#ff8fcb]">
           Loading weather strategy...
         </div>
       ) : null}
@@ -189,3 +189,5 @@ function Badge({ label, className }: { label: string; className: string }) {
     </span>
   )
 }
+
+

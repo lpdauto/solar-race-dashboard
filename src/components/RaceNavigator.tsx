@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import StrategyCallout, {
@@ -23,13 +23,13 @@ const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 const typeStyles: Record<SegmentType, string> = {
   climb: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
   descent: 'border-sky-300/30 bg-sky-300/10 text-sky-100',
-  flat: 'border-teal-300/30 bg-teal-300/10 text-teal-100',
+  flat: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   stop: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   town: 'border-violet-300/30 bg-violet-300/10 text-violet-100',
   caution: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
@@ -119,7 +119,7 @@ export default function RaceNavigator({
     <div className="grid gap-5">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
-          <p className="text-sm font-semibold text-teal-200">
+          <p className="text-sm font-semibold text-[#ff8fcb]">
             Live race-day navigator
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
@@ -133,7 +133,7 @@ export default function RaceNavigator({
             onClick={() => setViewMode('driver')}
             className={`h-10 rounded px-4 transition ${
               viewMode === 'driver'
-                ? 'bg-teal-300 text-slate-950'
+                ? 'bg-[#ff3ea5] text-white'
                 : 'text-slate-300 hover:bg-white/10'
             }`}
           >
@@ -144,7 +144,7 @@ export default function RaceNavigator({
             onClick={() => setViewMode('chase')}
             className={`h-10 rounded px-4 transition ${
               viewMode === 'chase'
-                ? 'bg-teal-300 text-slate-950'
+                ? 'bg-[#ff3ea5] text-white'
                 : 'text-slate-300 hover:bg-white/10'
             }`}
           >
@@ -166,7 +166,7 @@ export default function RaceNavigator({
               step="0.1"
               value={currentMile}
               onChange={(event) => updateCurrentMile(Number(event.target.value))}
-              className="w-full accent-teal-300"
+              className="w-full accent-[#ff3ea5]"
             />
           </label>
           <input
@@ -176,7 +176,7 @@ export default function RaceNavigator({
             step="0.1"
             value={currentMile}
             onChange={(event) => updateCurrentMile(Number(event.target.value))}
-            className="h-11 rounded-md border border-white/10 bg-slate-950 px-3 text-lg font-bold text-white outline-none focus:border-teal-300/60 lg:w-32"
+            className="h-11 rounded-md border border-white/10 bg-slate-950 px-3 text-lg font-bold text-white outline-none focus:border-[#ff3ea5]/60 lg:w-32"
           />
         </div>
 
@@ -234,8 +234,8 @@ function DriverView({
 }) {
   return (
     <section className="grid gap-4">
-      <div className="rounded-lg border border-teal-300/25 bg-teal-300/10 p-5 sm:p-6">
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal-100">
+      <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#ff3ea5]/10 p-5 sm:p-6">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#ff8fcb]">
           Current Mile
         </p>
         <p className="mt-2 text-5xl font-black text-white sm:text-7xl">
@@ -388,7 +388,7 @@ function ChaseView({
             <div
               key={`${segment.mileStart}-${segment.title}`}
               className={`grid grid-cols-[5.5rem_1fr_6rem_6rem] gap-2 px-3 py-3 text-sm ${
-                isActive ? 'bg-teal-300/10 text-white' : 'text-slate-300'
+                isActive ? 'bg-[#ff3ea5]/10 text-white' : 'text-slate-300'
               }`}
             >
               <span className="font-semibold">
@@ -410,7 +410,7 @@ function NavButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+      className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
     >
       {label}
     </button>
@@ -540,3 +540,5 @@ function calloutTypeForSegment(
   if (segment.type === 'town') return 'town'
   return 'energy'
 }
+
+

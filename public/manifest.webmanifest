@@ -1,11 +1,11 @@
-{
+﻿{
   "name": "Solar Race Strategy Dashboard",
   "short_name": "Solar Race",
   "description": "Offline race navigation and strategy dashboard for the solar car team",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#080808",
+  "theme_color": "#080808",
   "orientation": "landscape",
   "icons": [
     {
@@ -22,3 +22,4 @@
     }
   ]
 }
+

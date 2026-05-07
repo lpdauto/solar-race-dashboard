@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import DataManagementPanel from '@/components/DataManagementPanel'
 import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
 import RaceDayChecklist from '@/components/RaceDayChecklist'
@@ -9,7 +9,7 @@ const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 export default function HomePage() {
@@ -17,7 +17,7 @@ export default function HomePage() {
     <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 sm:p-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-200">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
             2026 Cross-Texas Solar Car Challenge
           </p>
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
@@ -29,7 +29,7 @@ export default function HomePage() {
                 Interactive route navigation, terrain risk, and energy planning for a five-day solar car race across Texas.
               </p>
             </div>
-            <div className="rounded-lg border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm text-teal-100">
+            <div className="rounded-lg border border-[#ff3ea5]/20 bg-[#ff3ea5]/10 px-4 py-3 text-sm text-[#ff8fcb]">
               Static route model ready for Phase 2 telemetry, DEM elevation, and live weather inputs.
             </div>
           </div>
@@ -48,11 +48,11 @@ export default function HomePage() {
           {raceRoute.map((raceDay) => (
             <article
               key={raceDay.day}
-              className="flex min-h-[24rem] flex-col rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-teal-300/40 hover:bg-white/[0.07]"
+              className="flex min-h-[24rem] flex-col rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-[#ff3ea5]/40 hover:bg-white/[0.07]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-teal-200">
+                  <p className="text-sm font-semibold text-[#ff8fcb]">
                     Day {raceDay.day}
                   </p>
                   <h2 className="mt-1 text-xl font-bold text-white">
@@ -94,7 +94,7 @@ export default function HomePage() {
 
               <Link
                 href={`/day/${raceDay.day}`}
-                className="mt-auto inline-flex h-11 items-center justify-center rounded-md bg-teal-300 px-4 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+                className="mt-auto inline-flex h-11 items-center justify-center rounded-md bg-[#ff3ea5] px-4 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
               >
                 View Day
               </Link>
@@ -159,7 +159,7 @@ function CollapsibleTile({
           <h2 className="text-lg font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">{summary}</p>
         </div>
-        <span className="rounded border border-teal-300/30 bg-teal-300/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal-100">
+        <span className="rounded border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-[#ff8fcb]">
           Open
         </span>
       </summary>
@@ -196,3 +196,5 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
     </span>
   )
 }
+
+

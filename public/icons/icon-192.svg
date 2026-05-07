@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Solar Race app icon">
-  <rect width="192" height="192" rx="42" fill="#020617"/>
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Solar Race app icon">
+  <rect width="192" height="192" rx="42" fill="#080808"/>
   <circle cx="145" cy="47" r="20" fill="#facc15"/>
-  <path d="M34 119c18-30 41-45 69-45 25 0 44 11 57 33" fill="none" stroke="#2dd4bf" stroke-width="12" stroke-linecap="round"/>
-  <path d="M31 128h96c15 0 27 10 31 24H63c-14 0-26-10-32-24Z" fill="#14b8a6"/>
+  <path d="M34 119c18-30 41-45 69-45 25 0 44 11 57 33" fill="none" stroke="#ff3ea5" stroke-width="12" stroke-linecap="round"/>
+  <path d="M31 128h96c15 0 27 10 31 24H63c-14 0-26-10-32-24Z" fill="#c2186a"/>
   <path d="M65 108h45l19 20H48l17-20Z" fill="#e2e8f0"/>
-  <circle cx="68" cy="151" r="10" fill="#020617" stroke="#e2e8f0" stroke-width="5"/>
-  <circle cx="135" cy="151" r="10" fill="#020617" stroke="#e2e8f0" stroke-width="5"/>
+  <circle cx="68" cy="151" r="10" fill="#080808" stroke="#e2e8f0" stroke-width="5"/>
+  <circle cx="135" cy="151" r="10" fill="#080808" stroke="#e2e8f0" stroke-width="5"/>
 </svg>
+
+

@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from 'next'
+﻿import type { Metadata, Viewport } from 'next'
 import OfflineStatusBanner from '@/components/OfflineStatusBanner'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 import './globals.css'
@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#020617',
+  themeColor: '#080808',
 }
 
 export default function RootLayout({
@@ -36,3 +36,4 @@ export default function RootLayout({
     </html>
   )
 }
+

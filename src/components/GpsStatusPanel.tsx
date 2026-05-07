@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import type { RoutePoint } from '@/data/raceRoute'
@@ -20,7 +20,7 @@ const confidenceStyles: Record<RouteMatchConfidence, string> = {
   high: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   low: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  unreliable: 'border-red-400/40 bg-red-400/10 text-red-100',
+  unreliable: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 export default function GpsStatusPanel({
@@ -91,13 +91,13 @@ export default function GpsStatusPanel({
     <div className="grid gap-4">
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
         <div>
-          <p className="text-sm font-semibold text-teal-200">
+          <p className="text-sm font-semibold text-[#ff8fcb]">
             GPS assist mode
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
             GPS works offline after the app is loaded. Internet is only needed for initial app load/API data.
           </p>
-          <p className="mt-2 inline-flex rounded border border-teal-300/30 bg-teal-300/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal-100">
+          <p className="mt-2 inline-flex rounded border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-[#ff8fcb]">
             Polyline snapping active
           </p>
         </div>
@@ -106,14 +106,14 @@ export default function GpsStatusPanel({
           <button
             type="button"
             onClick={startGpsMode}
-            className="h-10 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+            className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
           >
             Start GPS
           </button>
           <button
             type="button"
             onClick={geolocation.stopWatching}
-            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
           >
             Stop GPS
           </button>
@@ -134,7 +134,7 @@ export default function GpsStatusPanel({
       {(geolocation.status === 'unsupported' ||
         geolocation.status === 'permission-denied' ||
         geolocation.status === 'error') && geolocation.errorMessage ? (
-        <div className="rounded-md border border-red-400/35 bg-red-400/10 p-3 text-sm leading-6 text-red-100">
+        <div className="rounded-md border border-red-400/35 bg-red-400/10 p-3 text-sm leading-6 text-[#ff8fcb]">
           {geolocation.errorMessage}{' '}
           {geolocation.status === 'unsupported'
             ? 'GPS requires a secure context such as HTTPS or localhost.'
@@ -264,7 +264,7 @@ export default function GpsStatusPanel({
               value={testLat}
               onChange={(event) => setTestLat(event.target.value)}
               placeholder="30.50830"
-              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300/60"
+              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
             />
           </label>
           <label className="grid gap-1">
@@ -275,20 +275,20 @@ export default function GpsStatusPanel({
               value={testLng}
               onChange={(event) => setTestLng(event.target.value)}
               placeholder="-97.67890"
-              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300/60"
+              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
             />
           </label>
           <button
             type="button"
             onClick={useTestLocation}
-            className="h-10 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+            className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
           >
             Use test location
           </button>
           <button
             type="button"
             onClick={() => setTestLocation(null)}
-            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
           >
             Clear test location
           </button>
@@ -313,3 +313,5 @@ function formatStatus(status: string) {
   if (status === 'permission-denied') return 'Permission denied'
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
+
+

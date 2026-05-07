@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import type { RaceDay } from '@/data/raceRoute'
@@ -96,14 +96,14 @@ export default function WeatherCachePanel({ raceRoute }: WeatherCachePanelProps)
             type="button"
             onClick={preloadAllDays}
             disabled={loading}
-            className="h-10 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200 disabled:opacity-60"
+            className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f] disabled:opacity-60"
           >
             {loading ? 'Preloading...' : 'Preload all days'}
           </button>
           <button
             type="button"
             onClick={clearWeatherCache}
-            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
           >
             Clear weather cache
           </button>
@@ -111,7 +111,7 @@ export default function WeatherCachePanel({ raceRoute }: WeatherCachePanelProps)
       </div>
 
       {message ? (
-        <div className="mt-4 rounded-md border border-teal-300/30 bg-teal-300/10 p-3 text-sm leading-6 text-teal-100">
+        <div className="mt-4 rounded-md border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 p-3 text-sm leading-6 text-[#ff8fcb]">
           {message}
         </div>
       ) : null}
@@ -142,3 +142,5 @@ export default function WeatherCachePanel({ raceRoute }: WeatherCachePanelProps)
     </section>
   )
 }
+
+

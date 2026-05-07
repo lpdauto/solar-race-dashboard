@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useRef, useState } from 'react'
 import {
@@ -99,14 +99,14 @@ export default function DataManagementPanel() {
         <button
           type="button"
           onClick={exportSettings}
-          className="h-11 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+          className="h-11 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
           Export settings JSON
         </button>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="h-11 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+          className="h-11 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
           Select import JSON
         </button>
@@ -137,7 +137,7 @@ export default function DataManagementPanel() {
           <button
             type="button"
             onClick={cancelImport}
-            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+            className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
           >
             Cancel import
           </button>
@@ -151,7 +151,7 @@ export default function DataManagementPanel() {
               ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
               : message.type === 'warning'
                 ? 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100'
-                : 'border-red-400/30 bg-red-400/10 text-red-100'
+                : 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]'
           }`}
         >
           {message.text}
@@ -160,3 +160,5 @@ export default function DataManagementPanel() {
     </section>
   )
 }
+
+

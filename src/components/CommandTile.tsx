@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import type { WeatherRisk } from '@/types/weather'
 
@@ -32,7 +32,7 @@ const badgeStyles: Record<CommandTileRisk, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
   neutral: 'border-slate-300/30 bg-slate-300/10 text-slate-200',
 }
 
@@ -52,8 +52,8 @@ export default function CommandTile({
     <button
       type="button"
       onClick={() => onClick(id)}
-      className={`min-h-48 rounded-lg border border-t-4 border-white/10 bg-white/[0.045] p-4 text-left shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-teal-300/40 hover:bg-white/[0.07] ${riskStyles[riskLevel]} ${
-        isActive ? 'ring-2 ring-teal-300/50' : ''
+      className={`min-h-48 rounded-lg border border-t-4 border-white/10 bg-white/[0.045] p-4 text-left shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-[#ff3ea5]/40 hover:bg-white/[0.07] ${riskStyles[riskLevel]} ${
+        isActive ? 'ring-2 ring-[#ff3ea5]/50' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -92,3 +92,5 @@ export default function CommandTile({
     </button>
   )
 }
+
+

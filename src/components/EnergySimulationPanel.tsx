@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import type { RaceDay, RiskLevel } from '@/data/raceRoute'
@@ -19,7 +19,7 @@ const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 export default function EnergySimulationPanel({
@@ -55,7 +55,7 @@ export default function EnergySimulationPanel({
 
   if (loading) {
     return (
-      <div className="flex min-h-48 items-center justify-center rounded-md border border-white/10 bg-black/20 p-6 text-sm font-semibold text-teal-100">
+      <div className="flex min-h-48 items-center justify-center rounded-md border border-white/10 bg-black/20 p-6 text-sm font-semibold text-[#ff8fcb]">
         Loading energy model...
       </div>
     )
@@ -65,7 +65,7 @@ export default function EnergySimulationPanel({
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-teal-200">
+          <p className="text-sm font-semibold text-[#ff8fcb]">
             Physics-based day estimate
           </p>
           <p className="mt-1 text-sm text-slate-400">
@@ -134,3 +134,5 @@ function strategyText(risk: RiskLevel) {
 
   return 'Low energy risk. The route is manageable with this setup, but keep speed disciplined and preserve reserve for traffic, wind, or weather changes.'
 }
+
+

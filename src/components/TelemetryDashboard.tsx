@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import TelemetryGauge from '@/components/TelemetryGauge'
 import SystemHealthPanel from '@/components/SystemHealthPanel'
@@ -21,8 +21,8 @@ const statusStyles: Record<TelemetryConnectionStatus, string> = {
   disconnected: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   connecting: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   connected: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
-  simulated: 'border-teal-300/30 bg-teal-300/10 text-teal-100',
-  error: 'border-red-400/30 bg-red-400/10 text-red-100',
+  simulated: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
+  error: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
 
 const telemetrySources: TelemetrySource[] = [
@@ -69,7 +69,7 @@ export default function TelemetryDashboard({
           <select
             value={source}
             onChange={(event) => setSource(event.target.value as TelemetrySource)}
-            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300/60"
+            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
           >
             {telemetrySources.map((telemetrySource) => (
               <option key={telemetrySource} value={telemetrySource}>
@@ -81,21 +81,21 @@ export default function TelemetryDashboard({
         <button
           type="button"
           onClick={connect}
-          className="h-10 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+          className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
           Start simulation
         </button>
         <button
           type="button"
           onClick={disconnect}
-          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
           Stop simulation
         </button>
       </div>
 
       {status === 'error' ? (
-        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm leading-6 text-red-100">
+        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm leading-6 text-[#ff8fcb]">
           This telemetry source is reserved for future hardware integration. Switch back to simulator mode for live demo data.
         </div>
       ) : null}
@@ -166,3 +166,5 @@ function buildWarnings(telemetry: TelemetryData) {
 
   return warnings
 }
+
+

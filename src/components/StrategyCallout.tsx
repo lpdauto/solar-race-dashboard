@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import type { ReactNode } from 'react'
 
@@ -48,12 +48,12 @@ const calloutStyles: Record<
   energy: {
     label: 'Energy',
     icon: 'Wh',
-    className: 'border-teal-300/35 bg-teal-300/10 text-teal-100',
+    className: 'border-[#ff3ea5]/35 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   },
   wind: {
     label: 'Wind',
     icon: 'W',
-    className: 'border-cyan-300/35 bg-cyan-300/10 text-cyan-100',
+    className: 'border-[#ff3ea5]/35 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   },
   town: {
     label: 'Town',
@@ -88,3 +88,5 @@ export default function StrategyCallout({
     </article>
   )
 }
+
+

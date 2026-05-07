@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import StrategyRecommendationCard from '@/components/StrategyRecommendationCard'
@@ -23,7 +23,7 @@ type PredictiveStrategyPanelProps = {
 
 const modeStyles = {
   Conserve: 'border-yellow-300/35 bg-yellow-300/10 text-yellow-100',
-  Normal: 'border-teal-300/35 bg-teal-300/10 text-teal-100',
+  Normal: 'border-[#ff3ea5]/35 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   Attack: 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100',
 }
 
@@ -91,15 +91,15 @@ export default function PredictiveStrategyPanel({
       </div>
 
       <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_1fr]">
-        <div className="rounded-lg border border-teal-300/25 bg-teal-300/10 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-100">
+        <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#ff3ea5]/10 p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ff8fcb]">
             Recommended Speed
           </p>
           <p className="mt-2 text-5xl font-black text-white">
             {strategy.recommendedSpeedMph}
             <span className="ml-2 text-lg text-slate-300">mph</span>
           </p>
-          <p className="mt-3 text-sm leading-6 text-teal-50">
+          <p className="mt-3 text-sm leading-6 text-[#ff8fcb]">
             {strategy.driverAction}
           </p>
         </div>
@@ -152,3 +152,5 @@ function Metric({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+
+

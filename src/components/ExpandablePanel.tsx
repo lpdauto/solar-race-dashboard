@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 
@@ -55,8 +55,8 @@ export default function ExpandablePanel({
               onClick={() => setPinned(!pinned)}
               className={`h-10 rounded-md border px-3 text-sm font-bold transition ${
                 pinned
-                  ? 'border-teal-300/40 bg-teal-300/10 text-teal-100'
-                  : 'border-white/10 bg-white/5 text-slate-100 hover:border-teal-300/40'
+                  ? 'border-[#ff3ea5]/40 bg-[#ff3ea5]/10 text-[#ff8fcb]'
+                  : 'border-white/10 bg-white/5 text-slate-100 hover:border-[#ff3ea5]/40'
               }`}
             >
               {pinned ? 'Pinned' : 'Pin open'}
@@ -75,3 +75,5 @@ export default function ExpandablePanel({
     </div>
   )
 }
+
+

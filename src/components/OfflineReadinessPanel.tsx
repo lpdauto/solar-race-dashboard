@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -89,7 +89,7 @@ export default function OfflineReadinessPanel() {
         <button
           type="button"
           onClick={testOfflineReadiness}
-          className="h-10 rounded-md bg-teal-300 px-3 text-sm font-bold text-slate-950 transition hover:bg-teal-200"
+          className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
           Test offline readiness
         </button>
@@ -161,3 +161,5 @@ function ChecklistItem({
     </div>
   )
 }
+
+

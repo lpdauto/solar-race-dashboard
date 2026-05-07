@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import CarSetupPanel from '@/components/CarSetupPanel'
@@ -53,15 +53,15 @@ const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
   medium: 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100',
   high: 'border-orange-400/40 bg-orange-400/10 text-orange-100',
-  severe: 'border-red-400/40 bg-red-400/10 text-red-100',
+  severe: 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]',
 }
 
 const statusStyles: Record<TelemetryConnectionStatus, string> = {
   disconnected: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   connecting: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   connected: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
-  simulated: 'border-teal-300/30 bg-teal-300/10 text-teal-100',
-  error: 'border-red-400/30 bg-red-400/10 text-red-100',
+  simulated: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
+  error: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
 
 const weatherRiskToTileRisk: Record<WeatherRisk, CommandTileRisk> = {
@@ -191,11 +191,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
           <div className="flex flex-wrap items-center gap-2">
             <a
               href="/"
-              className="inline-flex h-9 items-center rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40"
+              className="inline-flex h-9 items-center rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40"
             >
               Back
             </a>
-            <span className="text-sm font-bold text-teal-200">
+            <span className="text-sm font-bold text-[#ff8fcb]">
               Day {raceDay.day}
             </span>
             <span className="text-sm font-semibold text-white">
@@ -219,7 +219,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         <section className="rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20">
           <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
             <div>
-              <p className="text-sm font-semibold text-teal-200">
+              <p className="text-sm font-semibold text-[#ff8fcb]">
                 Command Center
               </p>
               <h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">
@@ -232,7 +232,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 onClick={() => setViewMode('driver')}
                 className={`h-10 rounded px-4 transition ${
                   viewMode === 'driver'
-                    ? 'bg-teal-300 text-slate-950'
+                    ? 'bg-[#ff3ea5] text-white'
                     : 'text-slate-300 hover:bg-white/10'
                 }`}
               >
@@ -243,7 +243,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 onClick={() => setViewMode('chase')}
                 className={`h-10 rounded px-4 transition ${
                   viewMode === 'chase'
-                    ? 'bg-teal-300 text-slate-950'
+                    ? 'bg-[#ff3ea5] text-white'
                     : 'text-slate-300 hover:bg-white/10'
                 }`}
               >
@@ -620,7 +620,7 @@ function RouteSegmentsPanel({
             onChange={(event) =>
               setSegmentTypeFilter(event.target.value as 'all' | SegmentType)
             }
-            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300/60"
+            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
           >
             {['all', 'climb', 'descent', 'flat', 'stop', 'town', 'caution'].map(
               (type) => (
@@ -640,7 +640,7 @@ function RouteSegmentsPanel({
             onChange={(event) =>
               setSegmentRiskFilter(event.target.value as 'all' | RiskLevel)
             }
-            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300/60"
+            className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
           >
             {['all', 'low', 'medium', 'high', 'severe'].map((risk) => (
               <option key={risk} value={risk}>
@@ -654,7 +654,7 @@ function RouteSegmentsPanel({
             type="checkbox"
             checked={showUpcomingOnly}
             onChange={(event) => setShowUpcomingOnly(event.target.checked)}
-            className="h-5 w-5 accent-teal-300"
+            className="h-5 w-5 accent-[#ff3ea5]"
           />
           Show only upcoming
         </label>
@@ -668,7 +668,7 @@ function RouteSegmentsPanel({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-teal-200">
+                <p className="text-sm font-semibold text-[#ff8fcb]">
                   Mile {segment.mileStart} to {segment.mileEnd}
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-white">
@@ -754,3 +754,5 @@ function timelineColor(risk: RiskLevel) {
 function carSetupLabel() {
   return 'SET'
 }
+
+

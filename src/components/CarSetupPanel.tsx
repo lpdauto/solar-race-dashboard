@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import {
@@ -54,7 +54,7 @@ export default function CarSetupPanel() {
     <div className="grid gap-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <p className="text-sm font-semibold text-teal-200">
+          <p className="text-sm font-semibold text-[#ff8fcb]">
             Editable solar car model
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
@@ -64,7 +64,7 @@ export default function CarSetupPanel() {
         <button
           type="button"
           onClick={resetSetup}
-          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-teal-300/40 hover:bg-white/10"
+          className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
           Reset Defaults
         </button>
@@ -86,7 +86,7 @@ export default function CarSetupPanel() {
                 step={field.step}
                 value={carSetup[field.key]}
                 onChange={(event) => updateField(field.key, event.target.value)}
-                className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none transition focus:border-teal-300/60"
+                className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none transition focus:border-[#ff3ea5]/60"
               />
               <span className="w-10 text-right text-xs font-semibold text-slate-400">
                 {field.suffix}
@@ -98,3 +98,5 @@ export default function CarSetupPanel() {
     </div>
   )
 }
+
+
