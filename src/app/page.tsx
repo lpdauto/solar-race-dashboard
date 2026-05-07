@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link'
+import CourseMap from '@/components/CourseMap'
 import DataManagementPanel from '@/components/DataManagementPanel'
 import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
 import RaceDayChecklist from '@/components/RaceDayChecklist'
@@ -16,21 +17,35 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 sm:p-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
-            2026 Cross-Texas Solar Car Challenge
-          </p>
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <header className="relative overflow-hidden rounded-lg border border-[#ff3ea5]/20 bg-[#050505] p-5 shadow-2xl shadow-black/20 sm:p-6">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.16]"
+            style={{
+              backgroundImage: "url('/racer-x2-mark.svg')",
+              backgroundPosition: 'center 45%',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: 'min(64rem, 88vw)',
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_78%_12%,rgba(255,62,165,0.18),transparent_22rem),linear-gradient(90deg,rgba(0,0,0,0.1),rgba(0,0,0,0.76))]" />
+          <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
             <div>
-              <h1 className="text-3xl font-bold text-white sm:text-4xl">
-                Solar Race Strategy Dashboard
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
+                2026 Cross-Texas Solar Car Challenge
+              </p>
+              <h1 className="mt-3 flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 text-3xl font-black text-white sm:text-4xl">
+                <span className="font-black italic tracking-tight text-[#ff3ea5] drop-shadow-[0_0_16px_rgba(255,62,165,0.45)]">
+                  RACER X²
+                </span>
+                <span>Solar Race Strategy</span>
+                <span>Dashboard</span>
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
-                Interactive route navigation, terrain risk, and energy planning for a five-day solar car race across Texas.
+                Interactive route navigation, terrain risk, and energy planning for Temple City&apos;s all-female solar car team.
               </p>
             </div>
-            <div className="rounded-lg border border-[#ff3ea5]/20 bg-[#ff3ea5]/10 px-4 py-3 text-sm text-[#ff8fcb]">
-              Static route model ready for Phase 2 telemetry, DEM elevation, and live weather inputs.
+            <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#ff3ea5]/10 px-4 py-3 text-sm font-semibold text-[#ff8fcb]">
+              Static route model ready for telemetry, DEM elevation, live weather, and race-day strategy calls.
             </div>
           </div>
         </header>
@@ -40,6 +55,18 @@ export default function HomePage() {
           <SummaryMetric label="Hardest terrain day" value="Day 3" />
           <SummaryMetric label="Highest energy management risk" value="Day 4" />
           <SummaryMetric label="Most wind-exposed day" value="Day 5" />
+        </section>
+
+        <section className="grid gap-3">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
+              Full Route
+            </p>
+            <h2 className="mt-1 text-2xl font-black text-white">
+              Overall Course Map
+            </h2>
+          </div>
+          <CourseMap days={raceRoute} heightClass="h-[360px] md:h-[500px]" />
         </section>
 
         <WeatherCachePanel raceRoute={raceRoute} />

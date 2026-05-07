@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import CarSetupPanel from '@/components/CarSetupPanel'
 import CommandTile, { type CommandTileRisk } from '@/components/CommandTile'
+import CourseMap from '@/components/CourseMap'
+import DriverPaceCoach from '@/components/DriverPaceCoach'
 import ElevationProfile from '@/components/ElevationProfile'
 import EnergySimulationPanel from '@/components/EnergySimulationPanel'
 import ExpandablePanel from '@/components/ExpandablePanel'
@@ -18,6 +20,7 @@ import type {
   RouteSegment,
   SegmentType,
 } from '@/data/raceRoute'
+import { raceRoute } from '@/data/raceRoute'
 import { useElevationProfile } from '@/hooks/useElevationProfile'
 import { useRouteWeather } from '@/hooks/useRouteWeather'
 import { useTelemetry } from '@/hooks/useTelemetry'
@@ -37,10 +40,12 @@ type DayCommandCenterProps = {
 }
 
 type TileId =
+  | 'pace'
   | 'navigation'
   | 'strategy'
   | 'energy'
   | 'telemetry'
+  | 'map'
   | 'weather'
   | 'elevation'
   | 'car'
@@ -100,6 +105,19 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
           segment.type === 'town' ||
           segment.type === 'stop')
     ) ?? null
+  const nextImportantSegment =
+    sortedSegments.find(
+      (segment) =>
+        segment.mileStart > currentMile &&
+        segment.mileStart <= currentMile + 10 &&
+        (segment.type === 'climb' ||
+          segment.type === 'descent' ||
+          segment.type === 'stop' ||
+          segment.type === 'caution' ||
+          segment.type === 'town' ||
+          segment.risk === 'high' ||
+          segment.risk === 'severe')
+    ) ?? null
   const distanceRemaining = Math.max(0, raceDay.distanceMiles - currentMile)
   const telemetryController = useTelemetry({
     currentMile,
@@ -143,8 +161,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     manualMode,
     currentSegment,
     nextWarning,
+    nextImportantSegment,
     telemetryStatus: telemetryController.status,
     telemetrySpeed: telemetryController.telemetry?.speedMph,
+    telemetryControllerTemp: telemetryController.telemetry?.controllerTempC,
+    telemetryMotorTemp: telemetryController.telemetry?.motorTempC,
     telemetrySoc: telemetryController.telemetry?.batterySocPercent,
     energySimulation,
     predictiveStrategy,
@@ -205,12 +226,12 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
             <Badge label={telemetryController.status} className={statusStyles[telemetryController.status]} />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 xl:flex">
-            <StatusMetric label="Mile" value={currentMile.toFixed(1)} />
-            <StatusMetric label="Remain" value={`${distanceRemaining.toFixed(1)} mi`} />
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5 xl:flex">
+            <StatusMetric label="Current mile" value={currentMile.toFixed(1)} />
+            <StatusMetric label="Remaining" value={`${distanceRemaining.toFixed(1)} mi`} />
             <StatusMetric label="Finish SOC" value={`${predictiveStrategy.projectedFinishSoc.toFixed(0)}%`} />
-            <StatusMetric label="Weather" value={weather.strategySummary.weatherRisk} />
-            <StatusMetric label="Rec speed" value={`${predictiveStrategy.recommendedSpeedMph} mph`} />
+            <StatusMetric label="Weather risk" value={weather.strategySummary.weatherRisk} />
+            <StatusMetric label="Recommended speed" value={`${predictiveStrategy.recommendedSpeedMph} mph`} />
           </div>
         </div>
       </div>
@@ -312,6 +333,15 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         subtitle="Detailed race-day controls and analysis"
         onClose={() => setActiveTile(null)}
       >
+        {activeTile === 'pace' ? (
+          <DriverPaceCoach
+            telemetry={telemetryController.telemetry}
+            predictiveStrategy={predictiveStrategy}
+            currentSegment={currentSegment}
+            upcomingSegment={nextImportantSegment}
+          />
+        ) : null}
+
         {activeTile === 'navigation' ? (
           <div className="grid gap-4">
             <GpsStatusPanel
@@ -361,6 +391,15 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
           />
         ) : null}
 
+        {activeTile === 'map' ? (
+          <CourseMap
+            days={raceRoute}
+            currentDayNumber={raceDay.day}
+            currentMile={currentMile}
+            heightClass="h-[420px] md:h-[620px]"
+          />
+        ) : null}
+
         {activeTile === 'elevation' ? (
           <ElevationProfile day={raceDay.day} routePoints={raceDay.routePoints} />
         ) : null}
@@ -388,11 +427,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
 }
 
 const driverTileIds = new Set<TileId>([
+  'pace',
   'navigation',
   'strategy',
   'telemetry',
   'weather',
-  'elevation',
 ])
 
 function buildTiles({
@@ -402,8 +441,11 @@ function buildTiles({
   manualMode,
   currentSegment,
   nextWarning,
+  nextImportantSegment,
   telemetryStatus,
   telemetrySpeed,
+  telemetryControllerTemp,
+  telemetryMotorTemp,
   telemetrySoc,
   energySimulation,
   predictiveStrategy,
@@ -418,8 +460,11 @@ function buildTiles({
   manualMode: boolean
   currentSegment: RouteSegment | undefined
   nextWarning: RouteSegment | null
+  nextImportantSegment: RouteSegment | null
   telemetryStatus: TelemetryConnectionStatus
   telemetrySpeed?: number
+  telemetryControllerTemp?: number
+  telemetryMotorTemp?: number
   telemetrySoc?: number
   energySimulation: ReturnType<typeof simulateDayEnergy>
   predictiveStrategy: ReturnType<typeof generatePredictiveStrategy>
@@ -428,7 +473,39 @@ function buildTiles({
   weatherSource: string
   elevationGain: number
 }) {
+  const currentSpeed =
+    telemetrySpeed !== undefined
+      ? telemetrySpeed
+      : predictiveStrategy.recommendedSpeedMph
+  const speedDelta = currentSpeed - predictiveStrategy.recommendedSpeedMph
+  const paceStatus = getPaceStatus({
+    speedDelta,
+    projectedFinishSoc: predictiveStrategy.projectedFinishSoc,
+    controllerTemp: telemetryControllerTemp ?? 0,
+    motorTemp: telemetryMotorTemp ?? 0,
+  })
+  const paceRisk = paceStatusToTileRisk(paceStatus)
+
   return [
+    {
+      id: 'pace',
+      title: 'Driver Pace Coach',
+      mainValue: currentSpeed.toFixed(1),
+      mainUnit: 'mph',
+      supportingItems: [
+        { label: 'Target', value: `${predictiveStrategy.recommendedSpeedMph} mph` },
+        { label: 'Delta', value: `${speedDelta >= 0 ? '+' : ''}${speedDelta.toFixed(1)} mph` },
+        { label: 'Next', value: nextImportantSegment?.title ?? currentSegment?.title ?? 'Ready' },
+      ],
+      statusLabel: paceStatus,
+      riskLevel: paceRisk,
+      actionText: paceInstruction({
+        status: paceStatus,
+        speedDelta,
+        currentSegment: currentSegment ?? null,
+        upcomingSegment: nextImportantSegment,
+      }),
+    },
     {
       id: 'navigation',
       title: 'Navigation',
@@ -498,6 +575,20 @@ function buildTiles({
       statusLabel: weatherRisk,
       riskLevel: weatherRiskToTileRisk[weatherRisk],
       actionText: 'Open for headwind, crosswind, cloud, and solar advisory.',
+    },
+    {
+      id: 'map',
+      title: 'Course Map',
+      mainValue: `D${raceDay.day}`,
+      mainUnit: 'map',
+      supportingItems: [
+        { label: 'Mile', value: currentMile.toFixed(1) },
+        { label: 'Current', value: currentSegment?.title ?? 'Ready' },
+        { label: 'Overlay', value: 'terrain severity' },
+      ],
+      statusLabel: currentSegment?.risk ?? raceDay.riskLevel,
+      riskLevel: currentSegment?.risk ?? raceDay.riskLevel,
+      actionText: 'Open for full-route map, current day highlight, and endpoint markers.',
     },
     {
       id: 'elevation',
@@ -712,11 +803,13 @@ function MiniPanel({
 
 function StatusMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-white/10 bg-black/30 px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+    <div className="min-w-[7.75rem] rounded-md border border-[#ff3ea5]/20 bg-black/45 px-3 py-2.5 shadow-sm shadow-black/20">
+      <p className="text-[11px] font-black uppercase leading-none tracking-[0.12em] text-[#ff8fcb]">
         {label}
       </p>
-      <p className="text-sm font-black text-white">{value}</p>
+      <p className="mt-1.5 text-base font-black leading-none text-white">
+        {value}
+      </p>
     </div>
   )
 }
@@ -732,10 +825,12 @@ function Badge({ label, className }: { label: string; className: string }) {
 }
 
 function panelTitle(tileId: TileId | null) {
+  if (tileId === 'pace') return 'Driver Pace Coach'
   if (tileId === 'navigation') return 'Navigation'
   if (tileId === 'strategy') return 'Predictive Strategy'
   if (tileId === 'energy') return 'Energy Simulation'
   if (tileId === 'telemetry') return 'Telemetry'
+  if (tileId === 'map') return 'Course Map'
   if (tileId === 'weather') return 'Weather + Wind'
   if (tileId === 'elevation') return 'Elevation'
   if (tileId === 'car') return 'Car Setup'
@@ -753,6 +848,51 @@ function timelineColor(risk: RiskLevel) {
 
 function carSetupLabel() {
   return 'SET'
+}
+
+function getPaceStatus({
+  speedDelta,
+  projectedFinishSoc,
+  controllerTemp,
+  motorTemp,
+}: {
+  speedDelta: number
+  projectedFinishSoc: number
+  controllerTemp: number
+  motorTemp: number
+}) {
+  if (controllerTemp > 85 || motorTemp > 95) return 'THERMAL LIMIT'
+  if (projectedFinishSoc < 15) return 'CONSERVE NOW'
+  if (Math.abs(speedDelta) <= 1.5) return 'GOOD'
+  if (speedDelta > 1.5 && speedDelta <= 4) return 'SLIGHTLY FAST'
+  if (speedDelta > 4) return 'TOO FAST'
+  if (speedDelta < -4) return 'TOO SLOW'
+  return 'GOOD'
+}
+
+function paceStatusToTileRisk(status: ReturnType<typeof getPaceStatus>): CommandTileRisk {
+  if (status === 'GOOD') return 'low'
+  if (status === 'SLIGHTLY FAST' || status === 'TOO SLOW') return 'medium'
+  return 'severe'
+}
+
+function paceInstruction({
+  status,
+  speedDelta,
+  currentSegment,
+  upcomingSegment,
+}: {
+  status: ReturnType<typeof getPaceStatus>
+  speedDelta: number
+  currentSegment: RouteSegment | null
+  upcomingSegment: RouteSegment | null
+}) {
+  if (status === 'THERMAL LIMIT') return 'Watch temps'
+  if (status === 'CONSERVE NOW' || status === 'TOO FAST') return 'Slow down now'
+  if (status === 'SLIGHTLY FAST') return `Ease down ${Math.max(2, Math.round(speedDelta))} mph`
+  if (currentSegment?.type === 'descent') return 'Use regen carefully'
+  if (upcomingSegment?.type === 'climb') return 'Prepare for climb'
+  return 'Hold pace'
 }
 
 
