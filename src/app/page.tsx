@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link'
+import ConnectionStatusStrip from '@/components/ConnectionStatusStrip'
 import CourseMap from '@/components/CourseMap'
 import DataManagementPanel from '@/components/DataManagementPanel'
 import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
@@ -17,7 +18,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="relative overflow-hidden rounded-lg border border-[#ff3ea5]/20 bg-[#050505] p-5 shadow-2xl shadow-black/20 sm:p-6">
+        <header className="relative overflow-hidden rounded-lg border border-[#ff3ea5]/20 bg-[#050505] p-4 shadow-2xl shadow-black/20 sm:p-5">
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.16]"
             style={{
@@ -28,7 +29,7 @@ export default function HomePage() {
             }}
           />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_78%_12%,rgba(255,62,165,0.18),transparent_22rem),linear-gradient(90deg,rgba(0,0,0,0.1),rgba(0,0,0,0.76))]" />
-          <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
                 2026 Cross-Texas Solar Car Challenge
@@ -44,9 +45,7 @@ export default function HomePage() {
                 Interactive route navigation, terrain risk, and energy planning for Temple City&apos;s all-female solar car team.
               </p>
             </div>
-            <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#ff3ea5]/10 px-4 py-3 text-sm font-semibold text-[#ff8fcb]">
-              Static route model ready for telemetry, DEM elevation, live weather, and race-day strategy calls.
-            </div>
+            <ConnectionStatusStrip />
           </div>
         </header>
 
