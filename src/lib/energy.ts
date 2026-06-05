@@ -1,5 +1,7 @@
 import type { RiskLevel } from '@/data/raceRoute'
+import type { AppProfile } from '@/lib/aiRaceEngineer'
 import type { ElevationStats } from '@/lib/elevation'
+import { rx2Config } from '@/lib/race/rx2Config'
 
 export type CarSetup = {
   vehicleWeightLbs: number
@@ -14,6 +16,8 @@ export type CarSetup = {
   regenEfficiency: number
   solarWatts: number
   solarDrivingHours: number
+  spareBatterySocPercent: number
+  appProfile: AppProfile
 }
 
 export type EnergySimulationResult = {
@@ -35,19 +39,22 @@ const FEET_TO_METERS = 0.3048
 const MPH_TO_METERS_PER_SECOND = 0.44704
 const SOLAR_PRACTICAL_FACTOR = 0.65
 
+// RX2 vehicle configuration source
 export const defaultCarSetup: CarSetup = {
-  vehicleWeightLbs: 660,
-  driverCrewWeightLbs: 180,
-  batteryKwh: 4.992,
-  nominalVoltage: 76.8,
-  cruiseSpeedMph: 28,
-  cd: 0.35,
-  frontalAreaM2: 1.2,
-  rollingResistanceCoefficient: 0.012,
+  vehicleWeightLbs: rx2Config.baseVehicleWeightLbs,
+  driverCrewWeightLbs: rx2Config.requiredPassengerWeightLbs,
+  batteryKwh: rx2Config.mainBatteryUsableWh / 1000,
+  nominalVoltage: rx2Config.mainBatteryNominalVoltage,
+  cruiseSpeedMph: rx2Config.defaultTargetSpeedMph,
+  cd: rx2Config.estimatedCd,
+  frontalAreaM2: rx2Config.estimatedFrontalAreaM2,
+  rollingResistanceCoefficient: rx2Config.estimatedRollingResistance,
   drivetrainEfficiency: 0.82,
   regenEfficiency: 0.35,
-  solarWatts: 2000,
+  solarWatts: rx2Config.expectedSolarStationWatts,
   solarDrivingHours: 5,
+  spareBatterySocPercent: 100,
+  appProfile: 'team',
 }
 
 export const carSetupStorageKey = 'solar-race-car-setup'
@@ -165,6 +172,8 @@ export function normalizeCarSetup(value: Partial<CarSetup>): CarSetup {
     regenEfficiency: boundedEfficiency(value.regenEfficiency, defaultCarSetup.regenEfficiency),
     solarWatts: positiveNumber(value.solarWatts, defaultCarSetup.solarWatts),
     solarDrivingHours: positiveNumber(value.solarDrivingHours, defaultCarSetup.solarDrivingHours),
+    spareBatterySocPercent: socPercent(value.spareBatterySocPercent, defaultCarSetup.spareBatterySocPercent),
+    appProfile: appProfile(value.appProfile),
   }
 }
 
@@ -180,4 +189,16 @@ function boundedEfficiency(value: unknown, fallback: number) {
   }
 
   return Math.min(1, Math.max(0.01, value))
+}
+
+function socPercent(value: unknown, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.min(100, Math.max(0, value))
+}
+
+function appProfile(value: unknown): AppProfile {
+  return value === 'owner' ? 'owner' : defaultCarSetup.appProfile
 }

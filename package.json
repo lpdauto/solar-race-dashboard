@@ -5,6 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "enrich:elevation:mock": "node src/lib/routeImport/enrichRouteElevation.mjs",
+    "enrich:elevation:opentopo": "node src/lib/routeImport/enrichRouteElevation.mjs opentopodata",
+    "generate:route": "node src/lib/routeImport/generateRouteData.mjs",
+    "generate:mapped-route": "node src/lib/routeImport/generateMappedRaceSegments.mjs",
+    "report:elevation-impact": "node src/lib/routeImport/generateElevationImpactReport.mjs",
+    "test:elevation-energy": "node src/lib/routeImport/testElevationEnergy.mjs",
+    "validate:elevation": "node src/lib/routeImport/validateRouteElevation.mjs",
+    "validate:route": "node src/lib/routeImport/validateRouteData.mjs",
     "start": "next start",
     "lint": "eslint"
   },

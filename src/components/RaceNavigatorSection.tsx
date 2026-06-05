@@ -64,6 +64,9 @@ export default function RaceNavigatorSection({
         telemetry={telemetryController.telemetry}
         status={telemetryController.status}
         source={telemetryController.source}
+        connectionStatus={telemetryController.connectionStatus}
+        connectionError={telemetryController.connectionError}
+        lastPacketAt={telemetryController.lastPacketAt}
         connect={telemetryController.connect}
         disconnect={telemetryController.disconnect}
         setSource={telemetryController.setSource}
