@@ -2,6 +2,10 @@
 
 import TelemetryGauge from '@/components/TelemetryGauge'
 import SystemHealthPanel from '@/components/SystemHealthPanel'
+import {
+  exportRaceSnapshotsToCsv,
+  type RaceSnapshot,
+} from '@/lib/raceSnapshots'
 import type {
   TelemetryConnectionStatus,
   TelemetryData,
@@ -12,6 +16,11 @@ type TelemetryDashboardProps = {
   telemetry: TelemetryData | null
   status: TelemetryConnectionStatus
   source: TelemetrySource
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
+  connectionError?: string
+  lastPacketAt?: number
+  snapshots?: RaceSnapshot[]
+  onClearSnapshots?: () => void
   connect: () => void
   disconnect: () => void
   setSource: (source: TelemetrySource) => void
@@ -27,6 +36,9 @@ const statusStyles: Record<TelemetryConnectionStatus, string> = {
 
 const telemetrySources: TelemetrySource[] = [
   'simulator',
+  'mock-esp32',
+  'esp32',
+  'manual',
   'websocket',
   'serial',
   'ble',
@@ -37,6 +49,11 @@ export default function TelemetryDashboard({
   telemetry,
   status,
   source,
+  connectionStatus,
+  connectionError,
+  lastPacketAt,
+  snapshots = [],
+  onClearSnapshots,
   connect,
   disconnect,
   setSource,
@@ -55,7 +72,7 @@ export default function TelemetryDashboard({
         <div className="flex flex-wrap gap-2">
           <Badge label={status} className={statusStyles[status]} />
           <Badge
-            label={source}
+            label={telemetrySourceLabel(source)}
             className="border-violet-300/30 bg-violet-300/10 text-violet-100"
           />
         </div>
@@ -73,7 +90,7 @@ export default function TelemetryDashboard({
           >
             {telemetrySources.map((telemetrySource) => (
               <option key={telemetrySource} value={telemetrySource}>
-                {telemetrySource}
+                {telemetrySourceLabel(telemetrySource)}
               </option>
             ))}
           </select>
@@ -83,7 +100,7 @@ export default function TelemetryDashboard({
           onClick={connect}
           className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
-          Start simulation
+          {source === 'esp32' ? 'Start ESP32' : 'Start simulation'}
         </button>
         <button
           type="button"
@@ -94,9 +111,24 @@ export default function TelemetryDashboard({
         </button>
       </div>
 
+      <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-3">
+        <ConnectionMetric label="Source" value={telemetrySourceLabel(source)} />
+        <ConnectionMetric label="Connection" value={connectionStatus} />
+        <ConnectionMetric
+          label="Last packet"
+          value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'}
+        />
+        {connectionError ? (
+          <div className="sm:col-span-3 text-sm font-semibold text-[#ff8fcb]">
+            {connectionError}
+          </div>
+        ) : null}
+      </div>
+
       {status === 'error' ? (
         <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm leading-6 text-[#ff8fcb]">
-          This telemetry source is reserved for future hardware integration. Switch back to simulator mode for live demo data.
+          {connectionError ??
+            'This telemetry source is reserved for future hardware integration. Switch back to simulator mode for live demo data.'}
         </div>
       ) : null}
 
@@ -118,17 +150,133 @@ export default function TelemetryDashboard({
         <TelemetryGauge label="Battery SOC" value={telemetry?.batterySocPercent} unit="%" min={0} max={100} warningThreshold={30} dangerThreshold={85} precision={1} />
         <TelemetryGauge label="Battery Voltage" value={telemetry?.batteryVoltage} unit="V" min={68} max={86} precision={1} />
         <TelemetryGauge label="Battery Current" value={telemetry?.batteryCurrent} unit="A" min={-30} max={130} warningThreshold={85} dangerThreshold={105} precision={1} />
-        <TelemetryGauge label="Battery Power" value={telemetry ? telemetry.batteryPowerWatts / 1000 : null} unit="kW" min={-2} max={10} warningThreshold={6.5} dangerThreshold={8.5} precision={2} />
-        <TelemetryGauge label="Solar Power" value={telemetry?.solarPowerWatts} unit="W" min={0} max={2200} precision={0} />
+        <TelemetryGauge label="Battery Power" value={telemetry?.batteryPowerWatts !== undefined ? telemetry.batteryPowerWatts / 1000 : null} unit="kW" min={-2} max={10} warningThreshold={6.5} dangerThreshold={8.5} precision={2} />
+        <TelemetryGauge label="Solar Power" value={telemetry?.solarPowerWatts ?? telemetry?.mpptPowerWatts} unit="W" min={0} max={2200} precision={0} />
         <TelemetryGauge label="Controller Temp" value={telemetry?.controllerTempC} unit="C" min={20} max={100} warningThreshold={75} dangerThreshold={85} precision={1} />
         <TelemetryGauge label="Motor Temp" value={telemetry?.motorTempC} unit="C" min={20} max={110} warningThreshold={85} dangerThreshold={95} precision={1} />
-        <TelemetryGauge label="Efficiency" value={telemetry?.efficiencyWhPerMile} unit="Wh/mi" min={20} max={190} warningThreshold={120} dangerThreshold={140} precision={0} />
+        <TelemetryGauge label="Efficiency" value={telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile} unit="Wh/mi" min={20} max={190} warningThreshold={120} dangerThreshold={140} precision={0} />
         <TelemetryGauge label="Regen Power" value={telemetry?.regenWatts} unit="W" min={0} max={2000} precision={0} />
       </div>
 
       <SystemHealthPanel telemetry={telemetry} />
+
+      <RecentStrategyLog
+        snapshots={snapshots}
+        onClearSnapshots={onClearSnapshots}
+      />
     </section>
   )
+}
+
+function RecentStrategyLog({
+  snapshots,
+  onClearSnapshots,
+}: {
+  snapshots: RaceSnapshot[]
+  onClearSnapshots?: () => void
+}) {
+  const recentSnapshots = snapshots.slice(-5).reverse()
+  const hasSnapshots = snapshots.length > 0
+
+  function downloadCsv() {
+    if (!hasSnapshots || typeof window === 'undefined' || typeof document === 'undefined') {
+      return
+    }
+
+    const csv = exportRaceSnapshotsToCsv(snapshots)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = `rx2-strategy-log-${formatDownloadTimestamp(new Date())}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <h3 className="text-base font-bold text-white">Recent Strategy Log</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={downloadCsv}
+            disabled={!hasSnapshots}
+            className="h-9 rounded-md border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Download CSV
+          </button>
+          <button
+            type="button"
+            onClick={onClearSnapshots}
+            disabled={!onClearSnapshots || !hasSnapshots}
+            className="h-9 rounded-md border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Clear Log
+          </button>
+        </div>
+      </div>
+
+      {recentSnapshots.length === 0 ? (
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          No strategy snapshots recorded yet.
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-2">
+          {recentSnapshots.map((snapshot) => (
+            <article
+              key={`${snapshot.timestamp}-${snapshot.currentMile}`}
+              className="grid gap-2 rounded-md border border-white/10 bg-white/[0.035] p-3 text-sm md:grid-cols-[0.8fr_0.7fr_0.7fr_1.4fr_0.8fr_0.9fr]"
+            >
+              <LogField label="Time" value={formatSnapshotTime(snapshot.timestamp)} />
+              <LogField label="Speed" value={`${snapshot.speedMph.toFixed(1)} mph`} />
+              <LogField label="SOC" value={`${snapshot.batterySocPercent.toFixed(0)}%`} />
+              <LogField label="Command" value={snapshot.command ?? '--'} />
+              <LogField
+                label="Finish SOC"
+                value={
+                  snapshot.projectedFinishSoc !== undefined
+                    ? `${snapshot.projectedFinishSoc.toFixed(0)}%`
+                    : '--'
+                }
+              />
+              <LogField label="Swap" value={snapshot.swapAction ?? '--'} />
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function LogField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-semibold text-slate-100" title={value}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function formatSnapshotTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString()
+}
+
+function formatDownloadTimestamp(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${year}-${month}-${day}-${hours}${minutes}`
 }
 
 function Badge({ label, className }: { label: string; className: string }) {
@@ -141,14 +289,35 @@ function Badge({ label, className }: { label: string; className: string }) {
   )
 }
 
+function ConnectionMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-white">{value}</p>
+    </div>
+  )
+}
+
+function telemetrySourceLabel(source: TelemetrySource) {
+  if (source === 'mock-esp32') return 'Mock ESP32'
+  if (source === 'esp32') return 'ESP32 Live'
+
+  return source
+}
+
 function buildWarnings(telemetry: TelemetryData) {
   const warnings: string[] = []
+  const controllerTempC = telemetry.controllerTempC ?? 0
+  const motorTempC = telemetry.motorTempC ?? 0
+  const efficiencyWhPerMile = telemetry.efficiencyWhPerMile ?? telemetry.whPerMile ?? 0
 
-  if (telemetry.controllerTempC > 85) {
+  if (controllerTempC > 85) {
     warnings.push('Controller temperature critical.')
   }
 
-  if (telemetry.motorTempC > 95) {
+  if (motorTempC > 95) {
     warnings.push('Motor overheating risk.')
   }
 
@@ -160,7 +329,7 @@ function buildWarnings(telemetry: TelemetryData) {
     warnings.push('High current draw detected.')
   }
 
-  if (telemetry.efficiencyWhPerMile > 140) {
+  if (efficiencyWhPerMile > 140) {
     warnings.push('Vehicle efficiency degraded.')
   }
 

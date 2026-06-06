@@ -41,10 +41,15 @@ function HealthTile({ label, value }: { label: string; value: string }) {
 }
 
 function summarizeHealth(telemetry: TelemetryData) {
+  const controllerTempC = telemetry.controllerTempC ?? 0
+  const motorTempC = telemetry.motorTempC ?? 0
+  const efficiencyWhPerMile = telemetry.efficiencyWhPerMile ?? telemetry.whPerMile ?? 0
+  const regenWatts = telemetry.regenWatts ?? 0
+  const solarPowerWatts = telemetry.solarPowerWatts ?? telemetry.mpptPowerWatts ?? 0
   const thermalStatus =
-    telemetry.controllerTempC > 88 || telemetry.motorTempC > 96
+    controllerTempC > 88 || motorTempC > 96
       ? 'Critical thermal load'
-      : telemetry.controllerTempC > 78 || telemetry.motorTempC > 86
+      : controllerTempC > 78 || motorTempC > 86
         ? 'Watch temperatures'
         : 'Stable'
   const batteryReserve =
@@ -56,13 +61,13 @@ function summarizeHealth(telemetry: TelemetryData) {
   const drivetrainStatus =
     telemetry.batteryCurrent > 105
       ? 'Conserve energy'
-      : telemetry.efficiencyWhPerMile > 140
+      : efficiencyWhPerMile > 140
         ? 'Watch temperatures'
         : 'Stable'
   const chargingStatus =
-    telemetry.regenWatts > 300
+    regenWatts > 300
       ? 'Regen active'
-      : telemetry.solarPowerWatts > 1200
+      : solarPowerWatts > 1200
         ? 'Excellent'
         : 'Stable'
   const enduranceCondition =
@@ -70,9 +75,9 @@ function summarizeHealth(telemetry: TelemetryData) {
       ? 'Critical thermal load'
       : batteryReserve === 'Conserve energy'
         ? 'Conserve energy'
-        : telemetry.efficiencyWhPerMile > 140
+        : efficiencyWhPerMile > 140
           ? 'Watch temperatures'
-          : telemetry.solarPowerWatts > 1400 && telemetry.batterySocPercent > 50
+          : solarPowerWatts > 1400 && telemetry.batterySocPercent > 50
             ? 'Excellent'
             : 'Stable'
 

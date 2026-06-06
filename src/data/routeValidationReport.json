@@ -1,0 +1,852 @@
+{
+  "generatedAt": "2026-06-03T22:27:42.499Z",
+  "inputs": {
+    "routeDataPath": "src\\data\\routeData.json",
+    "raceRoutePath": "src\\data\\raceRoute.ts"
+  },
+  "totals": {
+    "generatedTotalRouteMiles": 777.5128,
+    "generatedDrivingMiles": 630.8471,
+    "generatedTrailerMiles": 146.6657,
+    "existingAppTotalMiles": 619.8,
+    "generatedTotalMinusExistingMiles": 157.7128,
+    "generatedDrivingMinusExistingMiles": 11.0471
+  },
+  "perDayComparison": [
+    {
+      "day": 1,
+      "existing": {
+        "start": "Fort Worth, TX",
+        "end": "Palestine, TX",
+        "distanceMiles": 153.6,
+        "segmentCount": 7
+      },
+      "generated": {
+        "totalMiles": 218.8876,
+        "drivingMiles": 156.7808,
+        "trailerMiles": 62.1068,
+        "segmentCount": 7,
+        "drivingSegmentCount": 4,
+        "trailerSegmentCount": 3
+      },
+      "differences": {
+        "generatedTotalMinusExistingMiles": 65.2876,
+        "generatedDrivingMinusExistingMiles": 3.1808,
+        "generatedTrailerMiles": 62.1068
+      },
+      "segmentComparison": {
+        "nameMatchedSegments": [],
+        "generatedSegmentsMissingFromExisting": [
+          {
+            "day": 1,
+            "segmentId": "day-1-driving-segment-1",
+            "segmentName": "Driving Segment 1",
+            "segmentType": "driving",
+            "segmentMiles": 29.0586
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-trailer-segment-1",
+            "segmentName": "Trailer Segment 1",
+            "segmentType": "trailer",
+            "segmentMiles": 44.3656
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-driving-segment-2",
+            "segmentName": "Driving Segment 2",
+            "segmentType": "driving",
+            "segmentMiles": 41.6059
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-driving-segment-3",
+            "segmentName": "Driving Segment 3",
+            "segmentType": "driving",
+            "segmentMiles": 38.7891
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-trailer-segment-2",
+            "segmentName": "Trailer Segment 2",
+            "segmentType": "trailer",
+            "segmentMiles": 11.0796
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-driving-segment-4",
+            "segmentName": "Driving Segment 4",
+            "segmentType": "driving",
+            "segmentMiles": 47.3272
+          },
+          {
+            "day": 1,
+            "segmentId": "day-1-trailer-segment-3",
+            "segmentName": "Trailer Segment 3",
+            "segmentType": "trailer",
+            "segmentMiles": 6.6616
+          }
+        ],
+        "existingSegmentsMissingFromGenerated": [
+          {
+            "day": 1,
+            "segmentName": "Fort Worth departure",
+            "segmentType": "caution",
+            "segmentMiles": 18.5
+          },
+          {
+            "day": 1,
+            "segmentName": "TX 114 to TX 51 transition",
+            "segmentType": "flat",
+            "segmentMiles": 24.7
+          },
+          {
+            "day": 1,
+            "segmentName": "Weatherford and Granbury corridor",
+            "segmentType": "town",
+            "segmentMiles": 21.6
+          },
+          {
+            "day": 1,
+            "segmentName": "Rolling central stretch",
+            "segmentType": "climb",
+            "segmentMiles": 23.3
+          },
+          {
+            "day": 1,
+            "segmentName": "TX 22 approach",
+            "segmentType": "caution",
+            "segmentMiles": 23.3
+          },
+          {
+            "day": 1,
+            "segmentName": "US 287 connector",
+            "segmentType": "flat",
+            "segmentMiles": 23.2
+          },
+          {
+            "day": 1,
+            "segmentName": "US 79 into Palestine",
+            "segmentType": "town",
+            "segmentMiles": 19
+          }
+        ],
+        "ordinalComparison": [
+          {
+            "day": 1,
+            "generatedSegmentName": "Driving Segment 1",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 29.0586,
+            "existingSegmentName": "Fort Worth departure",
+            "existingSegmentType": "caution",
+            "existingMiles": 18.5,
+            "differenceMiles": 10.5586,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Trailer Segment 1",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 44.3656,
+            "existingSegmentName": "TX 114 to TX 51 transition",
+            "existingSegmentType": "flat",
+            "existingMiles": 24.7,
+            "differenceMiles": 19.6656,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Driving Segment 2",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 41.6059,
+            "existingSegmentName": "Weatherford and Granbury corridor",
+            "existingSegmentType": "town",
+            "existingMiles": 21.6,
+            "differenceMiles": 20.0059,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Driving Segment 3",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 38.7891,
+            "existingSegmentName": "Rolling central stretch",
+            "existingSegmentType": "climb",
+            "existingMiles": 23.3,
+            "differenceMiles": 15.4891,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Trailer Segment 2",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 11.0796,
+            "existingSegmentName": "TX 22 approach",
+            "existingSegmentType": "caution",
+            "existingMiles": 23.3,
+            "differenceMiles": -12.2204,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Driving Segment 4",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 47.3272,
+            "existingSegmentName": "US 287 connector",
+            "existingSegmentType": "flat",
+            "existingMiles": 23.2,
+            "differenceMiles": 24.1272,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 1,
+            "generatedSegmentName": "Trailer Segment 3",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 6.6616,
+            "existingSegmentName": "US 79 into Palestine",
+            "existingSegmentType": "town",
+            "existingMiles": 19,
+            "differenceMiles": -12.3384,
+            "matchBasis": "day-order-only"
+          }
+        ]
+      }
+    },
+    {
+      "day": 2,
+      "existing": {
+        "start": "Palestine, TX",
+        "end": "Round Rock, TX",
+        "distanceMiles": 142.1,
+        "segmentCount": 7
+      },
+      "generated": {
+        "totalMiles": 157.8374,
+        "drivingMiles": 144.862,
+        "trailerMiles": 12.9754,
+        "segmentCount": 6,
+        "drivingSegmentCount": 4,
+        "trailerSegmentCount": 2
+      },
+      "differences": {
+        "generatedTotalMinusExistingMiles": 15.7374,
+        "generatedDrivingMinusExistingMiles": 2.762,
+        "generatedTrailerMiles": 12.9754
+      },
+      "segmentComparison": {
+        "nameMatchedSegments": [],
+        "generatedSegmentsMissingFromExisting": [
+          {
+            "day": 2,
+            "segmentId": "day-2-trailer-segment-1",
+            "segmentName": "Trailer Segment 1",
+            "segmentType": "trailer",
+            "segmentMiles": 7.4725
+          },
+          {
+            "day": 2,
+            "segmentId": "day-2-driving-segment-1",
+            "segmentName": "Driving Segment 1",
+            "segmentType": "driving",
+            "segmentMiles": 41.3264
+          },
+          {
+            "day": 2,
+            "segmentId": "day-2-driving-segment-2",
+            "segmentName": "Driving Segment 2",
+            "segmentType": "driving",
+            "segmentMiles": 38.9864
+          },
+          {
+            "day": 2,
+            "segmentId": "day-2-driving-segment-3",
+            "segmentName": "Driving Segment 3",
+            "segmentType": "driving",
+            "segmentMiles": 32.0826
+          },
+          {
+            "day": 2,
+            "segmentId": "day-2-driving-segment-4",
+            "segmentName": "Driving Segment 4",
+            "segmentType": "driving",
+            "segmentMiles": 32.4666
+          },
+          {
+            "day": 2,
+            "segmentId": "day-2-trailer-segment-2",
+            "segmentName": "Trailer Segment 2",
+            "segmentType": "trailer",
+            "segmentMiles": 5.5029
+          }
+        ],
+        "existingSegmentsMissingFromGenerated": [
+          {
+            "day": 2,
+            "segmentName": "Palestine rollout",
+            "segmentType": "town",
+            "segmentMiles": 21.3
+          },
+          {
+            "day": 2,
+            "segmentName": "US 79 steady cruise",
+            "segmentType": "flat",
+            "segmentMiles": 22.4
+          },
+          {
+            "day": 2,
+            "segmentName": "Small-town speed zones",
+            "segmentType": "caution",
+            "segmentMiles": 17.8
+          },
+          {
+            "day": 2,
+            "segmentName": "Midday heat exposure",
+            "segmentType": "flat",
+            "segmentMiles": 20.9
+          },
+          {
+            "day": 2,
+            "segmentName": "Taylor area approach",
+            "segmentType": "town",
+            "segmentMiles": 19.4
+          },
+          {
+            "day": 2,
+            "segmentName": "Late-stage open road",
+            "segmentType": "flat",
+            "segmentMiles": 24.1
+          },
+          {
+            "day": 2,
+            "segmentName": "Round Rock arrival",
+            "segmentType": "caution",
+            "segmentMiles": 16.2
+          }
+        ],
+        "ordinalComparison": [
+          {
+            "day": 2,
+            "generatedSegmentName": "Trailer Segment 1",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 7.4725,
+            "existingSegmentName": "Palestine rollout",
+            "existingSegmentType": "town",
+            "existingMiles": 21.3,
+            "differenceMiles": -13.8275,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 2,
+            "generatedSegmentName": "Driving Segment 1",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 41.3264,
+            "existingSegmentName": "US 79 steady cruise",
+            "existingSegmentType": "flat",
+            "existingMiles": 22.4,
+            "differenceMiles": 18.9264,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 2,
+            "generatedSegmentName": "Driving Segment 2",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 38.9864,
+            "existingSegmentName": "Small-town speed zones",
+            "existingSegmentType": "caution",
+            "existingMiles": 17.8,
+            "differenceMiles": 21.1864,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 2,
+            "generatedSegmentName": "Driving Segment 3",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 32.0826,
+            "existingSegmentName": "Midday heat exposure",
+            "existingSegmentType": "flat",
+            "existingMiles": 20.9,
+            "differenceMiles": 11.1826,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 2,
+            "generatedSegmentName": "Driving Segment 4",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 32.4666,
+            "existingSegmentName": "Taylor area approach",
+            "existingSegmentType": "town",
+            "existingMiles": 19.4,
+            "differenceMiles": 13.0666,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 2,
+            "generatedSegmentName": "Trailer Segment 2",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 5.5029,
+            "existingSegmentName": "Late-stage open road",
+            "existingSegmentType": "flat",
+            "existingMiles": 24.1,
+            "differenceMiles": -18.5971,
+            "matchBasis": "day-order-only"
+          }
+        ]
+      }
+    },
+    {
+      "day": 3,
+      "existing": {
+        "start": "Round Rock, TX",
+        "end": "Fredericksburg, TX",
+        "distanceMiles": 66.7,
+        "segmentCount": 7
+      },
+      "generated": {
+        "totalMiles": 112.2055,
+        "drivingMiles": 64.2652,
+        "trailerMiles": 47.9403,
+        "segmentCount": 5,
+        "drivingSegmentCount": 2,
+        "trailerSegmentCount": 3
+      },
+      "differences": {
+        "generatedTotalMinusExistingMiles": 45.5055,
+        "generatedDrivingMinusExistingMiles": -2.4348,
+        "generatedTrailerMiles": 47.9403
+      },
+      "segmentComparison": {
+        "nameMatchedSegments": [],
+        "generatedSegmentsMissingFromExisting": [
+          {
+            "day": 3,
+            "segmentId": "day-3-trailer-segment-1",
+            "segmentName": "Trailer Segment 1",
+            "segmentType": "trailer",
+            "segmentMiles": 11.8075
+          },
+          {
+            "day": 3,
+            "segmentId": "day-3-driving-segment-1",
+            "segmentName": "Driving Segment 1",
+            "segmentType": "driving",
+            "segmentMiles": 35.8136
+          },
+          {
+            "day": 3,
+            "segmentId": "day-3-trailer-segment-2",
+            "segmentName": "Trailer Segment 2",
+            "segmentType": "trailer",
+            "segmentMiles": 34.3121
+          },
+          {
+            "day": 3,
+            "segmentId": "day-3-driving-segment-2",
+            "segmentName": "Driving Segment 2",
+            "segmentType": "driving",
+            "segmentMiles": 28.4516
+          },
+          {
+            "day": 3,
+            "segmentId": "day-3-trailer-segment-3",
+            "segmentName": "Trailer Segment 3",
+            "segmentType": "trailer",
+            "segmentMiles": 1.8207
+          }
+        ],
+        "existingSegmentsMissingFromGenerated": [
+          {
+            "day": 3,
+            "segmentName": "Round Rock exit",
+            "segmentType": "caution",
+            "segmentMiles": 9.8
+          },
+          {
+            "day": 3,
+            "segmentName": "TX 29 rising rollers",
+            "segmentType": "climb",
+            "segmentMiles": 10.8
+          },
+          {
+            "day": 3,
+            "segmentName": "Hill Country descent set",
+            "segmentType": "descent",
+            "segmentMiles": 7.8
+          },
+          {
+            "day": 3,
+            "segmentName": "Johnson City approach",
+            "segmentType": "town",
+            "segmentMiles": 8.5
+          },
+          {
+            "day": 3,
+            "segmentName": "US 290 climbing sequence",
+            "segmentType": "climb",
+            "segmentMiles": 9.8
+          },
+          {
+            "day": 3,
+            "segmentName": "Long downhill recovery",
+            "segmentType": "descent",
+            "segmentMiles": 9.1
+          },
+          {
+            "day": 3,
+            "segmentName": "Fredericksburg approach",
+            "segmentType": "climb",
+            "segmentMiles": 10.9
+          }
+        ],
+        "ordinalComparison": [
+          {
+            "day": 3,
+            "generatedSegmentName": "Trailer Segment 1",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 11.8075,
+            "existingSegmentName": "Round Rock exit",
+            "existingSegmentType": "caution",
+            "existingMiles": 9.8,
+            "differenceMiles": 2.0075,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 3,
+            "generatedSegmentName": "Driving Segment 1",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 35.8136,
+            "existingSegmentName": "TX 29 rising rollers",
+            "existingSegmentType": "climb",
+            "existingMiles": 10.8,
+            "differenceMiles": 25.0136,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 3,
+            "generatedSegmentName": "Trailer Segment 2",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 34.3121,
+            "existingSegmentName": "Hill Country descent set",
+            "existingSegmentType": "descent",
+            "existingMiles": 7.8,
+            "differenceMiles": 26.5121,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 3,
+            "generatedSegmentName": "Driving Segment 2",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 28.4516,
+            "existingSegmentName": "Johnson City approach",
+            "existingSegmentType": "town",
+            "existingMiles": 8.5,
+            "differenceMiles": 19.9516,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 3,
+            "generatedSegmentName": "Trailer Segment 3",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 1.8207,
+            "existingSegmentName": "US 290 climbing sequence",
+            "existingSegmentType": "climb",
+            "existingMiles": 9.8,
+            "differenceMiles": -7.9793,
+            "matchBasis": "day-order-only"
+          }
+        ]
+      }
+    },
+    {
+      "day": 4,
+      "existing": {
+        "start": "Fredericksburg, TX",
+        "end": "San Angelo, TX",
+        "distanceMiles": 144.6,
+        "segmentCount": 8
+      },
+      "generated": {
+        "totalMiles": 150.1347,
+        "drivingMiles": 150.1347,
+        "trailerMiles": 0,
+        "segmentCount": 3,
+        "drivingSegmentCount": 3,
+        "trailerSegmentCount": 0
+      },
+      "differences": {
+        "generatedTotalMinusExistingMiles": 5.5347,
+        "generatedDrivingMinusExistingMiles": 5.5347,
+        "generatedTrailerMiles": 0
+      },
+      "segmentComparison": {
+        "nameMatchedSegments": [],
+        "generatedSegmentsMissingFromExisting": [
+          {
+            "day": 4,
+            "segmentId": "day-4-driving-segment-1",
+            "segmentName": "Driving Segment 1",
+            "segmentType": "driving",
+            "segmentMiles": 41.9583
+          },
+          {
+            "day": 4,
+            "segmentId": "day-4-driving-segment-2",
+            "segmentName": "Driving Segment 2",
+            "segmentType": "driving",
+            "segmentMiles": 26.7985
+          },
+          {
+            "day": 4,
+            "segmentId": "day-4-driving-segment-3",
+            "segmentName": "Driving Segment 3",
+            "segmentType": "driving",
+            "segmentMiles": 81.3779
+          }
+        ],
+        "existingSegmentsMissingFromGenerated": [
+          {
+            "day": 4,
+            "segmentName": "Fredericksburg departure climbs",
+            "segmentType": "climb",
+            "segmentMiles": 17.9
+          },
+          {
+            "day": 4,
+            "segmentName": "Mason rolling hills",
+            "segmentType": "climb",
+            "segmentMiles": 17.7
+          },
+          {
+            "day": 4,
+            "segmentName": "Descent recovery pockets",
+            "segmentType": "descent",
+            "segmentMiles": 16.8
+          },
+          {
+            "day": 4,
+            "segmentName": "Brady town control",
+            "segmentType": "town",
+            "segmentMiles": 17.7
+          },
+          {
+            "day": 4,
+            "segmentName": "US 87 exposed rollers",
+            "segmentType": "caution",
+            "segmentMiles": 21.1
+          },
+          {
+            "day": 4,
+            "segmentName": "Eden climb risk zone",
+            "segmentType": "climb",
+            "segmentMiles": 20.5
+          },
+          {
+            "day": 4,
+            "segmentName": "Windfarm open terrain",
+            "segmentType": "flat",
+            "segmentMiles": 18.5
+          },
+          {
+            "day": 4,
+            "segmentName": "San Angelo arrival",
+            "segmentType": "caution",
+            "segmentMiles": 14.4
+          }
+        ],
+        "ordinalComparison": [
+          {
+            "day": 4,
+            "generatedSegmentName": "Driving Segment 1",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 41.9583,
+            "existingSegmentName": "Fredericksburg departure climbs",
+            "existingSegmentType": "climb",
+            "existingMiles": 17.9,
+            "differenceMiles": 24.0583,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 4,
+            "generatedSegmentName": "Driving Segment 2",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 26.7985,
+            "existingSegmentName": "Mason rolling hills",
+            "existingSegmentType": "climb",
+            "existingMiles": 17.7,
+            "differenceMiles": 9.0985,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 4,
+            "generatedSegmentName": "Driving Segment 3",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 81.3779,
+            "existingSegmentName": "Descent recovery pockets",
+            "existingSegmentType": "descent",
+            "existingMiles": 16.8,
+            "differenceMiles": 64.5779,
+            "matchBasis": "day-order-only"
+          }
+        ]
+      }
+    },
+    {
+      "day": 5,
+      "existing": {
+        "start": "San Angelo, TX",
+        "end": "Fort Stockton, TX",
+        "distanceMiles": 112.8,
+        "segmentCount": 7
+      },
+      "generated": {
+        "totalMiles": 138.4476,
+        "drivingMiles": 114.8044,
+        "trailerMiles": 23.6432,
+        "segmentCount": 4,
+        "drivingSegmentCount": 3,
+        "trailerSegmentCount": 1
+      },
+      "differences": {
+        "generatedTotalMinusExistingMiles": 25.6476,
+        "generatedDrivingMinusExistingMiles": 2.0044,
+        "generatedTrailerMiles": 23.6432
+      },
+      "segmentComparison": {
+        "nameMatchedSegments": [],
+        "generatedSegmentsMissingFromExisting": [
+          {
+            "day": 5,
+            "segmentId": "day-5-driving-segment-1",
+            "segmentName": "Driving Segment 1",
+            "segmentType": "driving",
+            "segmentMiles": 43.0088
+          },
+          {
+            "day": 5,
+            "segmentId": "day-5-driving-segment-2",
+            "segmentName": "Driving Segment 2",
+            "segmentType": "driving",
+            "segmentMiles": 47.1676
+          },
+          {
+            "day": 5,
+            "segmentId": "day-5-driving-segment-3",
+            "segmentName": "Driving Segment 3",
+            "segmentType": "driving",
+            "segmentMiles": 24.628
+          },
+          {
+            "day": 5,
+            "segmentId": "day-5-trailer-segment-1",
+            "segmentName": "Trailer Segment 1",
+            "segmentType": "trailer",
+            "segmentMiles": 23.6432
+          }
+        ],
+        "existingSegmentsMissingFromGenerated": [
+          {
+            "day": 5,
+            "segmentName": "San Angelo exit",
+            "segmentType": "town",
+            "segmentMiles": 16.4
+          },
+          {
+            "day": 5,
+            "segmentName": "US 67 open crosswind",
+            "segmentType": "caution",
+            "segmentMiles": 18.4
+          },
+          {
+            "day": 5,
+            "segmentName": "Shallow grade plateau",
+            "segmentType": "flat",
+            "segmentMiles": 16.5
+          },
+          {
+            "day": 5,
+            "segmentName": "Extended downhill run",
+            "segmentType": "descent",
+            "segmentMiles": 17.3
+          },
+          {
+            "day": 5,
+            "segmentName": "US 385 transition",
+            "segmentType": "caution",
+            "segmentMiles": 13.9
+          },
+          {
+            "day": 5,
+            "segmentName": "West Texas wind corridor",
+            "segmentType": "flat",
+            "segmentMiles": 16.2
+          },
+          {
+            "day": 5,
+            "segmentName": "Fort Stockton approach",
+            "segmentType": "descent",
+            "segmentMiles": 14.1
+          }
+        ],
+        "ordinalComparison": [
+          {
+            "day": 5,
+            "generatedSegmentName": "Driving Segment 1",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 43.0088,
+            "existingSegmentName": "San Angelo exit",
+            "existingSegmentType": "town",
+            "existingMiles": 16.4,
+            "differenceMiles": 26.6088,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 5,
+            "generatedSegmentName": "Driving Segment 2",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 47.1676,
+            "existingSegmentName": "US 67 open crosswind",
+            "existingSegmentType": "caution",
+            "existingMiles": 18.4,
+            "differenceMiles": 28.7676,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 5,
+            "generatedSegmentName": "Driving Segment 3",
+            "generatedSegmentType": "driving",
+            "generatedMiles": 24.628,
+            "existingSegmentName": "Shallow grade plateau",
+            "existingSegmentType": "flat",
+            "existingMiles": 16.5,
+            "differenceMiles": 8.128,
+            "matchBasis": "day-order-only"
+          },
+          {
+            "day": 5,
+            "generatedSegmentName": "Trailer Segment 1",
+            "generatedSegmentType": "trailer",
+            "generatedMiles": 23.6432,
+            "existingSegmentName": "Extended downhill run",
+            "existingSegmentType": "descent",
+            "existingMiles": 17.3,
+            "differenceMiles": 6.3432,
+            "matchBasis": "day-order-only"
+          }
+        ]
+      }
+    }
+  ],
+  "generatedOnlyDays": [],
+  "existingOnlyDays": [],
+  "routeGaps": [
+    "Gap of 23.6298 mi before Driving Segment 1 on day 5."
+  ],
+  "kmlValidationWarnings": [
+    "Gap of 23.6298 mi before Driving Segment 1 on day 5."
+  ],
+  "notes": [
+    "Existing raceRoute.ts uses hand-authored strategy/terrain segments.",
+    "Generated routeData.json uses SCC KML driving/trailer line segments.",
+    "Exact per-segment name matches are expected to be sparse unless raceRoute.ts is renamed to KML segment names.",
+    "For strategy mileage, generated driving miles are the closest KML-derived match to existing app day distance because trailer miles do not count as official driven race mileage."
+  ]
+}

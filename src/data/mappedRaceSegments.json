@@ -1,0 +1,820 @@
+{
+  "generatedAt": "2026-06-03T22:35:48.607Z",
+  "mappingMethod": "Proportional per-day mapping from app semantic segment mile ranges onto KML-derived driving mileage.",
+  "notes": [
+    "KML driving mileage is treated as the geometry/mileage authority.",
+    "raceRoute.ts remains the semantic strategy, terrain, and risk authority.",
+    "Mapping is proportional and does not yet snap segment boundaries to GPS turns, stops, or intersections.",
+    "Trailer mileage is preserved in day summaries but excluded from kmlDrivingMileStart/kmlDrivingMileEnd because trailered miles do not count as official driven race mileage."
+  ],
+  "daySummaries": [
+    {
+      "day": 1,
+      "appMiles": 153.6,
+      "kmlDrivingMiles": 156.7808,
+      "kmlTotalMiles": 218.8876,
+      "kmlTrailerMiles": 62.1068,
+      "drivingMileageDifference": 3.1808,
+      "mappingConfidence": "MEDIUM",
+      "mappedSegmentCount": 7
+    },
+    {
+      "day": 2,
+      "appMiles": 142.1,
+      "kmlDrivingMiles": 144.862,
+      "kmlTotalMiles": 157.8374,
+      "kmlTrailerMiles": 12.9754,
+      "drivingMileageDifference": 2.762,
+      "mappingConfidence": "HIGH",
+      "mappedSegmentCount": 7
+    },
+    {
+      "day": 3,
+      "appMiles": 66.7,
+      "kmlDrivingMiles": 64.2652,
+      "kmlTotalMiles": 112.2055,
+      "kmlTrailerMiles": 47.9403,
+      "drivingMileageDifference": -2.4348,
+      "mappingConfidence": "HIGH",
+      "mappedSegmentCount": 7
+    },
+    {
+      "day": 4,
+      "appMiles": 144.6,
+      "kmlDrivingMiles": 150.1347,
+      "kmlTotalMiles": 150.1347,
+      "kmlTrailerMiles": 0,
+      "drivingMileageDifference": 5.5347,
+      "mappingConfidence": "MEDIUM",
+      "mappedSegmentCount": 8
+    },
+    {
+      "day": 5,
+      "appMiles": 112.8,
+      "kmlDrivingMiles": 114.8044,
+      "kmlTotalMiles": 138.4476,
+      "kmlTrailerMiles": 23.6432,
+      "drivingMileageDifference": 2.0044,
+      "mappingConfidence": "HIGH",
+      "mappedSegmentCount": 7
+    }
+  ],
+  "mappedSegments": [
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-1",
+      "appSegmentTitle": "Fort Worth departure",
+      "appMileStart": 0,
+      "appMileEnd": 18.5,
+      "kmlMileStart": 0,
+      "kmlMileEnd": 26.3634,
+      "kmlDrivingMileStart": 0,
+      "kmlDrivingMileEnd": 18.8831,
+      "segmentType": "caution",
+      "risk": "medium",
+      "terrainSummary": "Urban edge traffic, team spacing, and early course discipline matter before the route settles.",
+      "strategy": "Hold a predictable pace, avoid aggressive passes, and confirm telemetry links before open-road cruising.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-2",
+      "appSegmentTitle": "TX 114 to TX 51 transition",
+      "appMileStart": 18.5,
+      "appMileEnd": 43.2,
+      "kmlMileStart": 26.3634,
+      "kmlMileEnd": 61.5621,
+      "kmlDrivingMileStart": 18.8831,
+      "kmlDrivingMileEnd": 44.0946,
+      "segmentType": "flat",
+      "risk": "low",
+      "terrainSummary": "Generally manageable terrain with route changes that can create convoy compression.",
+      "strategy": "Use this section to establish the day baseline Wh/mile and keep battery draw below target.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-3",
+      "appSegmentTitle": "Weatherford and Granbury corridor",
+      "appMileStart": 43.2,
+      "appMileEnd": 64.8,
+      "kmlMileStart": 61.5621,
+      "kmlMileEnd": 92.3432,
+      "kmlDrivingMileStart": 44.0946,
+      "kmlDrivingMileEnd": 66.1419,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "More intersections, local traffic, and speed changes around town approaches.",
+      "strategy": "Prioritize clean stops, smooth acceleration, and radio confirmation at each highway change.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-4",
+      "appSegmentTitle": "Rolling central stretch",
+      "appMileStart": 64.8,
+      "appMileEnd": 88.1,
+      "kmlMileStart": 92.3432,
+      "kmlMileEnd": 125.5469,
+      "kmlDrivingMileStart": 66.1419,
+      "kmlDrivingMileEnd": 89.9244,
+      "segmentType": "climb",
+      "risk": "medium",
+      "terrainSummary": "Short rollers can quietly raise consumption if the driver chases speed over every crest.",
+      "strategy": "Cap power on climbs and let speed return naturally on the backsides.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-5",
+      "appSegmentTitle": "TX 22 approach",
+      "appMileStart": 88.1,
+      "appMileEnd": 111.4,
+      "kmlMileStart": 125.5469,
+      "kmlMileEnd": 158.7505,
+      "kmlDrivingMileStart": 89.9244,
+      "kmlDrivingMileEnd": 113.7069,
+      "segmentType": "caution",
+      "risk": "medium",
+      "terrainSummary": "Navigation load increases as the route moves between smaller highways.",
+      "strategy": "Have the navigator call next-turn timing early and keep chase spacing tidy.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-6",
+      "appSegmentTitle": "US 287 connector",
+      "appMileStart": 111.4,
+      "appMileEnd": 134.6,
+      "kmlMileStart": 158.7505,
+      "kmlMileEnd": 191.8117,
+      "kmlDrivingMileStart": 113.7069,
+      "kmlDrivingMileEnd": 137.3873,
+      "segmentType": "flat",
+      "risk": "low",
+      "terrainSummary": "A useful recovery section if winds stay manageable.",
+      "strategy": "Target steady-state efficiency and use sunlight windows to rebuild margin.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 1,
+      "appSegmentId": "day-1-app-segment-7",
+      "appSegmentTitle": "US 79 into Palestine",
+      "appMileStart": 134.6,
+      "appMileEnd": 153.6,
+      "kmlMileStart": 191.8117,
+      "kmlMileEnd": 218.8876,
+      "kmlDrivingMileStart": 137.3873,
+      "kmlDrivingMileEnd": 156.7808,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "End-of-day fatigue combines with traffic and town arrival procedures.",
+      "strategy": "Preserve a final 10-mile battery buffer and run arrival checks before entering control.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 1 app miles 153.6; KML driving miles 156.7808; difference 3.1808 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-1",
+      "appSegmentTitle": "Palestine rollout",
+      "appMileStart": 0,
+      "appMileEnd": 21.3,
+      "kmlMileStart": 0,
+      "kmlMileEnd": 23.6589,
+      "kmlDrivingMileStart": 0,
+      "kmlDrivingMileEnd": 21.714,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "Morning departure includes local traffic and stop-start inefficiency.",
+      "strategy": "Warm systems gently and avoid early current spikes while tires and driver rhythm settle.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-2",
+      "appSegmentTitle": "US 79 steady cruise",
+      "appMileStart": 21.3,
+      "appMileEnd": 43.7,
+      "kmlMileStart": 23.6589,
+      "kmlMileEnd": 48.5397,
+      "kmlDrivingMileStart": 21.714,
+      "kmlDrivingMileEnd": 44.5494,
+      "segmentType": "flat",
+      "risk": "low",
+      "terrainSummary": "Open highway rhythm allows clean efficiency measurements.",
+      "strategy": "Lock target speed to live Wh/mile instead of schedule pressure.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-3",
+      "appSegmentTitle": "Small-town speed zones",
+      "appMileStart": 43.7,
+      "appMileEnd": 61.5,
+      "kmlMileStart": 48.5397,
+      "kmlMileEnd": 68.311,
+      "kmlDrivingMileStart": 44.5494,
+      "kmlDrivingMileEnd": 62.6954,
+      "segmentType": "caution",
+      "risk": "medium",
+      "terrainSummary": "Repeated speed changes can drain energy if acceleration is abrupt.",
+      "strategy": "Use gentle launches and regenerative braking where traffic allows.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-4",
+      "appSegmentTitle": "Midday heat exposure",
+      "appMileStart": 61.5,
+      "appMileEnd": 82.4,
+      "kmlMileStart": 68.311,
+      "kmlMileEnd": 91.5257,
+      "kmlDrivingMileStart": 62.6954,
+      "kmlDrivingMileEnd": 84.0016,
+      "segmentType": "flat",
+      "risk": "medium",
+      "terrainSummary": "Cabin heat, battery temperature, and tire pressure become strategy variables.",
+      "strategy": "Monitor pack temperature and trade a small speed reduction for thermal stability if needed.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-5",
+      "appSegmentTitle": "Taylor area approach",
+      "appMileStart": 82.4,
+      "appMileEnd": 101.8,
+      "kmlMileStart": 91.5257,
+      "kmlMileEnd": 113.0742,
+      "kmlDrivingMileStart": 84.0016,
+      "kmlDrivingMileEnd": 103.7787,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "Traffic density increases as the route nears the Austin metro edge.",
+      "strategy": "Tighten communication cadence and keep driver workload low.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-6",
+      "appSegmentTitle": "Late-stage open road",
+      "appMileStart": 101.8,
+      "appMileEnd": 125.9,
+      "kmlMileStart": 113.0742,
+      "kmlMileEnd": 139.8433,
+      "kmlDrivingMileStart": 103.7787,
+      "kmlDrivingMileEnd": 128.3471,
+      "segmentType": "flat",
+      "risk": "low",
+      "terrainSummary": "Potential chance to regain schedule without much climbing penalty.",
+      "strategy": "Only increase pace if battery margin and solar input are both above plan.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 2,
+      "appSegmentId": "day-2-app-segment-7",
+      "appSegmentTitle": "Round Rock arrival",
+      "appMileStart": 125.9,
+      "appMileEnd": 142.1,
+      "kmlMileStart": 139.8433,
+      "kmlMileEnd": 157.8374,
+      "kmlDrivingMileStart": 128.3471,
+      "kmlDrivingMileEnd": 144.862,
+      "segmentType": "caution",
+      "risk": "high",
+      "terrainSummary": "Urban traffic and navigation complexity can erase gains late in the day.",
+      "strategy": "Switch to arrival mode early, prioritize safety spacing, and keep energy reserve intact.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 2 app miles 142.1; KML driving miles 144.862; difference 2.762 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-1",
+      "appSegmentTitle": "Round Rock exit",
+      "appMileStart": 0,
+      "appMileEnd": 9.8,
+      "kmlMileStart": 0,
+      "kmlMileEnd": 16.486,
+      "kmlDrivingMileStart": 0,
+      "kmlDrivingMileEnd": 9.4423,
+      "segmentType": "caution",
+      "risk": "medium",
+      "terrainSummary": "Traffic and route discipline dominate before the Hill Country profile starts to bite.",
+      "strategy": "Keep the opening pace calm and verify cooling before the first climbing sequence.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-2",
+      "appSegmentTitle": "TX 29 rising rollers",
+      "appMileStart": 9.8,
+      "appMileEnd": 20.6,
+      "kmlMileStart": 16.486,
+      "kmlMileEnd": 34.6542,
+      "kmlDrivingMileStart": 9.4423,
+      "kmlDrivingMileEnd": 19.848,
+      "segmentType": "climb",
+      "risk": "high",
+      "terrainSummary": "Repeated uphill pushes can multiply current draw in a short distance.",
+      "strategy": "Set a hard climb power ceiling and accept lower crest speeds.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-3",
+      "appSegmentTitle": "Hill Country descent set",
+      "appMileStart": 20.6,
+      "appMileEnd": 28.4,
+      "kmlMileStart": 34.6542,
+      "kmlMileEnd": 47.7757,
+      "kmlDrivingMileStart": 19.848,
+      "kmlDrivingMileEnd": 27.3633,
+      "segmentType": "descent",
+      "risk": "medium",
+      "terrainSummary": "Downhill sections offer recovery but may include curves and traffic.",
+      "strategy": "Use regen lightly where stable and avoid wasting energy braking late.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-4",
+      "appSegmentTitle": "Johnson City approach",
+      "appMileStart": 28.4,
+      "appMileEnd": 36.9,
+      "kmlMileStart": 47.7757,
+      "kmlMileEnd": 62.0747,
+      "kmlDrivingMileStart": 27.3633,
+      "kmlDrivingMileEnd": 35.553,
+      "segmentType": "town",
+      "risk": "high",
+      "terrainSummary": "Terrain, town traffic, and navigation converge in a high-workload area.",
+      "strategy": "Assign clear radio calls and prepare for a conservative town transit.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-5",
+      "appSegmentTitle": "US 290 climbing sequence",
+      "appMileStart": 36.9,
+      "appMileEnd": 46.7,
+      "kmlMileStart": 62.0747,
+      "kmlMileEnd": 78.5607,
+      "kmlDrivingMileStart": 35.553,
+      "kmlDrivingMileEnd": 44.9953,
+      "segmentType": "climb",
+      "risk": "severe",
+      "terrainSummary": "Large uphill sections can become battery-risk events if attacked too hard.",
+      "strategy": "Run energy-first pacing and trailer if pack temperature or current exceeds thresholds.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-6",
+      "appSegmentTitle": "Long downhill recovery",
+      "appMileStart": 46.7,
+      "appMileEnd": 55.8,
+      "kmlMileStart": 78.5607,
+      "kmlMileEnd": 93.8691,
+      "kmlDrivingMileStart": 44.9953,
+      "kmlDrivingMileEnd": 53.7631,
+      "segmentType": "descent",
+      "risk": "medium",
+      "terrainSummary": "Potential for meaningful regen and thermal relief.",
+      "strategy": "Let gravity carry speed, keep aero clean, and log regen yield for Phase 2 modeling.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 3,
+      "appSegmentId": "day-3-app-segment-7",
+      "appSegmentTitle": "Fredericksburg approach",
+      "appMileStart": 55.8,
+      "appMileEnd": 66.7,
+      "kmlMileStart": 93.8691,
+      "kmlMileEnd": 112.2055,
+      "kmlDrivingMileStart": 53.7631,
+      "kmlDrivingMileEnd": 64.2652,
+      "segmentType": "climb",
+      "risk": "high",
+      "terrainSummary": "Final terrain is still active, and arrival pressure can tempt overuse of battery.",
+      "strategy": "Protect the last reserve and finish with smooth, deliberate pacing.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 3 app miles 66.7; KML driving miles 64.2652; difference -2.4348 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-1",
+      "appSegmentTitle": "Fredericksburg departure climbs",
+      "appMileStart": 0,
+      "appMileEnd": 17.9,
+      "kmlMileStart": 0,
+      "kmlMileEnd": 18.5851,
+      "kmlDrivingMileStart": 0,
+      "kmlDrivingMileEnd": 18.5851,
+      "segmentType": "climb",
+      "risk": "high",
+      "terrainSummary": "The day starts with meaningful terrain before the team has much data for conditions.",
+      "strategy": "Begin under target speed and let live consumption decide whether to press later.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-2",
+      "appSegmentTitle": "Mason rolling hills",
+      "appMileStart": 17.9,
+      "appMileEnd": 35.6,
+      "kmlMileStart": 18.5851,
+      "kmlMileEnd": 36.9626,
+      "kmlDrivingMileStart": 18.5851,
+      "kmlDrivingMileEnd": 36.9626,
+      "segmentType": "climb",
+      "risk": "severe",
+      "terrainSummary": "Heavy rollers can stack into sustained high draw.",
+      "strategy": "Use strict crest discipline and prepare trailer criteria before entering the segment.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-3",
+      "appSegmentTitle": "Descent recovery pockets",
+      "appMileStart": 35.6,
+      "appMileEnd": 52.4,
+      "kmlMileStart": 36.9626,
+      "kmlMileEnd": 54.4057,
+      "kmlDrivingMileStart": 36.9626,
+      "kmlDrivingMileEnd": 54.4057,
+      "segmentType": "descent",
+      "risk": "medium",
+      "terrainSummary": "Useful downhill relief appears between hill groups.",
+      "strategy": "Favor coasting and controlled regen over speed surges.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-4",
+      "appSegmentTitle": "Brady town control",
+      "appMileStart": 52.4,
+      "appMileEnd": 70.1,
+      "kmlMileStart": 54.4057,
+      "kmlMileEnd": 72.7831,
+      "kmlDrivingMileStart": 54.4057,
+      "kmlDrivingMileEnd": 72.7831,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "Town operations break the terrain rhythm and add stop-start losses.",
+      "strategy": "Use the town as a driver and thermal checkpoint before the next open section.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-5",
+      "appSegmentTitle": "US 87 exposed rollers",
+      "appMileStart": 70.1,
+      "appMileEnd": 91.2,
+      "kmlMileStart": 72.7831,
+      "kmlMileEnd": 94.6908,
+      "kmlDrivingMileStart": 72.7831,
+      "kmlDrivingMileEnd": 94.6908,
+      "segmentType": "caution",
+      "risk": "high",
+      "terrainSummary": "Open terrain raises wind sensitivity while hills remain active.",
+      "strategy": "Adjust speed by apparent wind and avoid chasing schedule through gusts.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-6",
+      "appSegmentTitle": "Eden climb risk zone",
+      "appMileStart": 91.2,
+      "appMileEnd": 111.7,
+      "kmlMileStart": 94.6908,
+      "kmlMileEnd": 115.9754,
+      "kmlDrivingMileStart": 94.6908,
+      "kmlDrivingMileEnd": 115.9754,
+      "segmentType": "climb",
+      "risk": "severe",
+      "terrainSummary": "Several climbs can force trailer decisions if battery or temperature margins shrink.",
+      "strategy": "Pre-brief go/no-go points and trailer early if losses compound.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-7",
+      "appSegmentTitle": "Windfarm open terrain",
+      "appMileStart": 111.7,
+      "appMileEnd": 130.2,
+      "kmlMileStart": 115.9754,
+      "kmlMileEnd": 135.1835,
+      "kmlDrivingMileStart": 115.9754,
+      "kmlDrivingMileEnd": 135.1835,
+      "segmentType": "flat",
+      "risk": "high",
+      "terrainSummary": "Wind exposure can dominate even where grades flatten.",
+      "strategy": "Drive to yaw and power stability, not just posted speed.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 4,
+      "appSegmentId": "day-4-app-segment-8",
+      "appSegmentTitle": "San Angelo arrival",
+      "appMileStart": 130.2,
+      "appMileEnd": 144.6,
+      "kmlMileStart": 135.1835,
+      "kmlMileEnd": 150.1347,
+      "kmlDrivingMileStart": 135.1835,
+      "kmlDrivingMileEnd": 150.1347,
+      "segmentType": "caution",
+      "risk": "medium",
+      "terrainSummary": "Late-day fatigue and traffic return as the route approaches the city.",
+      "strategy": "Keep final reserve untouched and transition to arrival communications early.",
+      "mappingConfidence": "MEDIUM",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 4 app miles 144.6; KML driving miles 150.1347; difference 5.5347 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-1",
+      "appSegmentTitle": "San Angelo exit",
+      "appMileStart": 0,
+      "appMileEnd": 16.4,
+      "kmlMileStart": 0,
+      "kmlMileEnd": 20.1289,
+      "kmlDrivingMileStart": 0,
+      "kmlDrivingMileEnd": 16.6914,
+      "segmentType": "town",
+      "risk": "medium",
+      "terrainSummary": "Urban edge traffic transitions quickly to open road.",
+      "strategy": "Complete communications checks before entering long low-service stretches.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-2",
+      "appSegmentTitle": "US 67 open crosswind",
+      "appMileStart": 16.4,
+      "appMileEnd": 34.8,
+      "kmlMileStart": 20.1289,
+      "kmlMileEnd": 42.7126,
+      "kmlDrivingMileStart": 16.6914,
+      "kmlDrivingMileEnd": 35.4184,
+      "segmentType": "caution",
+      "risk": "high",
+      "terrainSummary": "Wind exposure begins early and may create steering and energy penalties.",
+      "strategy": "Drive to stable power and body control, reducing speed during gust bands.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-3",
+      "appSegmentTitle": "Shallow grade plateau",
+      "appMileStart": 34.8,
+      "appMileEnd": 51.3,
+      "kmlMileStart": 42.7126,
+      "kmlMileEnd": 62.9642,
+      "kmlDrivingMileStart": 35.4184,
+      "kmlDrivingMileEnd": 52.2116,
+      "segmentType": "flat",
+      "risk": "medium",
+      "terrainSummary": "Subtle grades can hide persistent consumption changes.",
+      "strategy": "Use rolling Wh/mile averages to detect grade and wind shifts.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-4",
+      "appSegmentTitle": "Extended downhill run",
+      "appMileStart": 51.3,
+      "appMileEnd": 68.6,
+      "kmlMileStart": 62.9642,
+      "kmlMileEnd": 84.1977,
+      "kmlDrivingMileStart": 52.2116,
+      "kmlDrivingMileEnd": 69.819,
+      "segmentType": "descent",
+      "risk": "medium",
+      "terrainSummary": "Long downhill sections can deliver excellent efficiency if speed stays disciplined.",
+      "strategy": "Let the route pay back energy through low-draw cruising and selective regen.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-5",
+      "appSegmentTitle": "US 385 transition",
+      "appMileStart": 68.6,
+      "appMileEnd": 82.5,
+      "kmlMileStart": 84.1977,
+      "kmlMileEnd": 101.2582,
+      "kmlDrivingMileStart": 69.819,
+      "kmlDrivingMileEnd": 83.966,
+      "segmentType": "caution",
+      "risk": "high",
+      "terrainSummary": "Highway transition and remote-road spacing require careful convoy control.",
+      "strategy": "Confirm turn procedures and keep chase vehicles visible without crowding.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-6",
+      "appSegmentTitle": "West Texas wind corridor",
+      "appMileStart": 82.5,
+      "appMileEnd": 98.7,
+      "kmlMileStart": 101.2582,
+      "kmlMileEnd": 121.1416,
+      "kmlDrivingMileStart": 83.966,
+      "kmlDrivingMileEnd": 100.4539,
+      "segmentType": "flat",
+      "risk": "high",
+      "terrainSummary": "Open landscape offers little shelter from crosswinds or headwinds.",
+      "strategy": "Recalculate speed targets whenever wind direction changes materially.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    },
+    {
+      "day": 5,
+      "appSegmentId": "day-5-app-segment-7",
+      "appSegmentTitle": "Fort Stockton approach",
+      "appMileStart": 98.7,
+      "appMileEnd": 112.8,
+      "kmlMileStart": 121.1416,
+      "kmlMileEnd": 138.4476,
+      "kmlDrivingMileStart": 100.4539,
+      "kmlDrivingMileEnd": 114.8044,
+      "segmentType": "descent",
+      "risk": "medium",
+      "terrainSummary": "Final miles may trend favorable but still demand attention after a long exposed day.",
+      "strategy": "Convert any downhill advantage into battery reserve instead of a late speed push.",
+      "mappingConfidence": "HIGH",
+      "mappingNotes": [
+        "Mapped proportionally by app segment mile range within the app day distance.",
+        "Day 5 app miles 112.8; KML driving miles 114.8044; difference 2.0044 mi.",
+        "This is not exact GPS turn-by-turn matching."
+      ]
+    }
+  ]
+}

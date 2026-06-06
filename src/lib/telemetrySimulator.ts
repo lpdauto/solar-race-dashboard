@@ -1,5 +1,6 @@
 import type { RouteSegment } from '@/data/raceRoute'
-import type { TelemetryData } from '@/types/telemetry'
+import { rx2Config } from '@/lib/race/rx2Config'
+import { normalizeTelemetry, type TelemetryData } from '@/types/telemetry'
 
 export type TelemetrySimulatorInput = {
   currentMile?: number
@@ -7,13 +8,15 @@ export type TelemetrySimulatorInput = {
   previousTelemetry?: TelemetryData | null
 }
 
-const initialSoc = 82
+const initialSoc = 100
+const MPH_TO_WHEEL_RPM_FACTOR = 336
 
 export function generateTelemetryFrame({
   currentMile = 0,
   currentSegment,
   previousTelemetry,
 }: TelemetrySimulatorInput): TelemetryData {
+  // RX2 vehicle configuration source
   const segmentType = currentSegment?.type ?? 'flat'
   const risk = currentSegment?.risk ?? 'low'
   const wave = Math.sin(Date.now() / 8000 + currentMile / 8)
@@ -28,8 +31,8 @@ export function generateTelemetryFrame({
   )
   const speedMph = clamp(
     speedForSegment(segmentType, risk) + wave * 2.4 + jitter,
-    20,
-    38
+    rx2Config.minimumRaceSpeedMph,
+    rx2Config.maxRecommendedSpeedMph
   )
   const batteryVoltage = clamp(
     baseVoltage - (initialSoc - batterySocPercent) * 0.045 + wave * 0.35,
@@ -38,7 +41,12 @@ export function generateTelemetryFrame({
   )
   const batteryCurrent = currentForSegment(segmentType, risk, wave)
   const batteryPowerWatts = batteryVoltage * batteryCurrent
-  const solarPowerWatts = clamp(1250 + Math.sin(Date.now() / 15000) * 650, 400, 2000)
+  const solarPowerWatts = clamp(
+    rx2Config.expectedSolarStationWatts * 0.625 +
+      Math.sin(Date.now() / 15000) * 650,
+    400,
+    rx2Config.expectedSolarStationWatts
+  )
   const solarVoltage = 92 + wave * 4
   const solarCurrent = solarPowerWatts / solarVoltage
   const controllerTempC = smoothTemp(
@@ -61,11 +69,13 @@ export function generateTelemetryFrame({
     35,
     190
   )
-  const wheelRpm = speedMph * 17.2
-  const motorRpm = wheelRpm * 4.8
+  const wheelRpm =
+    (speedMph * MPH_TO_WHEEL_RPM_FACTOR) / rx2Config.tireDiameterIn
+  const motorRpm = wheelRpm * rx2Config.drivetrainReduction
 
-  return {
+  return normalizeTelemetry({
     timestamp: Date.now(),
+    source: 'simulator',
     speedMph,
     batteryVoltage,
     batteryCurrent,
@@ -80,15 +90,25 @@ export function generateTelemetryFrame({
     motorRpm,
     wheelRpm,
     efficiencyWhPerMile,
+    whPerMile: efficiencyWhPerMile,
     regenWatts,
-  }
+    mpptVoltage: solarVoltage,
+    mpptCurrent: solarCurrent,
+    mpptPowerWatts: solarPowerWatts,
+  })
 }
 
 function speedForSegment(segmentType: string, risk: string) {
-  if (segmentType === 'climb') return risk === 'severe' ? 22 : 25
-  if (segmentType === 'descent') return 31
-  if (segmentType === 'town' || segmentType === 'caution') return 24
-  return 30
+  if (segmentType === 'climb') {
+    return risk === 'severe'
+      ? rx2Config.minimumRaceSpeedMph + 2
+      : rx2Config.defaultTargetSpeedMph + 1
+  }
+  if (segmentType === 'descent') return rx2Config.defaultTargetSpeedMph + 7
+  if (segmentType === 'town' || segmentType === 'caution') {
+    return rx2Config.defaultTargetSpeedMph
+  }
+  return rx2Config.defaultTargetSpeedMph + 6
 }
 
 function currentForSegment(segmentType: string, risk: string, wave: number) {
