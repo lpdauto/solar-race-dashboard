@@ -121,10 +121,43 @@ export type TelemetryConnectionStatus =
   | 'simulated'
   | 'error'
 
+export const telemetryNodeOptions = [
+  'vehicle',
+  'mppt',
+  'spare-battery',
+] as const
+
+export type KnownTelemetryNode = (typeof telemetryNodeOptions)[number]
+export type TelemetryNodeId = KnownTelemetryNode | (string & {})
+
+export type TelemetryFreshness = 'idle' | 'healthy' | 'warning' | 'stale'
+
+export type TelemetryPacketStats = {
+  packetsReceived: number
+  packetsPerMinute: number
+  averageUpdateIntervalSeconds: number | null
+  packetLossEstimatePercent: number | null
+}
+
+export type CloudTelemetryHealth = {
+  ok: boolean
+  redis: 'connected' | 'error' | 'not_configured'
+  latestVehiclePacketAgeSeconds: number | null
+  latestVehicleUpdatedAt: string | null
+  latestVehicleNode: TelemetryNodeId | null
+  nodes?: Array<{
+    node: TelemetryNodeId
+    updated_at: string | null
+    ageSeconds: number | null
+  }>
+  error?: string
+}
+
 export type TelemetrySource =
   | 'simulator'
   | 'mock-esp32'
   | 'esp32'
+  | 'cloud'
   | 'manual'
   | 'websocket'
   | 'serial'

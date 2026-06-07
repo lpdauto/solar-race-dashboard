@@ -1,5 +1,6 @@
 ﻿'use client'
 
+import CloudTelemetryStatusCard from '@/components/CloudTelemetryStatusCard'
 import TelemetryGauge from '@/components/TelemetryGauge'
 import SystemHealthPanel from '@/components/SystemHealthPanel'
 import {
@@ -9,8 +10,10 @@ import {
 import type {
   TelemetryConnectionStatus,
   TelemetryData,
+  TelemetryNodeId,
   TelemetrySource,
 } from '@/types/telemetry'
+import { telemetryNodeOptions } from '@/types/telemetry'
 
 type TelemetryDashboardProps = {
   telemetry: TelemetryData | null
@@ -19,11 +22,13 @@ type TelemetryDashboardProps = {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   connectionError?: string
   lastPacketAt?: number
+  cloudNode: TelemetryNodeId
   snapshots?: RaceSnapshot[]
   onClearSnapshots?: () => void
   connect: () => void
   disconnect: () => void
   setSource: (source: TelemetrySource) => void
+  setCloudNode: (node: TelemetryNodeId) => void
 }
 
 const statusStyles: Record<TelemetryConnectionStatus, string> = {
@@ -38,6 +43,7 @@ const telemetrySources: TelemetrySource[] = [
   'simulator',
   'mock-esp32',
   'esp32',
+  'cloud',
   'manual',
   'websocket',
   'serial',
@@ -52,11 +58,13 @@ export default function TelemetryDashboard({
   connectionStatus,
   connectionError,
   lastPacketAt,
+  cloudNode,
   snapshots = [],
   onClearSnapshots,
   connect,
   disconnect,
   setSource,
+  setCloudNode,
 }: TelemetryDashboardProps) {
   const warnings = telemetry ? buildWarnings(telemetry) : []
 
@@ -66,7 +74,7 @@ export default function TelemetryDashboard({
         <div>
           <h3 className="text-base font-bold text-white">Live Telemetry</h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Simulator mode is active today; websocket, serial, BLE, and CAN hooks are reserved for hardware integration.
+            Use simulator data, local ESP32 polling, or Cloud Telemetry for hosted race updates.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -95,28 +103,59 @@ export default function TelemetryDashboard({
             ))}
           </select>
         </label>
+        {source === 'cloud' ? (
+          <label className="grid gap-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Node
+            </span>
+            <select
+              value={cloudNode}
+              onChange={(event) =>
+                setCloudNode(event.target.value as TelemetryNodeId)
+              }
+              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
+            >
+              {telemetryNodeOptions.map((node) => (
+                <option key={node} value={node}>
+                  {telemetryNodeLabel(node)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           type="button"
           onClick={connect}
           className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
-          {source === 'esp32' ? 'Start ESP32' : 'Start simulation'}
+          {source === 'esp32'
+            ? 'Start ESP32'
+            : source === 'cloud'
+            ? 'Start Cloud'
+            : 'Start simulation'}
         </button>
         <button
           type="button"
           onClick={disconnect}
           className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
-          Stop simulation
+          Stop telemetry
         </button>
       </div>
+
+      <CloudTelemetryStatusCard
+        enabled={source === 'cloud'}
+        node={cloudNode}
+        connectionStatus={connectionStatus}
+        lastPacketAt={lastPacketAt}
+      />
 
       <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-3">
         <ConnectionMetric label="Source" value={telemetrySourceLabel(source)} />
         <ConnectionMetric label="Connection" value={connectionStatus} />
         <ConnectionMetric
           label="Last packet"
-          value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'}
+          value={formatLastPacketAge(lastPacketAt)}
         />
         {connectionError ? (
           <div className="sm:col-span-3 text-sm font-semibold text-[#ff8fcb]">
@@ -303,8 +342,28 @@ function ConnectionMetric({ label, value }: { label: string; value: string }) {
 function telemetrySourceLabel(source: TelemetrySource) {
   if (source === 'mock-esp32') return 'Mock ESP32'
   if (source === 'esp32') return 'ESP32 Live'
+  if (source === 'cloud') return 'Cloud Telemetry'
 
   return source
+}
+
+function telemetryNodeLabel(node: TelemetryNodeId) {
+  if (node === 'mppt') return 'MPPT'
+  if (node === 'spare-battery') return 'Spare Battery'
+
+  return node.charAt(0).toUpperCase() + node.slice(1)
+}
+
+function formatLastPacketAge(timestamp?: number) {
+  if (!timestamp) return '--'
+
+  const ageSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000))
+  const ageLabel =
+    ageSeconds < 60
+      ? `${ageSeconds}s ago`
+      : `${Math.floor(ageSeconds / 60)}m ${ageSeconds % 60}s ago`
+
+  return `${ageLabel} (${new Date(timestamp).toLocaleTimeString()})`
 }
 
 function buildWarnings(telemetry: TelemetryData) {

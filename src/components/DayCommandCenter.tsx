@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import CarSetupPanel from '@/components/CarSetupPanel'
+import CloudTelemetryStatusCard from '@/components/CloudTelemetryStatusCard'
 import CommandTile, { type CommandTileRisk } from '@/components/CommandTile'
 import CourseMap from '@/components/CourseMap'
 import DriverPaceCoach from '@/components/DriverPaceCoach'
@@ -62,8 +63,11 @@ import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import type {
   TelemetryConnectionStatus,
   TelemetryData,
+  TelemetryNodeId,
+  TelemetryPacketStats,
   TelemetrySource,
 } from '@/types/telemetry'
+import { telemetryNodeOptions } from '@/types/telemetry'
 import type { WeatherRisk } from '@/types/weather'
 
 type DayCommandCenterProps = {
@@ -605,9 +609,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               connectionStatus={telemetryController.connectionStatus}
               connectionError={telemetryController.connectionError}
               lastPacketAt={telemetryController.lastPacketAt}
+              cloudNode={telemetryController.cloudNode}
               connect={telemetryController.connect}
               disconnect={telemetryController.disconnect}
               setSource={telemetryController.setSource}
+              setCloudNode={telemetryController.setCloudNode}
             />
           </div>
         </AccordionSection>
@@ -641,6 +647,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               telemetryStatus={telemetryController.status}
               connectionStatus={telemetryController.connectionStatus}
               lastPacketAt={telemetryController.lastPacketAt}
+              packetStats={telemetryController.packetStats}
               currentMile={currentMile}
               remainingMiles={distanceRemaining}
               currentSegment={currentSegment ?? null}
@@ -1202,6 +1209,7 @@ function StrategyDebugPanel({
   telemetryStatus,
   connectionStatus,
   lastPacketAt,
+  packetStats,
   currentMile,
   remainingMiles,
   currentSegment,
@@ -1217,6 +1225,7 @@ function StrategyDebugPanel({
   telemetryStatus: TelemetryConnectionStatus
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   lastPacketAt?: number
+  packetStats: TelemetryPacketStats
   currentMile: number
   remainingMiles: number
   currentSegment: RouteSegment | null
@@ -1237,6 +1246,7 @@ function StrategyDebugPanel({
     telemetryStatus,
     connectionStatus,
     lastPacketAgeSeconds,
+    packetStats,
     currentMile,
     remainingMiles,
     currentSegment,
@@ -1455,6 +1465,30 @@ function StrategyDebugPanel({
         <DebugField label="Connection Status" value={connectionStatus} tone={connectionDebugTone(connectionStatus)} />
         <DebugField label="Telemetry Status" value={telemetryStatus} tone={telemetryStatus === 'error' ? 'danger' : telemetryStatus === 'disconnected' ? 'caution' : 'healthy'} />
         <DebugField label="Last Packet Age" value={lastPacketAgeSeconds !== undefined ? `${lastPacketAgeSeconds}s` : '--'} tone={lastPacketAgeSeconds !== undefined && lastPacketAgeSeconds > 30 ? 'caution' : 'healthy'} />
+        <DebugField label="Packets Received" value={`${packetStats.packetsReceived}`} />
+        <DebugField label="Packets Per Minute" value={`${packetStats.packetsPerMinute}`} />
+        <DebugField
+          label="Avg Update Interval"
+          value={
+            packetStats.averageUpdateIntervalSeconds !== null
+              ? `${packetStats.averageUpdateIntervalSeconds.toFixed(1)}s`
+              : '--'
+          }
+        />
+        <DebugField
+          label="Packet Loss Estimate"
+          value={
+            packetStats.packetLossEstimatePercent !== null
+              ? `${packetStats.packetLossEstimatePercent.toFixed(0)}%`
+              : '--'
+          }
+          tone={
+            packetStats.packetLossEstimatePercent !== null &&
+            packetStats.packetLossEstimatePercent > 10
+              ? 'caution'
+              : 'healthy'
+          }
+        />
         <DebugField label="Telemetry Penalty Applied" value={`-${raceHealth.breakdown.telemetryPenalty}`} tone={penaltyDebugTone(raceHealth.breakdown.telemetryPenalty)} />
       </DebugSection>
 
@@ -1507,6 +1541,7 @@ const telemetrySources: TelemetrySource[] = [
   'simulator',
   'mock-esp32',
   'esp32',
+  'cloud',
   'manual',
   'websocket',
   'serial',
@@ -1520,18 +1555,22 @@ function TelemetrySourceSetup({
   connectionStatus,
   connectionError,
   lastPacketAt,
+  cloudNode,
   connect,
   disconnect,
   setSource,
+  setCloudNode,
 }: {
   status: TelemetryConnectionStatus
   source: TelemetrySource
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   connectionError?: string
   lastPacketAt?: number
+  cloudNode: TelemetryNodeId
   connect: () => void
   disconnect: () => void
   setSource: (source: TelemetrySource) => void
+  setCloudNode: (node: TelemetryNodeId) => void
 }) {
   return (
     <section className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -1541,7 +1580,7 @@ function TelemetrySourceSetup({
             Telemetry Source
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Select simulator, mock ESP32, or reserved hardware sources.
+            Select simulator, local ESP32, or Cloud Telemetry for hosted race updates.
           </p>
         </div>
         <Badge label={status} className={statusStyles[status]} />
@@ -1564,20 +1603,53 @@ function TelemetrySourceSetup({
             ))}
           </select>
         </label>
+        {source === 'cloud' ? (
+          <label className="grid gap-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Node
+            </span>
+            <select
+              value={cloudNode}
+              onChange={(event) =>
+                setCloudNode(event.target.value as TelemetryNodeId)
+              }
+              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
+            >
+              {telemetryNodeOptions.map((node) => (
+                <option key={node} value={node}>
+                  {telemetryNodeLabel(node)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           type="button"
           onClick={connect}
           className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
         >
-          {source === 'esp32' ? 'Start ESP32' : 'Start simulation'}
+          {source === 'esp32'
+            ? 'Start ESP32'
+            : source === 'cloud'
+            ? 'Start Cloud'
+            : 'Start simulation'}
         </button>
         <button
           type="button"
           onClick={disconnect}
           className="h-10 rounded-md border border-white/10 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10"
         >
-          Stop simulation
+          Stop telemetry
         </button>
+      </div>
+
+      <div className="mt-3">
+        <CloudTelemetryStatusCard
+          enabled={source === 'cloud'}
+          node={cloudNode}
+          connectionStatus={connectionStatus}
+          lastPacketAt={lastPacketAt}
+        />
       </div>
 
       <div className="mt-3 grid gap-3 rounded-md border border-white/10 bg-white/[0.035] p-3 text-sm sm:grid-cols-3">
@@ -1585,7 +1657,7 @@ function TelemetrySourceSetup({
         <LogMetric label="Connection" value={connectionStatus} />
         <LogMetric
           label="Last packet"
-          value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'}
+          value={formatLastPacketAge(lastPacketAt)}
         />
       </div>
 
@@ -2087,11 +2159,31 @@ function formatDownloadTimestamp(date: Date) {
 function telemetrySourceLabel(source: TelemetrySource) {
   if (source === 'mock-esp32') return 'Mock ESP32'
   if (source === 'esp32') return 'ESP32 Live'
+  if (source === 'cloud') return 'Cloud Telemetry'
   if (source === 'websocket') return 'WebSocket'
   if (source === 'ble') return 'BLE'
   if (source === 'canbus') return 'CAN bus'
 
   return source.charAt(0).toUpperCase() + source.slice(1)
+}
+
+function telemetryNodeLabel(node: TelemetryNodeId) {
+  if (node === 'mppt') return 'MPPT'
+  if (node === 'spare-battery') return 'Spare Battery'
+
+  return node.charAt(0).toUpperCase() + node.slice(1)
+}
+
+function formatLastPacketAge(timestamp?: number) {
+  if (!timestamp) return '--'
+
+  const ageSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000))
+  const ageLabel =
+    ageSeconds < 60
+      ? `${ageSeconds}s ago`
+      : `${Math.floor(ageSeconds / 60)}m ${ageSeconds % 60}s ago`
+
+  return `${ageLabel} (${new Date(timestamp).toLocaleTimeString()})`
 }
 
 function classifyMissionStatus(
@@ -2515,6 +2607,7 @@ function buildStrategyDebugSnapshot({
   telemetryStatus,
   connectionStatus,
   lastPacketAgeSeconds,
+  packetStats,
   currentMile,
   remainingMiles,
   currentSegment,
@@ -2531,6 +2624,7 @@ function buildStrategyDebugSnapshot({
   telemetryStatus: TelemetryConnectionStatus
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   lastPacketAgeSeconds?: number
+  packetStats: TelemetryPacketStats
   currentMile: number
   remainingMiles: number
   currentSegment: RouteSegment | null
@@ -2634,6 +2728,18 @@ function buildStrategyDebugSnapshot({
     `Connection Status: ${connectionStatus}`,
     `Telemetry Status: ${telemetryStatus}`,
     `Last Packet Age: ${lastPacketAgeSeconds !== undefined ? `${lastPacketAgeSeconds}s` : '--'}`,
+    `Packets Received: ${packetStats.packetsReceived}`,
+    `Packets Per Minute: ${packetStats.packetsPerMinute}`,
+    `Average Update Interval: ${
+      packetStats.averageUpdateIntervalSeconds !== null
+        ? `${packetStats.averageUpdateIntervalSeconds.toFixed(1)}s`
+        : '--'
+    }`,
+    `Packet Loss Estimate: ${
+      packetStats.packetLossEstimatePercent !== null
+        ? `${packetStats.packetLossEstimatePercent.toFixed(0)}%`
+        : '--'
+    }`,
     `Telemetry Penalty Applied: -${breakdown.telemetryPenalty}`,
   ].join('\n')
 }

@@ -67,9 +67,11 @@ export default function RaceNavigatorSection({
         connectionStatus={telemetryController.connectionStatus}
         connectionError={telemetryController.connectionError}
         lastPacketAt={telemetryController.lastPacketAt}
+        cloudNode={telemetryController.cloudNode}
         connect={telemetryController.connect}
         disconnect={telemetryController.disconnect}
         setSource={telemetryController.setSource}
+        setCloudNode={telemetryController.setCloudNode}
       />
 
       <PredictiveStrategyPanel

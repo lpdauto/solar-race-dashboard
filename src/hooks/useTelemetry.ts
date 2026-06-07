@@ -3,17 +3,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RouteSegment } from '@/data/raceRoute'
 import {
+  type Esp32TelemetryPacket,
   parseEsp32TelemetryPacket,
   simulatorTelemetryToEsp32Packet,
 } from '@/lib/esp32Telemetry'
 import { generateTelemetryFrame } from '@/lib/telemetrySimulator'
 import type {
+  TelemetryNodeId,
+  TelemetryPacketStats,
   TelemetryConnectionStatus,
   TelemetryData,
   TelemetrySource,
 } from '@/types/telemetry'
 
 type Esp32ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+
+type CloudTelemetryLatestResponse = {
+  ok?: boolean
+  node?: string
+  payload?: unknown
+  updated_at?: string | null
+  error?: string
+}
+
+const defaultCloudNode: TelemetryNodeId = 'vehicle'
+const emptyPacketStats: TelemetryPacketStats = {
+  packetsReceived: 0,
+  packetsPerMinute: 0,
+  averageUpdateIntervalSeconds: null,
+  packetLossEstimatePercent: null,
+}
 
 type UseTelemetryOptions = {
   currentMile?: number
@@ -32,11 +51,20 @@ export function useTelemetry({
   const [connectionError, setConnectionError] = useState<string | undefined>()
   const [lastPacketAt, setLastPacketAt] = useState<number | undefined>()
   const [source, setSourceState] = useState<TelemetrySource>('simulator')
+  const [cloudNode, setCloudNodeState] =
+    useState<TelemetryNodeId>(defaultCloudNode)
+  const [packetStats, setPacketStats] =
+    useState<TelemetryPacketStats>(emptyPacketStats)
   const intervalRef = useRef<number | null>(null)
   const esp32PollInFlightRef = useRef(false)
   const esp32AbortControllerRef = useRef<AbortController | null>(null)
   const esp32SessionRef = useRef(0)
+  const cloudPollInFlightRef = useRef(false)
+  const cloudAbortControllerRef = useRef<AbortController | null>(null)
+  const cloudSessionRef = useRef(0)
   const telemetryRef = useRef<TelemetryData | null>(null)
+  const packetTimestampsRef = useRef<number[]>([])
+  const lastPacketKeyRef = useRef<string | null>(null)
   const currentMileRef = useRef(currentMile)
   const currentSegmentRef = useRef(currentSegment)
 
@@ -53,15 +81,22 @@ export function useTelemetry({
 
     setStatus('disconnected')
     stopEsp32Telemetry()
+    stopCloudTelemetry()
   }, [])
 
   const connect = useCallback(() => {
     disconnect()
+    resetPacketStats()
     setStatus('connecting')
     setConnectionError(undefined)
 
     if (source === 'esp32') {
       startEsp32Telemetry()
+      return
+    }
+
+    if (source === 'cloud') {
+      startCloudTelemetry()
       return
     }
 
@@ -90,11 +125,12 @@ export function useTelemetry({
       setStatus('simulated')
       setConnectionStatus('connected')
       setLastPacketAt(nextTelemetry.timestamp)
+      recordPacket(nextTelemetry.timestamp, `${source}:${nextTelemetry.timestamp}`)
     }
 
     tick()
     intervalRef.current = window.setInterval(tick, 1000)
-  }, [disconnect, source])
+  }, [cloudNode, disconnect, source])
 
   const setSource = useCallback(
     (nextSource: TelemetrySource) => {
@@ -103,6 +139,19 @@ export function useTelemetry({
       setTelemetry(null)
       setLastPacketAt(undefined)
       setConnectionError(undefined)
+      resetPacketStats()
+    },
+    [disconnect]
+  )
+
+  const setCloudNode = useCallback(
+    (nextNode: TelemetryNodeId) => {
+      disconnect()
+      setCloudNodeState(nextNode)
+      setTelemetry(null)
+      setLastPacketAt(undefined)
+      setConnectionError(undefined)
+      resetPacketStats()
     },
     [disconnect]
   )
@@ -190,17 +239,108 @@ export function useTelemetry({
     setConnectionStatus('disconnected')
   }
 
+  function startCloudTelemetry() {
+    const sessionId = cloudSessionRef.current + 1
+
+    cloudSessionRef.current = sessionId
+    setConnectionStatus('connecting')
+
+    async function pollCloudTelemetry() {
+      if (cloudPollInFlightRef.current) return
+
+      cloudPollInFlightRef.current = true
+      const abortController = new AbortController()
+      const timeoutId = window.setTimeout(() => {
+        abortController.abort()
+      }, 5000)
+
+      cloudAbortControllerRef.current = abortController
+
+      try {
+        const response = await fetch(
+          `/api/telemetry/latest?node=${encodeURIComponent(cloudNode)}`,
+          {
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/json',
+          },
+          signal: abortController.signal,
+          }
+        )
+
+        if (cloudSessionRef.current !== sessionId) return
+
+        const latest = (await response.json()) as CloudTelemetryLatestResponse
+
+        if (response.status === 404) {
+          refreshPacketStats()
+          setConnectionStatus('disconnected')
+          setStatus('connecting')
+          setConnectionError(undefined)
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            latest.error ??
+              `Cloud telemetry request failed with HTTP ${response.status}.`
+          )
+        }
+
+        setConnectionStatus('connected')
+
+        if (!latest.payload) {
+          refreshPacketStats()
+          setStatus('connecting')
+          setConnectionError(undefined)
+          return
+        }
+
+        const packetReceivedAt = parseTimestamp(latest.updated_at) ?? Date.now()
+
+        handleEsp32Payload(
+          latest.payload,
+          packetReceivedAt,
+          `cloud:${latest.node ?? cloudNode}:${latest.updated_at ?? packetReceivedAt}`
+        )
+      } catch (error) {
+        if (cloudSessionRef.current !== sessionId) return
+
+        setConnectionStatus('error')
+        setStatus('error')
+        setConnectionError(
+          error instanceof DOMException && error.name === 'AbortError'
+            ? 'Cloud telemetry request timed out.'
+            : error instanceof Error
+            ? error.message
+            : 'Failed to poll cloud telemetry.'
+        )
+      } finally {
+        window.clearTimeout(timeoutId)
+        if (cloudAbortControllerRef.current === abortController) {
+          cloudAbortControllerRef.current = null
+        }
+        cloudPollInFlightRef.current = false
+      }
+    }
+
+    void pollCloudTelemetry()
+    intervalRef.current = window.setInterval(() => {
+      void pollCloudTelemetry()
+    }, 1000)
+  }
+
+  function stopCloudTelemetry() {
+    cloudSessionRef.current += 1
+    cloudAbortControllerRef.current?.abort()
+    cloudAbortControllerRef.current = null
+    cloudPollInFlightRef.current = false
+  }
+
   function handleEsp32Packet(rawJson: string) {
     try {
       const packet = JSON.parse(rawJson)
-      const nextTelemetry = parseEsp32TelemetryPacket(packet)
-
-      telemetryRef.current = nextTelemetry
-      setTelemetry(nextTelemetry)
-      setLastPacketAt(nextTelemetry.timestamp)
-      setConnectionStatus('connected')
-      setStatus('connected')
-      setConnectionError(undefined)
+      handleEsp32Payload(packet)
     } catch (error) {
       setConnectionStatus('error')
       setStatus('error')
@@ -208,6 +348,66 @@ export function useTelemetry({
         error instanceof Error ? error.message : 'Failed to parse ESP32 packet.'
       )
     }
+  }
+
+  function handleEsp32Payload(
+    payload: unknown,
+    packetReceivedAt?: number,
+    packetKey?: string
+  ) {
+    try {
+      const packet =
+        typeof payload === 'string' ? JSON.parse(payload) : payload
+      const nextTelemetry = parseEsp32TelemetryPacket(
+        packet as Esp32TelemetryPacket
+      )
+      const lastPacketTimestamp = packetReceivedAt ?? nextTelemetry.timestamp
+      const lastPacketAgeSeconds = Math.max(
+        0,
+        Math.round((Date.now() - lastPacketTimestamp) / 1000)
+      )
+
+      telemetryRef.current = nextTelemetry
+      setTelemetry(nextTelemetry)
+      setLastPacketAt(lastPacketTimestamp)
+      setConnectionStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
+      setStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
+      setConnectionError(undefined)
+      recordPacket(
+        lastPacketTimestamp,
+        packetKey ?? `${source}:${lastPacketTimestamp}`
+      )
+    } catch (error) {
+      setConnectionStatus('error')
+      setStatus('error')
+      setConnectionError(
+        error instanceof Error ? error.message : 'Failed to parse ESP32 packet.'
+      )
+    }
+  }
+
+  function resetPacketStats() {
+    packetTimestampsRef.current = []
+    lastPacketKeyRef.current = null
+    setPacketStats(emptyPacketStats)
+  }
+
+  function refreshPacketStats() {
+    setPacketStats(calculatePacketStats(packetTimestampsRef.current))
+  }
+
+  function recordPacket(packetTimestamp: number, packetKey: string) {
+    if (lastPacketKeyRef.current === packetKey) {
+      refreshPacketStats()
+      return
+    }
+
+    lastPacketKeyRef.current = packetKey
+    packetTimestampsRef.current = [
+      ...packetTimestampsRef.current,
+      packetTimestamp,
+    ].sort((a, b) => a - b)
+    refreshPacketStats()
   }
 
   useEffect(() => {
@@ -221,8 +421,61 @@ export function useTelemetry({
     connectionStatus,
     connectionError,
     lastPacketAt,
+    packetStats,
+    cloudNode,
     connect,
     disconnect,
     setSource,
+    setCloudNode,
+  }
+}
+
+function parseTimestamp(value: string | null | undefined) {
+  if (!value) return undefined
+
+  const timestamp = Date.parse(value)
+
+  return Number.isFinite(timestamp) ? timestamp : undefined
+}
+
+function calculatePacketStats(timestamps: number[], now = Date.now()) {
+  const packetsReceived = timestamps.length
+
+  if (packetsReceived === 0) {
+    return emptyPacketStats
+  }
+
+  const packetsPerMinute = timestamps.filter(
+    (timestamp) => now - timestamp <= 60_000
+  ).length
+  const averageUpdateIntervalSeconds =
+    packetsReceived > 1
+      ? timestamps
+          .slice(1)
+          .reduce(
+            (total, timestamp, index) =>
+              total + Math.max(0, timestamp - timestamps[index]),
+            0
+          ) /
+        (packetsReceived - 1) /
+        1000
+      : null
+  const expectedPackets = Math.max(
+    1,
+    Math.floor((now - timestamps[0]) / 1000) + 1
+  )
+  const packetLossEstimatePercent =
+    expectedPackets > 1
+      ? Math.max(
+          0,
+          ((expectedPackets - packetsReceived) / expectedPackets) * 100
+        )
+      : 0
+
+  return {
+    packetsReceived,
+    packetsPerMinute,
+    averageUpdateIntervalSeconds,
+    packetLossEstimatePercent,
   }
 }
