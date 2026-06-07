@@ -476,6 +476,16 @@ export function useTelemetry({
       }),
     [cloudHealth, cloudNode, connectionStatus, lastPacketAt, source, status]
   )
+  const effectivePacketStats = useMemo(
+    () =>
+      effectiveTelemetryStatus.statusSource === 'health'
+        ? {
+            ...packetStats,
+            packetLossEstimatePercent: null,
+          }
+        : packetStats,
+    [effectiveTelemetryStatus.statusSource, packetStats]
+  )
 
   return {
     telemetry,
@@ -489,6 +499,7 @@ export function useTelemetry({
     effectiveLastPacketAt: effectiveTelemetryStatus.lastPacketAt,
     effectivePacketAgeSeconds: effectiveTelemetryStatus.packetAgeSeconds,
     effectiveStatusSource: effectiveTelemetryStatus.statusSource,
+    effectivePacketStats,
     packetStats,
     cloudNode,
     connect,
@@ -527,7 +538,11 @@ function deriveEffectiveTelemetryStatus({
     connectionStatus: rawConnectionStatus,
     lastPacketAt: rawLastPacketAt,
     packetAgeSeconds: rawPacketAgeSeconds,
-    statusSource: 'raw' as TelemetryEffectiveStatusSource,
+    statusSource: rawStatusSource({
+      source,
+      rawConnectionStatus,
+      rawLastPacketAt,
+    }),
   }
 
   if (source !== 'cloud' || !cloudHealth) {
@@ -556,6 +571,23 @@ function deriveEffectiveTelemetryStatus({
     packetAgeSeconds: healthPacketAgeSeconds ?? rawPacketAgeSeconds,
     statusSource: 'health' as TelemetryEffectiveStatusSource,
   }
+}
+
+function rawStatusSource({
+  source,
+  rawConnectionStatus,
+  rawLastPacketAt,
+}: {
+  source: TelemetrySource
+  rawConnectionStatus: TelemetryConnectionState
+  rawLastPacketAt?: number
+}): TelemetryEffectiveStatusSource {
+  if (source === 'simulator' || source === 'mock-esp32') return 'simulator'
+  if (source === 'cloud' && (rawLastPacketAt || rawConnectionStatus !== 'disconnected')) {
+    return 'latest'
+  }
+
+  return 'fallback'
 }
 
 function findSelectedNodeHealth(

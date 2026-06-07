@@ -133,7 +133,11 @@ export type TelemetryNodeId = KnownTelemetryNode | (string & {})
 
 export type TelemetryFreshness = 'idle' | 'healthy' | 'warning' | 'stale'
 
-export type TelemetryEffectiveStatusSource = 'raw' | 'health'
+export type TelemetryEffectiveStatusSource =
+  | 'health'
+  | 'latest'
+  | 'simulator'
+  | 'fallback'
 
 export type TelemetryPacketStats = {
   packetsReceived: number

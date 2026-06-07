@@ -651,7 +651,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               lastPacketAt={telemetryController.effectiveLastPacketAt}
               effectivePacketAgeSeconds={telemetryController.effectivePacketAgeSeconds}
               effectiveStatusSource={telemetryController.effectiveStatusSource}
-              packetStats={telemetryController.packetStats}
+              packetStats={telemetryController.effectivePacketStats}
               currentMile={currentMile}
               remainingMiles={distanceRemaining}
               currentSegment={currentSegment ?? null}
@@ -1214,7 +1214,7 @@ function StrategyDebugPanel({
   connectionStatus,
   lastPacketAt,
   effectivePacketAgeSeconds,
-  effectiveStatusSource = 'raw',
+  effectiveStatusSource = 'fallback',
   packetStats,
   currentMile,
   remainingMiles,
@@ -2190,9 +2190,7 @@ function telemetryNodeLabel(node: TelemetryNodeId) {
 }
 
 function formatTelemetryStatusSource(source: TelemetryEffectiveStatusSource) {
-  if (source === 'health') return 'health'
-
-  return 'latest'
+  return source
 }
 
 function formatLastPacketAge(timestamp?: number) {
