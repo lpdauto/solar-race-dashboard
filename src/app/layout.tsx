@@ -1,6 +1,8 @@
 ﻿import type { Metadata, Viewport } from 'next'
+import AppNavigation from '@/components/AppNavigation'
 import OfflineStatusBanner from '@/components/OfflineStatusBanner'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
+import { Suspense } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -31,6 +33,9 @@ export default function RootLayout({
       <body>
         <ServiceWorkerRegister />
         <OfflineStatusBanner />
+        <Suspense fallback={null}>
+          <AppNavigation />
+        </Suspense>
         {children}
       </body>
     </html>

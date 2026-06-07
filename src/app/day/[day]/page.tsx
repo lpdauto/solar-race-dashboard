@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Suspense } from 'react'
 import DayCommandCenter from '@/components/DayCommandCenter'
 import {
   getRaceDay,
@@ -41,5 +42,9 @@ export default async function DayDetailPage({ params }: DayPageProps) {
     notFound()
   }
 
-  return <DayCommandCenter raceDay={raceDay} />
+  return (
+    <Suspense fallback={null}>
+      <DayCommandCenter raceDay={raceDay} />
+    </Suspense>
+  )
 }

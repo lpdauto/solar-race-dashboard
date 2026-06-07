@@ -32,6 +32,7 @@ type TelemetryDashboardProps = {
   disconnect: () => void
   setSource: (source: TelemetrySource) => void
   setCloudNode: (node: TelemetryNodeId) => void
+  showDevelopmentSources?: boolean
 }
 
 const statusStyles: Record<TelemetryConnectionStatus, string> = {
@@ -72,8 +73,15 @@ export default function TelemetryDashboard({
   disconnect,
   setSource,
   setCloudNode,
+  showDevelopmentSources = false,
 }: TelemetryDashboardProps) {
   const warnings = telemetry ? buildWarnings(telemetry) : []
+  const visibleTelemetrySources = showDevelopmentSources
+    ? telemetrySources
+    : telemetrySources.filter(
+        (telemetrySource) =>
+          telemetrySource === 'cloud' || telemetrySource === 'esp32'
+      )
 
   return (
     <section className="grid gap-4 rounded-lg border border-white/10 bg-white/[0.035] p-4">
@@ -106,7 +114,7 @@ export default function TelemetryDashboard({
             onChange={(event) => setSource(event.target.value as TelemetrySource)}
             className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none focus:border-[#ff3ea5]/60"
           >
-            {telemetrySources.map((telemetrySource) => (
+            {visibleTelemetrySources.map((telemetrySource) => (
               <option key={telemetrySource} value={telemetrySource}>
                 {telemetrySourceLabel(telemetrySource)}
               </option>

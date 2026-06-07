@@ -59,7 +59,7 @@ export function useTelemetry({
     useState<Esp32ConnectionStatus>('disconnected')
   const [connectionError, setConnectionError] = useState<string | undefined>()
   const [lastPacketAt, setLastPacketAt] = useState<number | undefined>()
-  const [source, setSourceState] = useState<TelemetrySource>('simulator')
+  const [source, setSourceState] = useState<TelemetrySource>('cloud')
   const [cloudNode, setCloudNodeState] =
     useState<TelemetryNodeId>(defaultCloudNode)
   const [cloudHealth, setCloudHealth] =
@@ -73,6 +73,7 @@ export function useTelemetry({
   const cloudPollInFlightRef = useRef(false)
   const cloudAbortControllerRef = useRef<AbortController | null>(null)
   const cloudSessionRef = useRef(0)
+  const autoConnectRef = useRef(false)
   const telemetryRef = useRef<TelemetryData | null>(null)
   const packetTimestampsRef = useRef<number[]>([])
   const lastPacketKeyRef = useRef<string | null>(null)
@@ -205,6 +206,13 @@ export function useTelemetry({
     },
     [disconnect]
   )
+
+  useEffect(() => {
+    if (autoConnectRef.current || source !== 'cloud') return
+
+    autoConnectRef.current = true
+    connect()
+  }, [connect, source])
 
   function startEsp32Telemetry() {
     const telemetryUrl = process.env.NEXT_PUBLIC_ESP32_TELEMETRY_URL?.trim()
