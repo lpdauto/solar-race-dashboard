@@ -22,6 +22,9 @@ type TelemetryDashboardProps = {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   connectionError?: string
   lastPacketAt?: number
+  effectiveStatus: TelemetryConnectionStatus
+  effectiveConnectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
+  effectiveLastPacketAt?: number
   cloudNode: TelemetryNodeId
   snapshots?: RaceSnapshot[]
   onClearSnapshots?: () => void
@@ -35,6 +38,7 @@ const statusStyles: Record<TelemetryConnectionStatus, string> = {
   disconnected: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   connecting: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   connected: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
+  warning: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   simulated: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   error: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
@@ -58,6 +62,9 @@ export default function TelemetryDashboard({
   connectionStatus,
   connectionError,
   lastPacketAt,
+  effectiveStatus,
+  effectiveConnectionStatus,
+  effectiveLastPacketAt,
   cloudNode,
   snapshots = [],
   onClearSnapshots,
@@ -78,7 +85,10 @@ export default function TelemetryDashboard({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge label={status} className={statusStyles[status]} />
+          <Badge
+            label={effectiveStatus}
+            className={statusStyles[effectiveStatus]}
+          />
           <Badge
             label={telemetrySourceLabel(source)}
             className="border-violet-300/30 bg-violet-300/10 text-violet-100"
@@ -146,25 +156,28 @@ export default function TelemetryDashboard({
       <CloudTelemetryStatusCard
         enabled={source === 'cloud'}
         node={cloudNode}
-        connectionStatus={connectionStatus}
-        lastPacketAt={lastPacketAt}
+        connectionStatus={effectiveConnectionStatus}
+        lastPacketAt={effectiveLastPacketAt}
       />
 
       <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-3">
         <ConnectionMetric label="Source" value={telemetrySourceLabel(source)} />
-        <ConnectionMetric label="Connection" value={connectionStatus} />
+        <ConnectionMetric
+          label="Connection"
+          value={effectiveConnectionStatus}
+        />
         <ConnectionMetric
           label="Last packet"
-          value={formatLastPacketAge(lastPacketAt)}
+          value={formatLastPacketAge(effectiveLastPacketAt)}
         />
-        {connectionError ? (
+        {effectiveStatus === 'error' && connectionError ? (
           <div className="sm:col-span-3 text-sm font-semibold text-[#ff8fcb]">
             {connectionError}
           </div>
         ) : null}
       </div>
 
-      {status === 'error' ? (
+      {effectiveStatus === 'error' ? (
         <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm leading-6 text-[#ff8fcb]">
           {connectionError ??
             'This telemetry source is reserved for future hardware integration. Switch back to simulator mode for live demo data.'}

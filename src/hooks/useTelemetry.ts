@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RouteSegment } from '@/data/raceRoute'
 import {
   type Esp32TelemetryPacket,
@@ -9,6 +9,9 @@ import {
 } from '@/lib/esp32Telemetry'
 import { generateTelemetryFrame } from '@/lib/telemetrySimulator'
 import type {
+  CloudTelemetryHealth,
+  TelemetryEffectiveStatusSource,
+  TelemetryFreshness,
   TelemetryNodeId,
   TelemetryPacketStats,
   TelemetryConnectionStatus,
@@ -25,6 +28,12 @@ type CloudTelemetryLatestResponse = {
   updated_at?: string | null
   error?: string
 }
+
+type TelemetryConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'error'
 
 const defaultCloudNode: TelemetryNodeId = 'vehicle'
 const emptyPacketStats: TelemetryPacketStats = {
@@ -53,6 +62,8 @@ export function useTelemetry({
   const [source, setSourceState] = useState<TelemetrySource>('simulator')
   const [cloudNode, setCloudNodeState] =
     useState<TelemetryNodeId>(defaultCloudNode)
+  const [cloudHealth, setCloudHealth] =
+    useState<CloudTelemetryHealth | null>(null)
   const [packetStats, setPacketStats] =
     useState<TelemetryPacketStats>(emptyPacketStats)
   const intervalRef = useRef<number | null>(null)
@@ -72,6 +83,45 @@ export function useTelemetry({
     currentMileRef.current = currentMile
     currentSegmentRef.current = currentSegment
   }, [currentMile, currentSegment])
+
+  useEffect(() => {
+    if (source !== 'cloud') {
+      setCloudHealth(null)
+      return
+    }
+
+    let cancelled = false
+
+    async function fetchCloudHealth() {
+      try {
+        const response = await fetch('/api/telemetry/health', {
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/json',
+          },
+        })
+        const nextHealth = (await response.json()) as CloudTelemetryHealth
+
+        if (cancelled) return
+
+        setCloudHealth(nextHealth)
+      } catch {
+        if (cancelled) return
+
+        setCloudHealth(null)
+      }
+    }
+
+    void fetchCloudHealth()
+    const intervalId = window.setInterval(() => {
+      void fetchCloudHealth()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [source])
 
   const disconnect = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -414,6 +464,19 @@ export function useTelemetry({
     return () => disconnect()
   }, [disconnect])
 
+  const effectiveTelemetryStatus = useMemo(
+    () =>
+      deriveEffectiveTelemetryStatus({
+        source,
+        cloudHealth,
+        cloudNode,
+        rawStatus: status,
+        rawConnectionStatus: connectionStatus,
+        rawLastPacketAt: lastPacketAt,
+      }),
+    [cloudHealth, cloudNode, connectionStatus, lastPacketAt, source, status]
+  )
+
   return {
     telemetry,
     status,
@@ -421,6 +484,11 @@ export function useTelemetry({
     connectionStatus,
     connectionError,
     lastPacketAt,
+    effectiveStatus: effectiveTelemetryStatus.status,
+    effectiveConnectionStatus: effectiveTelemetryStatus.connectionStatus,
+    effectiveLastPacketAt: effectiveTelemetryStatus.lastPacketAt,
+    effectivePacketAgeSeconds: effectiveTelemetryStatus.packetAgeSeconds,
+    effectiveStatusSource: effectiveTelemetryStatus.statusSource,
     packetStats,
     cloudNode,
     connect,
@@ -436,6 +504,114 @@ function parseTimestamp(value: string | null | undefined) {
   const timestamp = Date.parse(value)
 
   return Number.isFinite(timestamp) ? timestamp : undefined
+}
+
+function deriveEffectiveTelemetryStatus({
+  source,
+  cloudHealth,
+  cloudNode,
+  rawStatus,
+  rawConnectionStatus,
+  rawLastPacketAt,
+}: {
+  source: TelemetrySource
+  cloudHealth: CloudTelemetryHealth | null
+  cloudNode: TelemetryNodeId
+  rawStatus: TelemetryConnectionStatus
+  rawConnectionStatus: TelemetryConnectionState
+  rawLastPacketAt?: number
+}) {
+  const rawPacketAgeSeconds = getPacketAgeSeconds(rawLastPacketAt)
+  const rawStatusResult = {
+    status: rawStatus,
+    connectionStatus: rawConnectionStatus,
+    lastPacketAt: rawLastPacketAt,
+    packetAgeSeconds: rawPacketAgeSeconds,
+    statusSource: 'raw' as TelemetryEffectiveStatusSource,
+  }
+
+  if (source !== 'cloud' || !cloudHealth) {
+    return rawStatusResult
+  }
+
+  if (cloudHealth.redis !== 'connected') {
+    return {
+      ...rawStatusResult,
+      status: 'error' as TelemetryConnectionStatus,
+      connectionStatus: 'error' as TelemetryConnectionState,
+      statusSource: 'health' as TelemetryEffectiveStatusSource,
+    }
+  }
+
+  const selectedNodeHealth = findSelectedNodeHealth(cloudHealth, cloudNode)
+  const healthLastPacketAt = parseTimestamp(selectedNodeHealth?.updated_at)
+  const healthPacketAgeSeconds =
+    selectedNodeHealth?.ageSeconds ?? getPacketAgeSeconds(healthLastPacketAt)
+  const freshness = classifyTelemetryFreshness(healthPacketAgeSeconds)
+
+  return {
+    status: statusForFreshness(freshness),
+    connectionStatus: connectionStatusForFreshness(freshness),
+    lastPacketAt: healthLastPacketAt ?? rawLastPacketAt,
+    packetAgeSeconds: healthPacketAgeSeconds ?? rawPacketAgeSeconds,
+    statusSource: 'health' as TelemetryEffectiveStatusSource,
+  }
+}
+
+function findSelectedNodeHealth(
+  health: CloudTelemetryHealth,
+  node: TelemetryNodeId
+) {
+  const selectedNodeHealth = health.nodes?.find(
+    (nodeHealth) => nodeHealth.node === node
+  )
+
+  if (selectedNodeHealth) return selectedNodeHealth
+
+  if (node === 'vehicle') {
+    return {
+      node: health.latestVehicleNode ?? node,
+      updated_at: health.latestVehicleUpdatedAt,
+      ageSeconds: health.latestVehiclePacketAgeSeconds,
+    }
+  }
+
+  return null
+}
+
+function getPacketAgeSeconds(timestamp?: number) {
+  return timestamp
+    ? Math.max(0, Math.round((Date.now() - timestamp) / 1000))
+    : undefined
+}
+
+function classifyTelemetryFreshness(
+  ageSeconds?: number | null
+): TelemetryFreshness {
+  if (ageSeconds === undefined || ageSeconds === null) return 'idle'
+  if (ageSeconds < 5) return 'healthy'
+  if (ageSeconds <= 15) return 'warning'
+
+  return 'stale'
+}
+
+function statusForFreshness(
+  freshness: TelemetryFreshness
+): TelemetryConnectionStatus {
+  if (freshness === 'healthy') return 'connected'
+  if (freshness === 'warning') return 'warning'
+  if (freshness === 'stale') return 'disconnected'
+
+  return 'connecting'
+}
+
+function connectionStatusForFreshness(
+  freshness: TelemetryFreshness
+): TelemetryConnectionState {
+  if (freshness === 'stale') return 'disconnected'
+  if (freshness === 'idle') return 'connecting'
+
+  return 'connected'
 }
 
 function calculatePacketStats(timestamps: number[], now = Date.now()) {

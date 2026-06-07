@@ -118,6 +118,7 @@ export type TelemetryConnectionStatus =
   | 'disconnected'
   | 'connecting'
   | 'connected'
+  | 'warning'
   | 'simulated'
   | 'error'
 
@@ -131,6 +132,8 @@ export type KnownTelemetryNode = (typeof telemetryNodeOptions)[number]
 export type TelemetryNodeId = KnownTelemetryNode | (string & {})
 
 export type TelemetryFreshness = 'idle' | 'healthy' | 'warning' | 'stale'
+
+export type TelemetryEffectiveStatusSource = 'raw' | 'health'
 
 export type TelemetryPacketStats = {
   packetsReceived: number

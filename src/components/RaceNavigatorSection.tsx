@@ -67,6 +67,9 @@ export default function RaceNavigatorSection({
         connectionStatus={telemetryController.connectionStatus}
         connectionError={telemetryController.connectionError}
         lastPacketAt={telemetryController.lastPacketAt}
+        effectiveStatus={telemetryController.effectiveStatus}
+        effectiveConnectionStatus={telemetryController.effectiveConnectionStatus}
+        effectiveLastPacketAt={telemetryController.effectiveLastPacketAt}
         cloudNode={telemetryController.cloudNode}
         connect={telemetryController.connect}
         disconnect={telemetryController.disconnect}

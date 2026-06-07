@@ -137,6 +137,7 @@ const statusStyles: Record<TelemetryConnectionStatus, string> = {
   disconnected: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   connecting: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   connected: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
+  warning: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
   simulated: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   error: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
@@ -604,11 +605,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
           <div className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
             <CarSetupPanel />
             <TelemetrySourceSetup
-              status={telemetryController.status}
+              status={telemetryController.effectiveStatus}
               source={telemetryController.source}
-              connectionStatus={telemetryController.connectionStatus}
+              connectionStatus={telemetryController.effectiveConnectionStatus}
               connectionError={telemetryController.connectionError}
-              lastPacketAt={telemetryController.lastPacketAt}
+              lastPacketAt={telemetryController.effectiveLastPacketAt}
               cloudNode={telemetryController.cloudNode}
               connect={telemetryController.connect}
               disconnect={telemetryController.disconnect}
@@ -1661,7 +1662,7 @@ function TelemetrySourceSetup({
         />
       </div>
 
-      {connectionError ? (
+      {status === 'error' && connectionError ? (
         <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm font-semibold text-[#ff8fcb]">
           {connectionError}
         </p>
