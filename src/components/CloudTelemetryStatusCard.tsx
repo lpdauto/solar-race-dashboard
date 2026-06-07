@@ -29,15 +29,26 @@ export default function CloudTelemetryStatusCard({
 }: CloudTelemetryStatusCardProps) {
   const [health, setHealth] = useState<CloudTelemetryHealth | null>(null)
   const [healthError, setHealthError] = useState<string | undefined>()
-  const packetAgeSeconds = useMemo(
-    () =>
-      lastPacketAt
-        ? Math.max(0, Math.round((Date.now() - lastPacketAt) / 1000))
-        : undefined,
+  const selectedNodeHealth = useMemo(
+    () => findSelectedNodeHealth(health, node),
+    [health, node]
+  )
+  const fallbackPacketAgeSeconds = useMemo(
+    () => getFallbackPacketAgeSeconds(lastPacketAt),
     [lastPacketAt]
   )
+  const packetAgeSeconds =
+    selectedNodeHealth?.ageSeconds ?? fallbackPacketAgeSeconds
+  const lastPacketTimestamp =
+    selectedNodeHealth?.updated_at ??
+    (lastPacketAt ? new Date(lastPacketAt).toISOString() : null)
   const freshness = classifyFreshness(packetAgeSeconds)
   const redisStatus = health?.redis ?? (enabled ? 'checking' : 'idle')
+  const displayedConnectionStatus = getDisplayedConnectionStatus({
+    health,
+    freshness,
+    fallbackConnectionStatus: connectionStatus,
+  })
 
   useEffect(() => {
     if (!enabled) return
@@ -114,11 +125,15 @@ export default function CloudTelemetryStatusCard({
 
       <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
         <StatusMetric label="Node" value={node} />
-        <StatusMetric label="Connection" value={connectionStatus} />
+        <StatusMetric label="Connection" value={displayedConnectionStatus} />
         <StatusMetric label="Redis" value={redisStatus} />
         <StatusMetric
           label="Last packet"
-          value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'}
+          value={
+            lastPacketTimestamp
+              ? new Date(lastPacketTimestamp).toLocaleTimeString()
+              : '--'
+          }
         />
         <StatusMetric
           label="Packet age"
@@ -129,22 +144,22 @@ export default function CloudTelemetryStatusCard({
       <div className="grid gap-3 text-sm sm:grid-cols-3">
         <StatusMetric
           label="Health node"
-          value={health?.latestVehicleNode ?? '--'}
+          value={selectedNodeHealth?.node ?? '--'}
         />
         <StatusMetric
           label="Health updated"
           value={
-            health?.latestVehicleUpdatedAt
-              ? new Date(health.latestVehicleUpdatedAt).toLocaleTimeString()
+            selectedNodeHealth?.updated_at
+              ? new Date(selectedNodeHealth.updated_at).toLocaleTimeString()
               : '--'
           }
         />
         <StatusMetric
           label="Health age"
           value={
-            health?.latestVehiclePacketAgeSeconds !== null &&
-            health?.latestVehiclePacketAgeSeconds !== undefined
-              ? `${health.latestVehiclePacketAgeSeconds}s`
+            selectedNodeHealth?.ageSeconds !== null &&
+            selectedNodeHealth?.ageSeconds !== undefined
+              ? `${selectedNodeHealth.ageSeconds}s`
               : '--'
           }
         />
@@ -206,4 +221,50 @@ function classifyFreshness(ageSeconds?: number): TelemetryFreshness {
   if (ageSeconds <= 15) return 'warning'
 
   return 'stale'
+}
+
+function findSelectedNodeHealth(
+  health: CloudTelemetryHealth | null,
+  node: TelemetryNodeId
+) {
+  if (!health) return null
+
+  const selectedNodeHealth = health.nodes?.find(
+    (nodeHealth) => nodeHealth.node === node
+  )
+
+  if (selectedNodeHealth) return selectedNodeHealth
+
+  if (node === 'vehicle') {
+    return {
+      node: health.latestVehicleNode ?? node,
+      updated_at: health.latestVehicleUpdatedAt,
+      ageSeconds: health.latestVehiclePacketAgeSeconds,
+    }
+  }
+
+  return null
+}
+
+function getFallbackPacketAgeSeconds(lastPacketAt?: number) {
+  return lastPacketAt
+    ? Math.max(0, Math.round((Date.now() - lastPacketAt) / 1000))
+    : undefined
+}
+
+function getDisplayedConnectionStatus({
+  health,
+  freshness,
+  fallbackConnectionStatus,
+}: {
+  health: CloudTelemetryHealth | null
+  freshness: TelemetryFreshness
+  fallbackConnectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
+}) {
+  if (!health) return fallbackConnectionStatus
+  if (health.redis !== 'connected') return 'error'
+  if (freshness === 'stale') return 'disconnected'
+  if (freshness === 'idle') return 'connecting'
+
+  return 'connected'
 }
