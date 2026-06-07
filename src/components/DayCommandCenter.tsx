@@ -63,6 +63,7 @@ import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import type {
   TelemetryConnectionStatus,
   TelemetryData,
+  TelemetryEffectiveStatusSource,
   TelemetryNodeId,
   TelemetryPacketStats,
   TelemetrySource,
@@ -294,8 +295,8 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   const raceHealth = calculateRaceHealth({
     strategy: predictiveStrategy,
     telemetrySource: telemetryController.source,
-    telemetryStatus: telemetryController.status,
-    connectionStatus: telemetryController.connectionStatus,
+    telemetryStatus: telemetryController.effectiveStatus,
+    connectionStatus: telemetryController.effectiveConnectionStatus,
   })
 
   const visibleTiles = buildTiles({
@@ -306,7 +307,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     currentSegment,
     nextWarning,
     nextImportantSegment,
-    telemetryStatus: telemetryController.status,
+    telemetryStatus: telemetryController.effectiveStatus,
     telemetrySpeed: telemetryController.telemetry?.speedMph,
     telemetryControllerTemp: telemetryController.telemetry?.controllerTempC,
     telemetryMotorTemp: telemetryController.telemetry?.motorTempC,
@@ -645,9 +646,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               strategy={predictiveStrategy}
               telemetry={telemetryController.telemetry}
               telemetrySource={telemetryController.source}
-              telemetryStatus={telemetryController.status}
-              connectionStatus={telemetryController.connectionStatus}
-              lastPacketAt={telemetryController.lastPacketAt}
+              telemetryStatus={telemetryController.effectiveStatus}
+              connectionStatus={telemetryController.effectiveConnectionStatus}
+              lastPacketAt={telemetryController.effectiveLastPacketAt}
+              effectivePacketAgeSeconds={telemetryController.effectivePacketAgeSeconds}
+              effectiveStatusSource={telemetryController.effectiveStatusSource}
               packetStats={telemetryController.packetStats}
               currentMile={currentMile}
               remainingMiles={distanceRemaining}
@@ -1210,6 +1213,8 @@ function StrategyDebugPanel({
   telemetryStatus,
   connectionStatus,
   lastPacketAt,
+  effectivePacketAgeSeconds,
+  effectiveStatusSource = 'raw',
   packetStats,
   currentMile,
   remainingMiles,
@@ -1226,6 +1231,8 @@ function StrategyDebugPanel({
   telemetryStatus: TelemetryConnectionStatus
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   lastPacketAt?: number
+  effectivePacketAgeSeconds?: number
+  effectiveStatusSource?: TelemetryEffectiveStatusSource
   packetStats: TelemetryPacketStats
   currentMile: number
   remainingMiles: number
@@ -1235,9 +1242,11 @@ function StrategyDebugPanel({
   elevationLoss: number
 }) {
   const baselineRemainingEnergyWh = strategy.safeStrategyWhPerMile * remainingMiles
-  const lastPacketAgeSeconds = lastPacketAt
-    ? Math.max(0, Math.round((Date.now() - lastPacketAt) / 1000))
-    : undefined
+  const lastPacketAgeSeconds =
+    effectivePacketAgeSeconds ??
+    (lastPacketAt
+      ? Math.max(0, Math.round((Date.now() - lastPacketAt) / 1000))
+      : undefined)
   const debugSnapshot = buildStrategyDebugSnapshot({
     missionStatus,
     raceHealth,
@@ -1247,6 +1256,7 @@ function StrategyDebugPanel({
     telemetryStatus,
     connectionStatus,
     lastPacketAgeSeconds,
+    effectiveStatusSource,
     packetStats,
     currentMile,
     remainingMiles,
@@ -1465,11 +1475,12 @@ function StrategyDebugPanel({
         <DebugField label="Telemetry Source" value={telemetrySourceLabel(telemetrySource)} />
         <DebugField label="Connection Status" value={connectionStatus} tone={connectionDebugTone(connectionStatus)} />
         <DebugField label="Telemetry Status" value={telemetryStatus} tone={telemetryStatus === 'error' ? 'danger' : telemetryStatus === 'disconnected' ? 'caution' : 'healthy'} />
+        <DebugField label="Telemetry Status Source" value={formatTelemetryStatusSource(effectiveStatusSource)} />
         <DebugField label="Last Packet Age" value={lastPacketAgeSeconds !== undefined ? `${lastPacketAgeSeconds}s` : '--'} tone={lastPacketAgeSeconds !== undefined && lastPacketAgeSeconds > 30 ? 'caution' : 'healthy'} />
-        <DebugField label="Packets Received" value={`${packetStats.packetsReceived}`} />
-        <DebugField label="Packets Per Minute" value={`${packetStats.packetsPerMinute}`} />
+        <DebugField label={effectiveStatusSource === 'health' ? 'Client Polling Packets' : 'Packets Received'} value={`${packetStats.packetsReceived}`} />
+        <DebugField label={effectiveStatusSource === 'health' ? 'Client Polling PPM' : 'Packets Per Minute'} value={`${packetStats.packetsPerMinute}`} />
         <DebugField
-          label="Avg Update Interval"
+          label={effectiveStatusSource === 'health' ? 'Client Polling Avg Interval' : 'Avg Update Interval'}
           value={
             packetStats.averageUpdateIntervalSeconds !== null
               ? `${packetStats.averageUpdateIntervalSeconds.toFixed(1)}s`
@@ -1479,11 +1490,14 @@ function StrategyDebugPanel({
         <DebugField
           label="Packet Loss Estimate"
           value={
-            packetStats.packetLossEstimatePercent !== null
+            effectiveStatusSource === 'health'
+              ? 'N/A - using health endpoint'
+              : packetStats.packetLossEstimatePercent !== null
               ? `${packetStats.packetLossEstimatePercent.toFixed(0)}%`
               : '--'
           }
           tone={
+            effectiveStatusSource !== 'health' &&
             packetStats.packetLossEstimatePercent !== null &&
             packetStats.packetLossEstimatePercent > 10
               ? 'caution'
@@ -2175,6 +2189,12 @@ function telemetryNodeLabel(node: TelemetryNodeId) {
   return node.charAt(0).toUpperCase() + node.slice(1)
 }
 
+function formatTelemetryStatusSource(source: TelemetryEffectiveStatusSource) {
+  if (source === 'health') return 'health'
+
+  return 'latest'
+}
+
 function formatLastPacketAge(timestamp?: number) {
   if (!timestamp) return '--'
 
@@ -2608,6 +2628,7 @@ function buildStrategyDebugSnapshot({
   telemetryStatus,
   connectionStatus,
   lastPacketAgeSeconds,
+  effectiveStatusSource,
   packetStats,
   currentMile,
   remainingMiles,
@@ -2625,6 +2646,7 @@ function buildStrategyDebugSnapshot({
   telemetryStatus: TelemetryConnectionStatus
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   lastPacketAgeSeconds?: number
+  effectiveStatusSource: TelemetryEffectiveStatusSource
   packetStats: TelemetryPacketStats
   currentMile: number
   remainingMiles: number
@@ -2728,16 +2750,19 @@ function buildStrategyDebugSnapshot({
     `Telemetry Source: ${telemetrySourceLabel(telemetrySource)}`,
     `Connection Status: ${connectionStatus}`,
     `Telemetry Status: ${telemetryStatus}`,
+    `Telemetry Status Source: ${formatTelemetryStatusSource(effectiveStatusSource)}`,
     `Last Packet Age: ${lastPacketAgeSeconds !== undefined ? `${lastPacketAgeSeconds}s` : '--'}`,
-    `Packets Received: ${packetStats.packetsReceived}`,
-    `Packets Per Minute: ${packetStats.packetsPerMinute}`,
-    `Average Update Interval: ${
+    `${effectiveStatusSource === 'health' ? 'Client Polling Packets' : 'Packets Received'}: ${packetStats.packetsReceived}`,
+    `${effectiveStatusSource === 'health' ? 'Client Polling PPM' : 'Packets Per Minute'}: ${packetStats.packetsPerMinute}`,
+    `${effectiveStatusSource === 'health' ? 'Client Polling Avg Interval' : 'Average Update Interval'}: ${
       packetStats.averageUpdateIntervalSeconds !== null
         ? `${packetStats.averageUpdateIntervalSeconds.toFixed(1)}s`
         : '--'
     }`,
     `Packet Loss Estimate: ${
-      packetStats.packetLossEstimatePercent !== null
+      effectiveStatusSource === 'health'
+        ? 'N/A - using health endpoint'
+        : packetStats.packetLossEstimatePercent !== null
         ? `${packetStats.packetLossEstimatePercent.toFixed(0)}%`
         : '--'
     }`,
