@@ -3,6 +3,8 @@ export type NormalizedTelemetrySource = 'simulator' | 'esp32' | 'manual'
 export type TelemetryData = {
   timestamp: number
   source: NormalizedTelemetrySource
+  odometerMiles?: number
+  distanceMiles?: number
   speedMph: number
   batteryVoltage: number
   batteryCurrent: number
@@ -21,6 +23,15 @@ export type TelemetryData = {
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
+  mpptPvVoltage?: number
+  mpptPvCurrent?: number
+  mpptPvPowerWatts?: number
+  mpptBatteryVoltage?: number
+  mpptChargeCurrent?: number
+  mpptChargePowerWatts?: number
+  mpptDailyEnergyWh?: number
+  mpptStatus?: string
+  mpptFault?: string
   mpptChargeState?: string
   regenWatts?: number
   whPerMile?: number
@@ -44,10 +55,18 @@ export type TelemetryInput = Partial<TelemetryData> & {
 export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
   const mpptVoltage = input.mpptVoltage ?? input.solarVoltage
   const mpptCurrent = input.mpptCurrent ?? input.solarCurrent
+  const mpptPvVoltage = input.mpptPvVoltage ?? mpptVoltage
+  const mpptPvCurrent = input.mpptPvCurrent ?? mpptCurrent
   const mpptPowerWatts =
     input.mpptPowerWatts ??
+    input.mpptPvPowerWatts ??
     input.solarPowerWatts ??
-    multiplyIfNumbers(mpptVoltage, mpptCurrent)
+    multiplyIfNumbers(mpptPvVoltage, mpptPvCurrent)
+  const mpptPvPowerWatts =
+    input.mpptPvPowerWatts ?? mpptPowerWatts
+  const mpptChargePowerWatts =
+    input.mpptChargePowerWatts ??
+    multiplyIfNumbers(input.mpptBatteryVoltage, input.mpptChargeCurrent)
   const batteryPowerWatts =
     input.batteryPowerWatts ??
     multiplyIfNumbers(input.batteryVoltage, input.batteryCurrent)
@@ -60,6 +79,8 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
   return {
     timestamp: input.timestamp ?? Date.now(),
     source: input.source ?? 'manual',
+    odometerMiles: input.odometerMiles,
+    distanceMiles: input.distanceMiles,
     speedMph: finiteNumber(input.speedMph, 0),
     gpsLat: input.gpsLat,
     gpsLng: input.gpsLng,
@@ -81,10 +102,19 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     mpptVoltage,
     mpptCurrent,
     mpptPowerWatts,
+    mpptPvVoltage,
+    mpptPvCurrent,
+    mpptPvPowerWatts,
+    mpptBatteryVoltage: input.mpptBatteryVoltage,
+    mpptChargeCurrent: input.mpptChargeCurrent,
+    mpptChargePowerWatts,
+    mpptDailyEnergyWh: input.mpptDailyEnergyWh,
+    mpptStatus: input.mpptStatus,
+    mpptFault: input.mpptFault,
     mpptChargeState: input.mpptChargeState,
     regenWatts: input.regenWatts,
     whPerMile,
-    solarPowerWatts: input.solarPowerWatts ?? mpptPowerWatts,
+    solarPowerWatts: input.solarPowerWatts ?? mpptChargePowerWatts ?? mpptPowerWatts,
     solarCurrent: input.solarCurrent ?? mpptCurrent,
     solarVoltage: input.solarVoltage ?? mpptVoltage,
     wheelRpm: input.wheelRpm,

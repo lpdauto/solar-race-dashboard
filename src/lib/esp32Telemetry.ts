@@ -26,6 +26,15 @@ export type Esp32TelemetryPacket = {
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
+  mpptPvVoltage?: number
+  mpptPvCurrent?: number
+  mpptPvPowerWatts?: number
+  mpptBatteryVoltage?: number
+  mpptChargeCurrent?: number
+  mpptChargePowerWatts?: number
+  mpptDailyEnergyWh?: number
+  mpptStatus?: string
+  mpptFault?: string
   regenWatts?: number
 }
 
@@ -46,6 +55,14 @@ export const mockEsp32TelemetryPacket: Esp32TelemetryPacket = {
   mpptVoltage: 91.5,
   mpptCurrent: 18.7,
   mpptPowerWatts: 1711,
+  mpptPvVoltage: 91.5,
+  mpptPvCurrent: 18.7,
+  mpptPvPowerWatts: 1711,
+  mpptBatteryVoltage: 78.4,
+  mpptChargeCurrent: 20.6,
+  mpptChargePowerWatts: 1615,
+  mpptDailyEnergyWh: 2710,
+  mpptStatus: 'charging',
   regenWatts: 0,
 }
 
@@ -71,6 +88,15 @@ export function parseEsp32TelemetryPacket(
     mpptVoltage: finiteNumber(packet.mpptVoltage),
     mpptCurrent: finiteNumber(packet.mpptCurrent),
     mpptPowerWatts: finiteNumber(packet.mpptPowerWatts),
+    mpptPvVoltage: finiteNumber(packet.mpptPvVoltage ?? packet.mpptVoltage),
+    mpptPvCurrent: finiteNumber(packet.mpptPvCurrent ?? packet.mpptCurrent),
+    mpptPvPowerWatts: finiteNumber(packet.mpptPvPowerWatts ?? packet.mpptPowerWatts),
+    mpptBatteryVoltage: finiteNumber(packet.mpptBatteryVoltage),
+    mpptChargeCurrent: finiteNumber(packet.mpptChargeCurrent),
+    mpptChargePowerWatts: finiteNumber(packet.mpptChargePowerWatts),
+    mpptDailyEnergyWh: finiteNumber(packet.mpptDailyEnergyWh),
+    mpptStatus: stringValue(packet.mpptStatus),
+    mpptFault: stringValue(packet.mpptFault),
     regenWatts: finiteNumber(packet.regenWatts),
   } satisfies TelemetryInput)
 }
@@ -95,6 +121,15 @@ export function simulatorTelemetryToEsp32Packet(
     mpptVoltage: telemetry.mpptVoltage ?? telemetry.solarVoltage,
     mpptCurrent: telemetry.mpptCurrent ?? telemetry.solarCurrent,
     mpptPowerWatts: telemetry.mpptPowerWatts ?? telemetry.solarPowerWatts,
+    mpptPvVoltage: telemetry.mpptPvVoltage ?? telemetry.mpptVoltage ?? telemetry.solarVoltage,
+    mpptPvCurrent: telemetry.mpptPvCurrent ?? telemetry.mpptCurrent ?? telemetry.solarCurrent,
+    mpptPvPowerWatts: telemetry.mpptPvPowerWatts ?? telemetry.mpptPowerWatts ?? telemetry.solarPowerWatts,
+    mpptBatteryVoltage: telemetry.mpptBatteryVoltage,
+    mpptChargeCurrent: telemetry.mpptChargeCurrent,
+    mpptChargePowerWatts: telemetry.mpptChargePowerWatts,
+    mpptDailyEnergyWh: telemetry.mpptDailyEnergyWh,
+    mpptStatus: telemetry.mpptStatus,
+    mpptFault: telemetry.mpptFault,
     regenWatts: telemetry.regenWatts,
   }
 }
@@ -109,4 +144,8 @@ function clampSoc(value: unknown) {
   }
 
   return Math.min(100, Math.max(0, value))
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }

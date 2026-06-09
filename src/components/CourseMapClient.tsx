@@ -11,7 +11,9 @@ import {
   useMap,
 } from 'react-leaflet'
 import type { RaceDay, RiskLevel, RoutePoint } from '@/data/raceRoute'
+import routeElevation from '@/data/routeElevation.json'
 import {
+  classifyElevationSeverityFromGrade,
   classifyRouteSegmentSeverity,
   findSegmentForMile,
   getCurrentDayBounds,
@@ -42,7 +44,33 @@ type RouteLine = {
   isCurrentSegment: boolean
 }
 
+type ElevationPoint = {
+  day: number
+  latitude: number
+  longitude: number
+  cumulativeMiles: number
+  elevationFt?: number | null
+  gradePercent?: number | null
+  smoothedGradePercent?: number | null
+  segmentType?: string
+}
+
+type ElevationRouteLine = {
+  key: string
+  day: RaceDay
+  positions: Array<[number, number]>
+  severity: MapSeverity
+  startMile: number
+  endMile: number
+  elevationGainFt: number
+  elevationLossFt: number
+  maxGradePercent: number | null
+  isCurrentDay: boolean
+  isCurrentSegment: boolean
+}
+
 const texasCenter: [number, number] = [31.35, -99.25]
+const elevationPoints = routeElevation.points as ElevationPoint[]
 
 export default function CourseMapClient({
   days,
@@ -66,6 +94,15 @@ export default function CourseMapClient({
   const currentDayBounds = useMemo(
     () => (currentDay ? getCurrentDayBounds(currentDay) : bounds),
     [bounds, currentDay]
+  )
+  const elevationRouteLines = useMemo(
+    () =>
+      buildElevationRouteLines({
+        days: visibleDays,
+        currentDayNumber,
+        currentMile,
+      }),
+    [currentDayNumber, currentMile, visibleDays]
   )
   const routeLines = useMemo(
     () =>
@@ -98,6 +135,7 @@ export default function CourseMapClient({
       ),
     [currentDayNumber, currentMile, visibleDays]
   )
+  const shouldUseElevationLines = elevationRouteLines.length > 0
   const currentSegment =
     currentDay && currentMile !== undefined
       ? findSegmentForMile(currentDay, currentMile)
@@ -133,7 +171,21 @@ export default function CourseMapClient({
           />
           <FitBounds bounds={bounds} />
 
-          {routeLines.map((line) => (
+          {shouldUseElevationLines ? elevationRouteLines.map((line) => (
+            <Polyline
+              key={line.key}
+              positions={line.positions}
+              pathOptions={{
+                color: getSeverityColor(line.severity),
+                opacity: line.isCurrentDay ? 0.98 : 0.5,
+                weight: line.isCurrentSegment ? 9 : line.isCurrentDay ? 7 : 4,
+              }}
+            >
+              <Popup>
+                <ElevationMapPopupLine line={line} />
+              </Popup>
+            </Polyline>
+          )) : routeLines.map((line) => (
             <Polyline
               key={line.key}
               positions={[
@@ -255,6 +307,106 @@ export default function CourseMapClient({
   )
 }
 
+function buildElevationRouteLines({
+  days,
+  currentDayNumber,
+  currentMile,
+}: {
+  days: RaceDay[]
+  currentDayNumber?: number
+  currentMile?: number
+}) {
+  const dayMap = new Map(days.map((day) => [day.day, day]))
+  const dayStartMiles = new Map<number, number>()
+
+  for (const point of elevationPoints) {
+    if (!dayMap.has(point.day)) continue
+
+    const currentStart = dayStartMiles.get(point.day)
+    if (currentStart === undefined || point.cumulativeMiles < currentStart) {
+      dayStartMiles.set(point.day, point.cumulativeMiles)
+    }
+  }
+
+  const lines: ElevationRouteLine[] = []
+
+  for (const day of days) {
+    const points = elevationPoints
+      .filter(
+        (point) =>
+          point.day === day.day &&
+          Number.isFinite(point.latitude) &&
+          Number.isFinite(point.longitude)
+      )
+      .sort((left, right) => left.cumulativeMiles - right.cumulativeMiles)
+    const dayStartMile = dayStartMiles.get(day.day) ?? points[0]?.cumulativeMiles ?? 0
+
+    let activeLine: ElevationRouteLine | null = null
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const pointA = points[index]
+      const pointB = points[index + 1]
+      const grade =
+        pointB.smoothedGradePercent ??
+        pointB.gradePercent ??
+        pointA.smoothedGradePercent ??
+        pointA.gradePercent
+      const severity =
+        typeof grade === 'number'
+          ? classifyElevationSeverityFromGrade(grade)
+          : day.riskLevel
+      const startMile = pointA.cumulativeMiles - dayStartMile
+      const endMile = pointB.cumulativeMiles - dayStartMile
+      const isCurrentDay = day.day === currentDayNumber
+      const isCurrentSegment =
+        isCurrentDay &&
+        currentMile !== undefined &&
+        currentMile >= startMile &&
+        currentMile <= endMile
+      const legGain = Math.max(0, (pointB.elevationFt ?? 0) - (pointA.elevationFt ?? 0))
+      const legLoss = Math.max(0, (pointA.elevationFt ?? 0) - (pointB.elevationFt ?? 0))
+      const absoluteGrade = typeof grade === 'number' ? Math.abs(grade) : null
+
+      if (
+        activeLine &&
+        activeLine.severity === severity &&
+        activeLine.day.day === day.day &&
+        !isCurrentSegment
+      ) {
+        activeLine.positions.push([pointB.latitude, pointB.longitude])
+        activeLine.endMile = endMile
+        activeLine.elevationGainFt += legGain
+        activeLine.elevationLossFt += legLoss
+        activeLine.maxGradePercent =
+          absoluteGrade === null
+            ? activeLine.maxGradePercent
+            : Math.max(activeLine.maxGradePercent ?? 0, absoluteGrade)
+        activeLine.isCurrentSegment = activeLine.isCurrentSegment || isCurrentSegment
+      } else {
+        activeLine = {
+          key: `elevation-${day.day}-${index}-${severity}`,
+          day,
+          positions: [
+            [pointA.latitude, pointA.longitude],
+            [pointB.latitude, pointB.longitude],
+          ],
+          severity,
+          startMile,
+          endMile,
+          elevationGainFt: legGain,
+          elevationLossFt: legLoss,
+          maxGradePercent: absoluteGrade,
+          isCurrentDay,
+          isCurrentSegment,
+        }
+        lines.push(activeLine)
+      }
+    }
+  }
+
+  return lines
+}
+
 function FitBounds({ bounds }: { bounds: Array<[number, number]> }) {
   const map = useMap()
 
@@ -282,6 +434,26 @@ function MapPopupLine({ line }: { line: RouteLine }) {
         {line.pointA.label ?? 'Route point'} to {line.pointB.label ?? 'route point'}
       </span>
       {segment ? <span>{segment.notes}</span> : null}
+    </div>
+  )
+}
+
+function ElevationMapPopupLine({ line }: { line: ElevationRouteLine }) {
+  return (
+    <div className="grid gap-1 text-sm">
+      <strong>Day {line.day.day} elevation sector</strong>
+      <span>
+        Mile {line.startMile.toFixed(1)} to {line.endMile.toFixed(1)}
+      </span>
+      <span>Elevation severity: {line.severity}</span>
+      <span>Gain: {line.elevationGainFt.toFixed(0)} ft</span>
+      <span>Loss: {line.elevationLossFt.toFixed(0)} ft</span>
+      <span>
+        Max smoothed grade:{' '}
+        {line.maxGradePercent !== null
+          ? `${line.maxGradePercent.toFixed(1)}%`
+          : '--'}
+      </span>
     </div>
   )
 }

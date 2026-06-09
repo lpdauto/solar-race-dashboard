@@ -25,8 +25,12 @@ import type {
 } from '@/data/raceRoute'
 import { raceRoute } from '@/data/raceRoute'
 import { useElevationProfile } from '@/hooks/useElevationProfile'
+import { useGeolocation } from '@/hooks/useGeolocation'
 import { useRouteWeather } from '@/hooks/useRouteWeather'
-import { useTelemetry } from '@/hooks/useTelemetry'
+import {
+  useTelemetry,
+  type TelemetryHistorySample,
+} from '@/hooks/useTelemetry'
 import {
   carSetupChangedEventName,
   defaultCarSetup,
@@ -61,8 +65,15 @@ import {
   type TraileringSession,
 } from '@/lib/raceEvents'
 import { rx2Config } from '@/lib/race/rx2Config'
+import {
+  buildRaceCaptainEnergyModel,
+  buildTargetRows,
+  formatSignedPercent,
+  formatSwapAction,
+} from '@/lib/raceCaptainEnergy'
 import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import type {
+  CloudTelemetryHealth,
   TelemetryConnectionStatus,
   TelemetryData,
   TelemetryEffectiveStatusSource,
@@ -91,6 +102,7 @@ type TileId =
   | 'offline'
 
 type ViewMode = 'driver' | 'chase'
+type TelemetrySubview = 'vehicle' | 'mppt' | 'connections'
 
 type PrototypeRole =
   | 'race-captain'
@@ -195,6 +207,8 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   const [prototypeRole, setPrototypeRole] =
     useState<PrototypeRole>('race-captain')
   const [mobileMapExpanded, setMobileMapExpanded] = useState(false)
+  const [telemetrySubview, setTelemetrySubview] =
+    useState<TelemetrySubview>('vehicle')
   const [activeTile, setActiveTile] = useState<TileId | null>(null)
   const [segmentTypeFilter, setSegmentTypeFilter] = useState<'all' | SegmentType>('all')
   const [segmentRiskFilter, setSegmentRiskFilter] = useState<'all' | RiskLevel>('all')
@@ -245,6 +259,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     currentMile,
     currentSegment,
   })
+  const geolocation = useGeolocation()
   const queryView = searchParams.get('view')
   const queryNode = searchParams.get('node')
   const navigationQuery = searchParams.toString()
@@ -650,6 +665,21 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               <MissionStatusBanner status={missionStatus} raceHealth={raceHealth} />
             </div>
             <div className="hidden md:block">
+              <RaceCaptainEnergyCommandCenter
+                raceDay={raceDay}
+                currentMile={currentMile}
+                distanceRemaining={distanceRemaining}
+                telemetry={telemetryController.telemetry}
+                telemetryHistory={telemetryController.telemetryHistory}
+                energySimulation={energySimulation}
+                predictiveStrategy={predictiveStrategy}
+                carSetup={carSetup}
+                swapAdvice={predictiveStrategy.swapAdvice}
+                traileringOption={predictiveStrategy.routeIntelligence.traileringOption}
+                activeTraileringSession={Boolean(activeTraileringSession)}
+              />
+            </div>
+            <div className="hidden md:block">
               <MiniPanel title="Alerts">
               {raceCaptainAlerts.length > 0 ? (
                 <div className="grid gap-2">
@@ -812,53 +842,83 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
 
         {prototypeRole === 'vehicle-systems' ? (
           <>
-            <MobileTelemetryCards
-              telemetry={telemetryController.telemetry}
-              connectionStatus={telemetryController.effectiveConnectionStatus}
+            <TelemetrySubviewSelector
+              activeSubview={telemetrySubview}
+              onSubviewChange={setTelemetrySubview}
             />
-            <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-              <div className="hidden md:block">
-                <VehicleCard telemetry={telemetryController.telemetry} />
-              </div>
-              <div className="hidden md:block">
-                <MiniPanel title="Temps">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <StatusMetric
-                    label="Battery"
-                    value={
-                      telemetryController.telemetry?.batteryTempC !== undefined
-                        ? `${telemetryController.telemetry.batteryTempC.toFixed(1)} C`
-                        : '--'
-                    }
+            {telemetrySubview === 'vehicle' ? (
+              <>
+                <MobileTelemetryCards
+                  telemetry={telemetryController.telemetry}
+                  connectionStatus={telemetryController.effectiveConnectionStatus}
+                />
+                <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+                  <div className="hidden md:block">
+                    <VehicleCard telemetry={telemetryController.telemetry} />
+                  </div>
+                  <div className="hidden md:block">
+                    <MiniPanel title="Temps">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <StatusMetric
+                        label="Battery"
+                        value={
+                          telemetryController.telemetry?.batteryTempC !== undefined
+                            ? `${telemetryController.telemetry.batteryTempC.toFixed(1)} C`
+                            : '--'
+                        }
+                      />
+                      <StatusMetric
+                        label="Controller"
+                        value={
+                          telemetryController.telemetry?.controllerTempC !== undefined
+                            ? `${telemetryController.telemetry.controllerTempC.toFixed(1)} C`
+                            : '--'
+                        }
+                      />
+                      <StatusMetric
+                        label="Motor"
+                        value={
+                          telemetryController.telemetry?.motorTempC !== undefined
+                            ? `${telemetryController.telemetry.motorTempC.toFixed(1)} C`
+                            : '--'
+                        }
+                      />
+                    </div>
+                    </MiniPanel>
+                  </div>
+                </section>
+                <MiniPanel title="Telemetry Status">
+                  <CloudTelemetryStatusCard
+                    enabled={telemetryController.source === 'cloud'}
+                    node={telemetryController.cloudNode}
+                    connectionStatus={telemetryController.effectiveConnectionStatus}
+                    lastPacketAt={telemetryController.effectiveLastPacketAt}
                   />
-                  <StatusMetric
-                    label="Controller"
-                    value={
-                      telemetryController.telemetry?.controllerTempC !== undefined
-                        ? `${telemetryController.telemetry.controllerTempC.toFixed(1)} C`
-                        : '--'
-                    }
-                  />
-                  <StatusMetric
-                    label="Motor"
-                    value={
-                      telemetryController.telemetry?.motorTempC !== undefined
-                        ? `${telemetryController.telemetry.motorTempC.toFixed(1)} C`
-                        : '--'
-                    }
-                  />
-                </div>
                 </MiniPanel>
-              </div>
-            </section>
-            <MiniPanel title="Telemetry Status">
-              <CloudTelemetryStatusCard
-                enabled={telemetryController.source === 'cloud'}
-                node={telemetryController.cloudNode}
+              </>
+            ) : null}
+            {telemetrySubview === 'mppt' ? (
+              <MpptLivePanel
+                telemetry={telemetryController.telemetry}
+                telemetryHistory={telemetryController.telemetryHistory}
+                carSetup={carSetup}
+              />
+            ) : null}
+            {telemetrySubview === 'connections' ? (
+              <ConnectionStatusPanel
+                telemetry={telemetryController.telemetry}
+                telemetryHistory={telemetryController.telemetryHistory}
+                telemetryStatus={telemetryController.effectiveStatus}
                 connectionStatus={telemetryController.effectiveConnectionStatus}
                 lastPacketAt={telemetryController.effectiveLastPacketAt}
+                packetAgeSeconds={telemetryController.effectivePacketAgeSeconds}
+                packetStats={telemetryController.effectivePacketStats}
+                source={telemetryController.source}
+                cloudNode={telemetryController.cloudNode}
+                cloudHealth={telemetryController.cloudHealth}
+                geolocation={geolocation}
               />
-            </MiniPanel>
+            ) : null}
           </>
         ) : null}
 
@@ -1759,6 +1819,626 @@ function MissionStatusBanner({
   )
 }
 
+const nativeInfo = '#38bdf8'
+
+const solarTrendPoints = [
+  { x: 0, y: 77 },
+  { x: 10, y: 64 },
+  { x: 20, y: 43 },
+  { x: 30, y: 31 },
+  { x: 40, y: 22 },
+  { x: 52, y: 28 },
+  { x: 62, y: 20 },
+  { x: 74, y: 31 },
+  { x: 86, y: 50 },
+  { x: 100, y: 72 },
+]
+
+function SimulatedBadge({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#ff8fcb] ${className}`}
+    >
+      Simulated
+    </span>
+  )
+}
+
+function EstimatedBadge({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded border border-sky-300/30 bg-sky-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-sky-200 ${className}`}
+    >
+      Estimated
+    </span>
+  )
+}
+
+function RaceCaptainEnergyCommandCenter({
+  raceDay,
+  currentMile,
+  distanceRemaining,
+  telemetry,
+  telemetryHistory,
+  energySimulation,
+  predictiveStrategy,
+  carSetup,
+  swapAdvice,
+  traileringOption,
+  activeTraileringSession,
+}: {
+  raceDay: RaceDay
+  currentMile: number
+  distanceRemaining: number
+  telemetry: TelemetryData | null
+  telemetryHistory: TelemetryHistorySample[]
+  energySimulation: ReturnType<typeof simulateDayEnergy>
+  predictiveStrategy: ReturnType<typeof generatePredictiveStrategy>
+  carSetup: CarSetup
+  swapAdvice: ReturnType<typeof generatePredictiveStrategy>['swapAdvice']
+  traileringOption: ReturnType<typeof generatePredictiveStrategy>['routeIntelligence']['traileringOption']
+  activeTraileringSession: boolean
+}) {
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+  const energyModel = buildRaceCaptainEnergyModel({
+    raceDay,
+    currentMile,
+    distanceRemaining,
+    telemetry,
+    telemetryHistory,
+    energySimulation,
+    predictiveStrategy,
+    carSetup,
+    now: currentTime,
+  })
+  const {
+    currentSocPercent,
+    currentSocIsSimulated,
+    activeBatteryKwh,
+    reserveBatterySocPercent,
+    reserveBatteryKwh,
+    combinedEnergyKwh,
+    combinedInventoryPercent,
+    currentWhPerMile,
+    requiredWhPerMile,
+    currentWhIsSimulated,
+    rollingWhPerMile,
+    solarInputWatts,
+    solarInputIsSimulated,
+    solarInputIsEstimated,
+    solarCapturedKwh,
+    solarCapturedIsEstimated,
+    solarCapturedUnavailable,
+    energyUsedKwh,
+    solarOffsetPercent,
+    netEnergyLossKwh,
+    nextStopDistance,
+    projectedArrivalSoc,
+    projectedFinishSoc,
+    projectedFinishLabel,
+    routeSocPoints,
+    upcomingTimelineSegments,
+    timeToSunset,
+  } = energyModel
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return (
+    <section className="grid gap-4">
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
+          Race Captain Energy Command Center
+        </p>
+      </div>
+
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.55fr_1.15fr]">
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Swap Recommendation" />
+            <div className="mt-5 flex items-center justify-between gap-4">
+              <p className="text-4xl font-black uppercase tracking-tight text-white">
+                {formatSwapAction(swapAdvice.action)}
+              </p>
+              <div className="grid h-12 w-12 place-items-center rounded-full border-2 border-emerald-400/50 bg-emerald-400/10 text-2xl font-black text-emerald-200">
+                ✓
+              </div>
+            </div>
+            <div className="mt-6 rounded-md border border-white/10 bg-black/20">
+              <DecisionMetric
+                label="Projected Arrival SOC"
+                value={`${projectedArrivalSoc.toFixed(0)}%`}
+              />
+              <DecisionMetric label="Swap Window" value={swapAdvice.urgency} />
+            </div>
+          </NativeEnergyCard>
+
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Projected Finish SOC" info />
+            <div className="mt-3 text-center">
+              <p className="text-6xl font-black tracking-tight text-emerald-200">
+                {formatSignedPercent(projectedFinishSoc)}
+              </p>
+              <p className="mt-1 text-sm font-black uppercase tracking-[0.12em] text-emerald-200">
+                {projectedFinishLabel}
+              </p>
+            </div>
+            <FinishSocScale projectedFinishSoc={projectedFinishSoc} />
+            <p className="mt-5 text-center text-sm text-slate-400">
+              Projected at Current Pace & Conditions
+            </p>
+          </NativeEnergyCard>
+
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Battery Status" />
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <BatteryStatus
+                label="ACTIVE BATTERY"
+                id="A"
+                soc={currentSocPercent}
+                kwh={activeBatteryKwh}
+                color="magenta"
+                simulated={currentSocIsSimulated}
+              />
+              <BatteryStatus
+                label="RESERVE BATTERY"
+                id="B"
+                soc={reserveBatterySocPercent}
+                kwh={reserveBatteryKwh}
+                color="info"
+                simulated
+              />
+            </div>
+            <div className="mt-5 border-t border-white/10 pt-4 text-center">
+              <p className="text-sm font-bold uppercase tracking-[0.12em] text-slate-200">
+                Combined Energy Inventory
+              </p>
+              <div className="mt-2 flex items-end justify-center gap-8">
+                <p className="text-3xl font-black text-white">{combinedEnergyKwh.toFixed(2)} kWh</p>
+                <p className="text-3xl font-black text-emerald-200">{combinedInventoryPercent.toFixed(0)}%</p>
+              </div>
+              <SegmentedInventoryBar
+                activePercent={currentSocPercent}
+                reservePercent={reserveBatterySocPercent}
+              />
+              <p className="mt-2 text-xs text-slate-400">
+                Equivalent to {combinedInventoryPercent.toFixed(0)}% of one full battery
+              </p>
+            </div>
+          </NativeEnergyCard>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.8fr_1fr]">
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Efficiency Wh/mi" info />
+            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+              <EfficiencyReadout label="Required" value={requiredWhPerMile.toFixed(0)} highlight />
+              <EfficiencyReadout
+                label={rollingWhPerMile.label}
+                value={rollingWhPerMile.value === null ? '--' : rollingWhPerMile.value.toFixed(0)}
+                estimated={rollingWhPerMile.mode === 'estimated'}
+              />
+              <EfficiencyReadout label="Current" value={currentWhPerMile.toFixed(0)} simulated={currentWhIsSimulated} />
+            </div>
+            <EfficiencyRail
+              requiredWhPerMile={requiredWhPerMile}
+              rollingWhPerMile={rollingWhPerMile.value ?? currentWhPerMile}
+              currentWhPerMile={currentWhPerMile}
+            />
+          </NativeEnergyCard>
+
+          <NativeEnergyCard>
+            <div className="flex items-start justify-between gap-3">
+              <NativeEnergyTitle title="Solar Input" />
+              <div className="text-right">
+                <p className="text-3xl font-black text-white">{solarInputWatts.toFixed(0)}<span className="ml-1 text-xl">w</span></p>
+                {solarInputIsEstimated ? <EstimatedBadge /> : solarInputIsSimulated ? <SimulatedBadge /> : null}
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-4">
+              <SolarChart />
+              <div className="self-center text-right">
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Solar Offset</p>
+                <p className="mt-1 text-3xl font-black text-emerald-200">{solarOffsetPercent.toFixed(0)}%</p>
+              </div>
+            </div>
+          </NativeEnergyCard>
+
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Today's Energy Balance" />
+            <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 text-center">
+              <BalanceMetric label="Energy Used" value={energyUsedKwh.toFixed(2)} unit="kWh" />
+              <BalanceMetric
+                label="Solar Captured"
+                value={solarCapturedUnavailable ? '--' : solarCapturedKwh.toFixed(2)}
+                unit="kWh"
+                color="text-emerald-200"
+                badge={solarCapturedIsEstimated ? 'estimated' : undefined}
+              />
+              <BalanceMetric label="Net Loss" value={netEnergyLossKwh.toFixed(2)} unit="kWh" />
+            </div>
+            <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20">
+              <div className="h-full bg-[#ff3ea5]" style={{ width: `${Math.min(100, solarOffsetPercent)}%` }} />
+            </div>
+            <p className="mt-2 text-center text-2xl font-black text-[#ff8fcb]">
+              {solarOffsetPercent.toFixed(0)}% <span className="text-xs uppercase text-slate-300">of used</span>
+            </p>
+          </NativeEnergyCard>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1fr_0.45fr]">
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Route Energy Timeline" info />
+            <RouteEnergyTimeline
+              segments={upcomingTimelineSegments}
+              socPoints={routeSocPoints}
+              currentSocPercent={currentSocPercent}
+              projectedFinishSoc={projectedFinishSoc}
+            />
+          </NativeEnergyCard>
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Key Targets" />
+            <div className="mt-3 divide-y divide-white/10">
+              {buildTargetRows({
+                nextStopDistance,
+                distanceRemaining,
+                projectedArrivalSoc,
+                projectedFinishSoc,
+                timeToSunset,
+              }).map((target) => (
+                <div key={target.label} className="flex items-center justify-between gap-4 py-3">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                    {target.label}
+                  </p>
+                  <p className={`text-xl font-black ${target.color}`}>{target.value}</p>
+                </div>
+              ))}
+            </div>
+          </NativeEnergyCard>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Swap Advisor" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <StatusMetric label="Action" value={swapAdvice.action} />
+              <StatusMetric label="Urgency" value={swapAdvice.urgency} />
+              <StatusMetric label="Continue SOC" value={`${swapAdvice.projectedSocIfContinue.toFixed(1)}%`} />
+              <StatusMetric label="Swap SOC" value={`${swapAdvice.projectedSocAfterSwap.toFixed(1)}%`} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-300">{swapAdvice.reason}</p>
+          </NativeEnergyCard>
+          <NativeEnergyCard>
+            <NativeEnergyTitle title="Trailering Advisor" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <StatusMetric label="Action" value={traileringOption.action} />
+              <StatusMetric label="Energy Saved" value={`${traileringOption.estimatedEnergySavedWh.toFixed(0)} Wh`} />
+              <StatusMetric label="Mileage Penalty" value={`${traileringOption.mileagePenalty.toFixed(1)} mi`} />
+              <StatusMetric label="Active" value={activeTraileringSession ? 'yes' : 'no'} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-300">{traileringOption.reason}</p>
+          </NativeEnergyCard>
+        </section>
+    </section>
+  )
+}
+
+function NativeEnergyCard({ children }: { children: React.ReactNode }) {
+  return (
+    <article className="rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20">
+      {children}
+    </article>
+  )
+}
+
+function NativeEnergyTitle({ title, info = false }: { title: string; info?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
+        {title}
+      </p>
+      {info ? (
+        <span className="grid h-4 w-4 place-items-center rounded-full border border-slate-500 text-[10px] font-bold text-slate-400">
+          i
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function DecisionMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-white/10 p-3 last:border-b-0">
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-300">{label}</p>
+      <p className="mt-1 text-2xl font-black text-emerald-200">{value}</p>
+    </div>
+  )
+}
+
+function FinishSocScale({ projectedFinishSoc }: { projectedFinishSoc: number }) {
+  const markerPosition = Math.min(
+    100,
+    Math.max(0, ((projectedFinishSoc + 20) / 70) * 100)
+  )
+
+  return (
+    <div className="mt-6">
+      <div className="relative h-4 overflow-visible rounded-full bg-white/15">
+        <div className="absolute inset-0 rounded-full bg-gradient-to-r from-red-500 via-amber-300 via-45% to-sky-400" />
+        <div
+          className="absolute -top-3 h-0 w-0 border-x-[9px] border-t-[15px] border-x-transparent border-t-white"
+          style={{ left: `calc(${markerPosition}% - 0.5625rem)` }}
+        />
+      </div>
+      <div className="mt-2 grid grid-cols-5 text-xs font-bold">
+        <span className="text-red-400">-20%</span>
+        <span className="text-amber-300">0%</span>
+        <span className="text-emerald-200">10%</span>
+        <span className="text-emerald-200">25%</span>
+        <span className="text-right text-sky-300">50%+</span>
+      </div>
+    </div>
+  )
+}
+
+function BatteryStatus({
+  label,
+  id,
+  soc,
+  kwh,
+  color,
+  simulated = false,
+}: {
+  label: string
+  id: string
+  soc: number
+  kwh: number
+  color: 'magenta' | 'info'
+  simulated?: boolean
+}) {
+  const accent = color === 'magenta' ? '#ff3ea5' : nativeInfo
+
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wide" style={{ color: accent }}>
+        {label}
+      </p>
+      <div className="mt-2 flex items-end gap-4">
+        <p className="text-5xl font-black" style={{ color: accent }}>{id}</p>
+        <p className="text-4xl font-black text-white">{soc.toFixed(0)}%</p>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/20">
+        <div className="h-full" style={{ width: `${Math.min(100, Math.max(0, soc))}%`, backgroundColor: accent }} />
+      </div>
+      <p className="mt-2 text-center text-sm font-bold" style={{ color: accent }}>
+        {kwh.toFixed(2)} kWh
+      </p>
+      {simulated ? <SimulatedBadge className="mx-auto mt-2" /> : null}
+    </div>
+  )
+}
+
+function SegmentedInventoryBar({
+  activePercent,
+  reservePercent,
+}: {
+  activePercent: number
+  reservePercent: number
+}) {
+  const activeSegments = Math.round((Math.min(100, Math.max(0, activePercent)) / 100) * 8)
+  const reserveSegments = Math.round((Math.min(100, Math.max(0, reservePercent)) / 100) * 8)
+
+  return (
+    <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-white/15">
+      {Array.from({ length: 16 }).map((_, index) => (
+        <div
+          key={index}
+          className="border-r border-black/30 last:border-r-0"
+          style={{
+            width: '6.25%',
+            backgroundColor: index < 10 ? '#ff3ea5' : nativeInfo,
+            opacity:
+              index < 8
+                ? index < activeSegments ? 0.9 : 0.22
+                : index - 8 < reserveSegments ? 0.9 : 0.22,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function EfficiencyReadout({
+  label,
+  value,
+  highlight = false,
+  simulated = false,
+  estimated = false,
+}: {
+  label: string
+  value: string
+  highlight?: boolean
+  simulated?: boolean
+  estimated?: boolean
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">{label}</p>
+      <p className={`mt-1 text-4xl font-black ${highlight ? 'text-emerald-200' : 'text-white'}`}>{value}</p>
+      <p className="text-sm text-slate-300">Wh/mi</p>
+      {simulated ? <SimulatedBadge className="mx-auto mt-2" /> : null}
+      {estimated ? <EstimatedBadge className="mx-auto mt-2" /> : null}
+    </div>
+  )
+}
+
+function EfficiencyRail({
+  requiredWhPerMile,
+  rollingWhPerMile,
+  currentWhPerMile,
+}: {
+  requiredWhPerMile: number
+  rollingWhPerMile: number
+  currentWhPerMile: number
+}) {
+  const min = 80
+  const max = 180
+  const position = (value: number) =>
+    Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
+
+  return (
+    <div className="mt-6">
+      <div className="relative h-8">
+        <div className="absolute left-0 right-0 top-3 h-1 bg-white/25" />
+        <div className="absolute left-0 top-3 h-1 bg-[#ff3ea5]" style={{ width: `${position(requiredWhPerMile)}%` }} />
+        <div className="absolute top-0 h-5 w-5 rounded-full border-2 border-white bg-slate-200" style={{ left: `calc(${position(rollingWhPerMile)}% - 0.625rem)` }} />
+        <div className="absolute top-0 h-0 w-0 border-x-[10px] border-t-[18px] border-x-transparent border-t-[#ff3ea5]" style={{ left: `calc(${position(requiredWhPerMile)}% - 0.625rem)` }} />
+        <div className="absolute top-0 h-5 w-5 rounded-full border-2 border-white bg-slate-200" style={{ left: `calc(${position(currentWhPerMile)}% - 0.625rem)` }} />
+      </div>
+      <div className="grid grid-cols-6 text-xs text-slate-300">
+        {[80, 100, 120, 140, 160, 180].map((tick) => (
+          <span key={tick}>{tick}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SolarChart() {
+  return (
+    <svg viewBox="0 0 100 72" className="h-36 w-full" role="img" aria-label="Solar input over time">
+      {[18, 36, 54].map((line) => (
+        <line key={line} x1="0" x2="100" y1={line} y2={line} stroke="rgba(255,255,255,0.14)" strokeWidth="0.8" />
+      ))}
+      <path
+        d={`${solarTrendPoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')} L 100 72 L 0 72 Z`}
+        fill="rgba(126,211,33,0.16)"
+      />
+      <polyline
+        points={solarTrendPoints.map((point) => `${point.x},${point.y}`).join(' ')}
+        fill="none"
+        stroke="#ff3ea5"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function BalanceMetric({
+  label,
+  value,
+  unit,
+  color = 'text-white',
+  badge,
+}: {
+  label: string
+  value: string
+  unit: string
+  color?: string
+  badge?: 'estimated'
+}) {
+  return (
+    <div className="px-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">{label}</p>
+      <p className={`mt-2 text-3xl font-black ${color}`}>{value}</p>
+      <p className={color}>{unit}</p>
+      {badge === 'estimated' ? <EstimatedBadge className="mx-auto mt-2" /> : null}
+    </div>
+  )
+}
+
+function RouteEnergyTimeline({
+  segments,
+  socPoints,
+  currentSocPercent,
+  projectedFinishSoc,
+}: {
+  segments: Array<{
+    label: string
+    detail: string
+    color: string
+    barColor: string
+  }>
+  socPoints: Array<{ x: number; y: number; soc: number }>
+  currentSocPercent: number
+  projectedFinishSoc: number
+}) {
+  const linePoints = socPoints.map((point) => `${point.x},${100 - point.y}`).join(' ')
+  const lowestPoint = socPoints.reduce((lowest, point) =>
+    point.soc < lowest.soc ? point : lowest
+  , socPoints[0])
+
+  return (
+    <div className="mt-4">
+      <div className="grid grid-cols-5 gap-2 text-center text-xs uppercase tracking-wide">
+        {segments.map((segment) => (
+          <TimelineStop
+            key={`${segment.label}-${segment.detail}`}
+            label={segment.label}
+            detail={segment.detail}
+            color={segment.color}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-white/10">
+        {segments.map((segment) => (
+          <div key={`${segment.label}-${segment.barColor}`} className={segment.barColor} style={{ width: '20%' }} />
+        ))}
+      </div>
+      <div className="mt-4 h-56 rounded-md border border-white/10 bg-black/25 p-3">
+        <svg viewBox="0 0 100 100" className="h-full w-full" role="img" aria-label="Projected active battery state of charge">
+          {[20, 40, 60, 80].map((line) => (
+            <line key={line} x1="0" x2="100" y1={line} y2={line} stroke="rgba(255,255,255,0.12)" strokeWidth="0.7" />
+          ))}
+          <line x1="0" x2="100" y1="24" y2="24" stroke="rgba(126,211,33,0.5)" strokeDasharray="4 4" />
+          <line x1="0" x2="100" y1="50" y2="50" stroke="rgba(250,204,21,0.45)" strokeDasharray="4 4" />
+          <line x1="0" x2="100" y1="76" y2="76" stroke="rgba(239,68,68,0.55)" strokeDasharray="4 4" />
+          <polyline
+            points={linePoints}
+            fill="none"
+            stroke="#ff3ea5"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx={socPoints[0]?.x ?? 0} cy={100 - (socPoints[0]?.y ?? currentSocPercent)} r="3" fill="#060808" stroke="#22c55e" strokeWidth="2" />
+          <circle cx={lowestPoint.x} cy={100 - lowestPoint.y} r="3" fill="#060808" stroke="#ef4444" strokeWidth="2" />
+          <circle cx={socPoints[socPoints.length - 1]?.x ?? 100} cy={100 - (socPoints[socPoints.length - 1]?.y ?? projectedFinishSoc)} r="3" fill="#060808" stroke="#22c55e" strokeWidth="2" />
+          <text x="3" y={Math.max(8, 96 - currentSocPercent)} fill="#22c55e" fontSize="7" fontWeight="800">{currentSocPercent.toFixed(0)}%</text>
+          <text x={Math.max(4, lowestPoint.x - 3)} y={Math.min(96, 106 - lowestPoint.y)} fill="#ef4444" fontSize="7" fontWeight="800">{lowestPoint.soc.toFixed(0)}%</text>
+          <text x="88" y={Math.max(8, 96 - projectedFinishSoc)} fill="#22c55e" fontSize="7" fontWeight="800">{projectedFinishSoc.toFixed(0)}%</text>
+          <text x="92" y="26" fill="#22c55e" fontSize="6" fontWeight="800">SAFE</text>
+          <text x="88" y="51" fill="#facc15" fontSize="6" fontWeight="800">CAUTION</text>
+          <text x="88" y="77" fill="#ef4444" fontSize="6" fontWeight="800">DANGER</text>
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function TimelineStop({
+  label,
+  detail,
+  color,
+}: {
+  label: string
+  detail: string
+  color: string
+}) {
+  return (
+    <div>
+      <p className={`font-black ${color}`}>{label}</p>
+      <p className="text-slate-300">{detail}</p>
+    </div>
+  )
+}
+
 function RaceCommandCard({
   raceDay,
   predictiveStrategy,
@@ -1862,6 +2542,341 @@ function VehicleCard({ telemetry }: { telemetry: TelemetryData | null }) {
         />
       </div>
     </section>
+  )
+}
+
+function TelemetrySubviewSelector({
+  activeSubview,
+  onSubviewChange,
+}: {
+  activeSubview: TelemetrySubview
+  onSubviewChange: (subview: TelemetrySubview) => void
+}) {
+  const subviews: Array<{ id: TelemetrySubview; label: string }> = [
+    { id: 'vehicle', label: 'Vehicle' },
+    { id: 'mppt', label: 'MPPT' },
+    { id: 'connections', label: 'Connections' },
+  ]
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-black/20 p-2">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {subviews.map((subview) => (
+          <button
+            key={subview.id}
+            type="button"
+            onClick={() => onSubviewChange(subview.id)}
+            className={`h-10 rounded-md border px-3 text-sm font-black uppercase tracking-wide transition ${
+              activeSubview === subview.id
+                ? 'border-[#ff3ea5]/50 bg-[#ff3ea5]/15 text-[#ff8fcb]'
+                : 'border-white/10 bg-white/5 text-slate-300 hover:border-[#ff3ea5]/30 hover:bg-white/10'
+            }`}
+          >
+            {subview.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+const mpptFields = [
+  'mpptPvVoltage',
+  'mpptPvCurrent',
+  'mpptPvPowerWatts',
+  'mpptBatteryVoltage',
+  'mpptChargeCurrent',
+  'mpptChargePowerWatts',
+  'mpptDailyEnergyWh',
+  'mpptStatus',
+  'mpptFault',
+] as const
+
+function formatWatts(value?: number) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(0)} W`
+    : '--'
+}
+
+function formatVolts(value?: number) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(1)} V`
+    : '--'
+}
+
+function formatAmps(value?: number) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(1)} A`
+    : '--'
+}
+
+function solarInputSource(telemetry: TelemetryData | null) {
+  if (telemetry?.mpptChargePowerWatts !== undefined) return 'mpptChargePowerWatts'
+  if (telemetry?.mpptPvPowerWatts !== undefined) return 'mpptPvPowerWatts'
+  if (telemetry?.solarPowerWatts !== undefined) return 'solarPowerWatts'
+  return 'setup estimate'
+}
+
+function latestMpptAgeSeconds(
+  telemetryHistory: TelemetryHistorySample[],
+  telemetry: TelemetryData | null
+) {
+  const latestHistoryTimestamp = [...telemetryHistory]
+    .reverse()
+    .find(
+      (sample) =>
+        sample.mpptChargePowerWatts !== undefined ||
+        sample.mpptDailyEnergyWh !== undefined
+    )?.timestamp
+  const latestTelemetryTimestamp =
+    telemetry &&
+    (telemetry.mpptChargePowerWatts !== undefined ||
+      telemetry.mpptPvPowerWatts !== undefined ||
+      telemetry.mpptDailyEnergyWh !== undefined)
+      ? telemetry.timestamp
+      : undefined
+  const latestTimestamp = latestHistoryTimestamp ?? latestTelemetryTimestamp
+
+  return latestTimestamp !== undefined
+    ? Math.max(0, Math.round((Date.now() - latestTimestamp) / 1000))
+    : null
+}
+
+function integrateMpptChargeEnergyWh(telemetryHistory: TelemetryHistorySample[]) {
+  const samples = telemetryHistory
+    .filter(
+      (sample) =>
+        sample.mpptChargePowerWatts !== undefined &&
+        Number.isFinite(sample.mpptChargePowerWatts)
+    )
+    .sort((left, right) => left.timestamp - right.timestamp)
+
+  if (samples.length < 2) return null
+
+  let energyWh = 0
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const previous = samples[index - 1]
+    const current = samples[index]
+    const deltaHours = Math.max(0, current.timestamp - previous.timestamp) / 3_600_000
+    const averagePower =
+      ((previous.mpptChargePowerWatts ?? 0) + (current.mpptChargePowerWatts ?? 0)) / 2
+
+    energyWh += Math.max(0, averagePower) * deltaHours
+  }
+
+  return energyWh
+}
+
+function classifyDataFreshness(ageSeconds?: number) {
+  if (ageSeconds === undefined) {
+    return { label: 'disconnected', tone: 'danger' as const }
+  }
+  if (ageSeconds < 5) return { label: 'connected', tone: 'healthy' as const }
+  if (ageSeconds <= 30) return { label: 'stale', tone: 'warning' as const }
+  return { label: 'disconnected', tone: 'danger' as const }
+}
+
+function telemetrySourceDisplay(source: TelemetrySource) {
+  if (source === 'esp32') return 'ESP32'
+  if (source === 'simulator' || source === 'mock-esp32') return 'simulator'
+  if (source === 'cloud') return 'cloud'
+  return 'local'
+}
+
+function MpptLivePanel({
+  telemetry,
+  telemetryHistory,
+  carSetup,
+}: {
+  telemetry: TelemetryData | null
+  telemetryHistory: TelemetryHistorySample[]
+  carSetup: CarSetup
+}) {
+  const solarSource = solarInputSource(telemetry)
+  const chargePower = telemetry?.mpptChargePowerWatts
+  const capturedTodayWh =
+    telemetry?.mpptDailyEnergyWh ?? integrateMpptChargeEnergyWh(telemetryHistory)
+  const mpptAgeSeconds = latestMpptAgeSeconds(telemetryHistory, telemetry)
+  const missingFields = mpptFields.filter((field) => telemetry?.[field] === undefined)
+  const noMpptData = missingFields.length === mpptFields.length
+
+  return (
+    <section className="grid gap-4">
+      {noMpptData ? (
+        <div className="rounded-md border border-slate-400/25 bg-slate-400/10 p-3 text-sm font-semibold text-slate-300">
+          No MPPT data
+        </div>
+      ) : null}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <StatusMetric label="MPPT Status" value={telemetry?.mpptStatus ?? telemetry?.mpptChargeState ?? '--'} />
+        <StatusMetric label="MPPT Fault" value={telemetry?.mpptFault ?? '--'} />
+        <StatusMetric label="PV Voltage" value={formatVolts(telemetry?.mpptPvVoltage)} />
+        <StatusMetric label="PV Current" value={formatAmps(telemetry?.mpptPvCurrent)} />
+        <StatusMetric label="PV Power" value={formatWatts(telemetry?.mpptPvPowerWatts)} />
+        <StatusMetric label="Charge Voltage" value={formatVolts(telemetry?.mpptBatteryVoltage)} />
+        <StatusMetric label="Charge Current" value={formatAmps(telemetry?.mpptChargeCurrent)} />
+        <StatusMetric label="Charge Power" value={formatWatts(telemetry?.mpptChargePowerWatts)} />
+        <StatusMetric
+          label="Daily Energy"
+          value={
+            telemetry?.mpptDailyEnergyWh !== undefined
+              ? `${telemetry.mpptDailyEnergyWh.toFixed(0)} Wh / ${(telemetry.mpptDailyEnergyWh / 1000).toFixed(2)} kWh`
+              : '--'
+          }
+        />
+        <StatusMetric
+          label="Solar Input Source"
+          value={solarSource}
+        />
+        {solarSource === 'setup estimate' ? (
+          <p className="text-xs font-semibold text-slate-400">
+            {carSetup.solarWatts.toFixed(0)} W estimated
+          </p>
+        ) : null}
+      </section>
+      <section className="grid gap-4 lg:grid-cols-3">
+        <MiniPanel title="Live Charge Power">
+          <StatusMetric label="Current" value={formatWatts(chargePower)} />
+        </MiniPanel>
+        <MiniPanel title="Solar Captured Today">
+          <StatusMetric
+            label="Captured"
+            value={
+              capturedTodayWh !== null
+                ? `${capturedTodayWh.toFixed(0)} Wh / ${(capturedTodayWh / 1000).toFixed(2)} kWh`
+                : '--'
+            }
+          />
+          {telemetry?.mpptDailyEnergyWh === undefined && capturedTodayWh !== null ? (
+            <p className="mt-2 text-xs font-semibold text-slate-400">
+              Integrated from MPPT charge power history
+            </p>
+          ) : null}
+        </MiniPanel>
+        <MiniPanel title="Solar Data Age">
+          <StatusMetric
+            label="Age"
+            value={mpptAgeSeconds !== null ? `${mpptAgeSeconds}s` : '--'}
+          />
+          {solarSource === 'setup estimate' ? (
+            <p className="mt-2 text-xs font-semibold text-slate-400">
+              Fallback mode: estimated/setup data
+            </p>
+          ) : null}
+        </MiniPanel>
+      </section>
+    </section>
+  )
+}
+
+function ConnectionStatusPanel({
+  telemetry,
+  telemetryHistory,
+  telemetryStatus,
+  connectionStatus,
+  lastPacketAt,
+  packetAgeSeconds,
+  packetStats,
+  source,
+  cloudNode,
+  cloudHealth,
+  geolocation,
+}: {
+  telemetry: TelemetryData | null
+  telemetryHistory: TelemetryHistorySample[]
+  telemetryStatus: TelemetryConnectionStatus
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
+  lastPacketAt?: number
+  packetAgeSeconds?: number
+  packetStats: TelemetryPacketStats
+  source: TelemetrySource
+  cloudNode: TelemetryNodeId
+  cloudHealth: CloudTelemetryHealth | null
+  geolocation: ReturnType<typeof useGeolocation>
+}) {
+  const vehicleFreshness = classifyDataFreshness(packetAgeSeconds)
+  const mpptAge = latestMpptAgeSeconds(telemetryHistory, telemetry)
+  const mpptFreshness = classifyDataFreshness(mpptAge ?? undefined)
+  const missingMpptFields = mpptFields.filter((field) => telemetry?.[field] === undefined).length
+  const gpsAgeSeconds = geolocation.timestamp
+    ? Math.max(0, Math.round((Date.now() - geolocation.timestamp) / 1000))
+    : undefined
+  const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
+
+  return (
+    <section className="grid gap-4">
+      <MiniPanel title="Vehicle Telemetry">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <ConnectionField label="Status" value={vehicleFreshness.label} tone={vehicleFreshness.tone} />
+          <StatusMetric label="Last Packet" value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'} />
+          <StatusMetric label="Packet Age" value={packetAgeSeconds !== undefined ? `${packetAgeSeconds}s` : '--'} />
+          <StatusMetric label="Packet Rate" value={`${(packetStats.packetsPerMinute / 60).toFixed(2)} Hz`} />
+          <StatusMetric label="Source" value={telemetrySourceDisplay(source)} />
+          <StatusMetric label="Node" value={cloudNode} />
+          <StatusMetric label="Connection" value={connectionStatus} />
+          <StatusMetric label="Telemetry" value={telemetryStatus} />
+        </div>
+      </MiniPanel>
+      <MiniPanel title="MPPT Telemetry">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <ConnectionField label="Status" value={mpptFreshness.label} tone={mpptFreshness.tone} />
+          <StatusMetric label="Last MPPT Packet" value={mpptAge !== null ? `${mpptAge}s ago` : '--'} />
+          <StatusMetric label="MPPT Data Age" value={mpptAge !== null ? `${mpptAge}s` : '--'} />
+          <StatusMetric label="Last Charge Power" value={formatWatts(telemetry?.mpptChargePowerWatts)} />
+          <StatusMetric label="Missing Fields" value={String(missingMpptFields)} />
+        </div>
+      </MiniPanel>
+      <MiniPanel title="Cloud Telemetry">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <ConnectionField
+            label="Redis"
+            value={cloudHealth?.redis ?? 'not_configured'}
+            tone={cloudHealth?.redis === 'connected' ? 'healthy' : cloudHealth?.redis === 'error' ? 'danger' : 'neutral'}
+          />
+          <ConnectionField label="API Status" value={cloudHealth?.ok ? 'healthy' : 'unavailable'} tone={cloudHealth?.ok ? 'healthy' : 'neutral'} />
+          <StatusMetric label="Last Cloud Packet" value={cloudHealth?.latestVehicleUpdatedAt ? new Date(cloudHealth.latestVehicleUpdatedAt).toLocaleTimeString() : '--'} />
+          <StatusMetric label="Health Node" value={cloudHealth?.latestVehicleNode ?? '--'} />
+          <StatusMetric label="Health Age" value={cloudHealth?.latestVehiclePacketAgeSeconds !== null && cloudHealth?.latestVehiclePacketAgeSeconds !== undefined ? `${cloudHealth.latestVehiclePacketAgeSeconds}s` : '--'} />
+        </div>
+      </MiniPanel>
+      <MiniPanel title="GPS">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <ConnectionField label="Permission" value={geolocation.status} tone={geolocation.status === 'watching' ? 'healthy' : geolocation.status === 'error' || geolocation.status === 'permission-denied' ? 'danger' : 'neutral'} />
+          <ConnectionField label="GPS Fix" value={geolocation.latitude !== null && geolocation.longitude !== null ? 'available' : 'unavailable'} tone={geolocation.latitude !== null && geolocation.longitude !== null ? gpsFreshness.tone : 'neutral'} />
+          <StatusMetric label="Lat/Lon" value={geolocation.latitude !== null && geolocation.longitude !== null ? `${geolocation.latitude.toFixed(5)}, ${geolocation.longitude.toFixed(5)}` : '--'} />
+          <StatusMetric label="GPS Age" value={gpsAgeSeconds !== undefined ? `${gpsAgeSeconds}s` : '--'} />
+        </div>
+      </MiniPanel>
+    </section>
+  )
+}
+
+function ConnectionField({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone: 'healthy' | 'warning' | 'danger' | 'neutral'
+}) {
+  const toneClass =
+    tone === 'healthy'
+      ? 'text-emerald-200'
+      : tone === 'warning'
+        ? 'text-yellow-100'
+        : tone === 'danger'
+          ? 'text-red-300'
+          : 'text-slate-300'
+
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff8fcb]">
+        {label}
+      </p>
+      <p className={`mt-1 text-base font-black ${toneClass}`}>{value}</p>
+    </div>
   )
 }
 

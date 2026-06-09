@@ -48,6 +48,18 @@ type UseTelemetryOptions = {
   currentSegment?: RouteSegment | null
 }
 
+export type TelemetryHistorySample = {
+  timestamp: number
+  distanceMiles?: number
+  batteryEnergyUsedWh?: number
+  batteryPowerWatts?: number
+  mpptChargePowerWatts?: number
+  mpptDailyEnergyWh?: number
+  speedMph: number
+}
+
+const maxTelemetryHistorySamples = 900
+
 export function useTelemetry({
   currentMile,
   currentSegment,
@@ -66,6 +78,7 @@ export function useTelemetry({
     useState<CloudTelemetryHealth | null>(null)
   const [packetStats, setPacketStats] =
     useState<TelemetryPacketStats>(emptyPacketStats)
+  const [telemetryHistory, setTelemetryHistory] = useState<TelemetryHistorySample[]>([])
   const intervalRef = useRef<number | null>(null)
   const esp32PollInFlightRef = useRef(false)
   const esp32AbortControllerRef = useRef<AbortController | null>(null)
@@ -173,6 +186,7 @@ export function useTelemetry({
 
       telemetryRef.current = nextTelemetry
       setTelemetry(nextTelemetry)
+      recordTelemetryHistory(nextTelemetry)
       setStatus('simulated')
       setConnectionStatus('connected')
       setLastPacketAt(nextTelemetry.timestamp)
@@ -427,6 +441,7 @@ export function useTelemetry({
 
       telemetryRef.current = nextTelemetry
       setTelemetry(nextTelemetry)
+      recordTelemetryHistory(nextTelemetry)
       setLastPacketAt(lastPacketTimestamp)
       setConnectionStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
       setStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
@@ -448,6 +463,7 @@ export function useTelemetry({
     packetTimestampsRef.current = []
     lastPacketKeyRef.current = null
     setPacketStats(emptyPacketStats)
+    setTelemetryHistory([])
   }
 
   function refreshPacketStats() {
@@ -466,6 +482,31 @@ export function useTelemetry({
       packetTimestamp,
     ].sort((a, b) => a - b)
     refreshPacketStats()
+  }
+
+  function recordTelemetryHistory(nextTelemetry: TelemetryData) {
+    setTelemetryHistory((currentHistory) =>
+      [
+        ...currentHistory,
+        {
+          timestamp: nextTelemetry.timestamp,
+          distanceMiles:
+            nextTelemetry.odometerMiles ??
+            nextTelemetry.distanceMiles ??
+            currentMileRef.current,
+          batteryEnergyUsedWh: undefined,
+          batteryPowerWatts:
+            nextTelemetry.batteryPowerWatts ??
+            multiplyIfNumbers(
+              nextTelemetry.batteryVoltage,
+              nextTelemetry.batteryCurrent
+            ),
+          mpptChargePowerWatts: nextTelemetry.mpptChargePowerWatts,
+          mpptDailyEnergyWh: nextTelemetry.mpptDailyEnergyWh,
+          speedMph: nextTelemetry.speedMph,
+        },
+      ].slice(-maxTelemetryHistorySamples)
+    )
   }
 
   useEffect(() => {
@@ -509,6 +550,8 @@ export function useTelemetry({
     effectiveStatusSource: effectiveTelemetryStatus.statusSource,
     effectivePacketStats,
     packetStats,
+    telemetryHistory,
+    cloudHealth,
     cloudNode,
     connect,
     disconnect,
@@ -694,4 +737,13 @@ function calculatePacketStats(timestamps: number[], now = Date.now()) {
     averageUpdateIntervalSeconds,
     packetLossEstimatePercent,
   }
+}
+
+function multiplyIfNumbers(left: unknown, right: unknown) {
+  return typeof left === 'number' &&
+    Number.isFinite(left) &&
+    typeof right === 'number' &&
+    Number.isFinite(right)
+    ? left * right
+    : undefined
 }
