@@ -74,6 +74,7 @@ import {
 import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import type {
   CloudTelemetryHealth,
+  CloudTelemetryPacketStatus,
   TelemetryConnectionStatus,
   TelemetryData,
   TelemetryEffectiveStatusSource,
@@ -913,6 +914,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 lastPacketAt={telemetryController.effectiveLastPacketAt}
                 packetAgeSeconds={telemetryController.effectivePacketAgeSeconds}
                 packetStats={telemetryController.effectivePacketStats}
+                cloudPacketStatus={telemetryController.cloudPacketStatus}
                 source={telemetryController.source}
                 cloudNode={telemetryController.cloudNode}
                 cloudHealth={telemetryController.cloudHealth}
@@ -2673,7 +2675,7 @@ function classifyDataFreshness(ageSeconds?: number) {
     return { label: 'disconnected', tone: 'danger' as const }
   }
   if (ageSeconds < 5) return { label: 'connected', tone: 'healthy' as const }
-  if (ageSeconds <= 30) return { label: 'stale', tone: 'warning' as const }
+  if (ageSeconds <= 15) return { label: 'stale', tone: 'warning' as const }
   return { label: 'disconnected', tone: 'danger' as const }
 }
 
@@ -2778,6 +2780,7 @@ function ConnectionStatusPanel({
   lastPacketAt,
   packetAgeSeconds,
   packetStats,
+  cloudPacketStatus,
   source,
   cloudNode,
   cloudHealth,
@@ -2790,6 +2793,7 @@ function ConnectionStatusPanel({
   lastPacketAt?: number
   packetAgeSeconds?: number
   packetStats: TelemetryPacketStats
+  cloudPacketStatus: CloudTelemetryPacketStatus | null
   source: TelemetrySource
   cloudNode: TelemetryNodeId
   cloudHealth: CloudTelemetryHealth | null
@@ -2803,6 +2807,18 @@ function ConnectionStatusPanel({
     ? Math.max(0, Math.round((Date.now() - geolocation.timestamp) / 1000))
     : undefined
   const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
+  const displayedPacketRateHz =
+    source === 'cloud' && cloudPacketStatus?.packetRateHz !== undefined
+      ? cloudPacketStatus.packetRateHz
+      : packetStats.packetsPerMinute / 60
+  const displayedSource =
+    source === 'cloud'
+      ? cloudPacketStatus?.source ?? telemetrySourceDisplay(source)
+      : telemetrySourceDisplay(source)
+  const displayedConnectionStatus =
+    source === 'cloud'
+      ? cloudPacketStatus?.connectionStatus ?? connectionStatus
+      : connectionStatus
 
   return (
     <section className="grid gap-4">
@@ -2811,11 +2827,37 @@ function ConnectionStatusPanel({
           <ConnectionField label="Status" value={vehicleFreshness.label} tone={vehicleFreshness.tone} />
           <StatusMetric label="Last Packet" value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'} />
           <StatusMetric label="Packet Age" value={packetAgeSeconds !== undefined ? `${packetAgeSeconds}s` : '--'} />
-          <StatusMetric label="Packet Rate" value={`${(packetStats.packetsPerMinute / 60).toFixed(2)} Hz`} />
-          <StatusMetric label="Source" value={telemetrySourceDisplay(source)} />
+          <StatusMetric label="Packet Rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
+          <StatusMetric label="Source" value={displayedSource} />
           <StatusMetric label="Node" value={cloudNode} />
-          <StatusMetric label="Connection" value={connectionStatus} />
+          <StatusMetric label="Connection" value={displayedConnectionStatus} />
           <StatusMetric label="Telemetry" value={telemetryStatus} />
+          <StatusMetric
+            label="Telemetry Fresh"
+            value={
+              cloudPacketStatus?.telemetryFresh === undefined
+                ? '--'
+                : cloudPacketStatus.telemetryFresh
+                ? 'true'
+                : 'false'
+            }
+          />
+          <StatusMetric
+            label="Last Cloud Status"
+            value={
+              cloudPacketStatus?.lastCloudStatus !== undefined
+                ? String(cloudPacketStatus.lastCloudStatus)
+                : '--'
+            }
+          />
+          <StatusMetric
+            label="ESP32 Packet Age"
+            value={
+              cloudPacketStatus?.lastPacketAgeMs !== undefined
+                ? `${cloudPacketStatus.lastPacketAgeMs} ms`
+                : '--'
+            }
+          />
         </div>
       </MiniPanel>
       <MiniPanel title="MPPT Telemetry">
@@ -2838,6 +2880,7 @@ function ConnectionStatusPanel({
           <StatusMetric label="Last Cloud Packet" value={cloudHealth?.latestVehicleUpdatedAt ? new Date(cloudHealth.latestVehicleUpdatedAt).toLocaleTimeString() : '--'} />
           <StatusMetric label="Health Node" value={cloudHealth?.latestVehicleNode ?? '--'} />
           <StatusMetric label="Health Age" value={cloudHealth?.latestVehiclePacketAgeSeconds !== null && cloudHealth?.latestVehiclePacketAgeSeconds !== undefined ? `${cloudHealth.latestVehiclePacketAgeSeconds}s` : '--'} />
+          <StatusMetric label="Latest Updated" value={cloudPacketStatus?.updatedAt ? new Date(cloudPacketStatus.updatedAt).toLocaleTimeString() : '--'} />
         </div>
       </MiniPanel>
       <MiniPanel title="GPS">

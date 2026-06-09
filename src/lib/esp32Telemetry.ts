@@ -1,21 +1,27 @@
 import {
   normalizeTelemetry,
   type NormalizedTelemetry,
+  type NormalizedTelemetrySource,
   type TelemetryData,
   type TelemetryInput,
 } from '@/types/telemetry'
 
 export type Esp32TelemetryPacket = {
   timestamp?: number
+  source?: string
   speedMph?: number
   gpsLat?: number
   gpsLng?: number
   gpsElevationFt?: number
   packVoltage?: number
+  batteryVoltage?: number
   packCurrent?: number
+  batteryCurrent?: number
   packSoc?: number
   soc?: number
+  batterySocPercent?: number
   packTempC?: number
+  batteryTempC?: number
   motorTempC?: number
   motorTemp?: number
   controllerTempC?: number
@@ -23,6 +29,20 @@ export type Esp32TelemetryPacket = {
   motorRpm?: number
   rpm?: number
   throttlePercent?: number
+  throttleVoltage?: number
+  packPowerWatts?: number
+  batteryPowerWatts?: number
+  phaseA?: number
+  phaseC?: number
+  modulation?: number
+  gear?: number
+  controllerSerial?: string
+  bleConnected?: boolean
+  telemetryFresh?: boolean
+  connectionStatus?: string
+  packetRateHz?: number
+  lastPacketAgeMs?: number
+  lastCloudStatus?: number
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
@@ -72,19 +92,36 @@ export function parseEsp32TelemetryPacket(
   // Future ESP32 transport should pass decoded JSON packets into this mapper.
   return normalizeTelemetry({
     timestamp: finiteNumber(packet.timestamp),
-    source: 'esp32',
+    source: normalizePacketSource(packet.source),
     speedMph: finiteNumber(packet.speedMph),
     gpsLat: finiteNumber(packet.gpsLat),
     gpsLng: finiteNumber(packet.gpsLng),
     gpsElevationFt: finiteNumber(packet.gpsElevationFt),
-    batteryVoltage: finiteNumber(packet.packVoltage),
-    batteryCurrent: finiteNumber(packet.packCurrent),
-    batterySocPercent: clampSoc(packet.packSoc ?? packet.soc),
-    batteryTempC: finiteNumber(packet.packTempC),
+    batteryVoltage: finiteNumber(packet.packVoltage ?? packet.batteryVoltage),
+    batteryCurrent: finiteNumber(packet.packCurrent ?? packet.batteryCurrent),
+    batterySocPercent: clampSoc(
+      packet.packSoc ?? packet.soc ?? packet.batterySocPercent
+    ),
+    batteryTempC: finiteNumber(packet.packTempC ?? packet.batteryTempC),
+    batteryPowerWatts: finiteNumber(
+      packet.packPowerWatts ?? packet.batteryPowerWatts
+    ),
     motorTempC: finiteNumber(packet.motorTempC ?? packet.motorTemp),
     controllerTempC: finiteNumber(packet.controllerTempC ?? packet.controllerTemp),
     motorRpm: finiteNumber(packet.motorRpm ?? packet.rpm),
     throttlePercent: clampSoc(packet.throttlePercent),
+    throttleVoltage: finiteNumber(packet.throttleVoltage),
+    phaseA: finiteNumber(packet.phaseA),
+    phaseC: finiteNumber(packet.phaseC),
+    modulation: finiteNumber(packet.modulation),
+    gear: finiteNumber(packet.gear),
+    controllerSerial: stringValue(packet.controllerSerial),
+    bleConnected: booleanValue(packet.bleConnected),
+    telemetryFresh: booleanValue(packet.telemetryFresh),
+    cloudConnectionStatus: stringValue(packet.connectionStatus),
+    packetRateHz: finiteNumber(packet.packetRateHz),
+    lastPacketAgeMs: finiteNumber(packet.lastPacketAgeMs),
+    lastCloudStatus: finiteNumber(packet.lastCloudStatus),
     mpptVoltage: finiteNumber(packet.mpptVoltage),
     mpptCurrent: finiteNumber(packet.mpptCurrent),
     mpptPowerWatts: finiteNumber(packet.mpptPowerWatts),
@@ -148,4 +185,12 @@ function clampSoc(value: unknown) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function booleanValue(value: unknown) {
+  return typeof value === 'boolean' ? value : undefined
+}
+
+function normalizePacketSource(_value: unknown): NormalizedTelemetrySource {
+  return 'esp32'
 }

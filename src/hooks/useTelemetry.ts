@@ -10,6 +10,7 @@ import {
 import { generateTelemetryFrame } from '@/lib/telemetrySimulator'
 import type {
   CloudTelemetryHealth,
+  CloudTelemetryPacketStatus,
   TelemetryEffectiveStatusSource,
   TelemetryFreshness,
   TelemetryNodeId,
@@ -76,6 +77,8 @@ export function useTelemetry({
     useState<TelemetryNodeId>(defaultCloudNode)
   const [cloudHealth, setCloudHealth] =
     useState<CloudTelemetryHealth | null>(null)
+  const [cloudPacketStatus, setCloudPacketStatus] =
+    useState<CloudTelemetryPacketStatus | null>(null)
   const [packetStats, setPacketStats] =
     useState<TelemetryPacketStats>(emptyPacketStats)
   const [telemetryHistory, setTelemetryHistory] = useState<TelemetryHistorySample[]>([])
@@ -101,6 +104,7 @@ export function useTelemetry({
   useEffect(() => {
     if (source !== 'cloud') {
       setCloudHealth(null)
+      setCloudPacketStatus(null)
       return
     }
 
@@ -202,6 +206,7 @@ export function useTelemetry({
       disconnect()
       setSourceState(nextSource)
       setTelemetry(null)
+      setCloudPacketStatus(null)
       setLastPacketAt(undefined)
       setConnectionError(undefined)
       resetPacketStats()
@@ -214,6 +219,7 @@ export function useTelemetry({
       disconnect()
       setCloudNodeState(nextNode)
       setTelemetry(null)
+      setCloudPacketStatus(null)
       setLastPacketAt(undefined)
       setConnectionError(undefined)
       resetPacketStats()
@@ -346,6 +352,10 @@ export function useTelemetry({
 
         if (response.status === 404) {
           refreshPacketStats()
+          setTelemetry(null)
+          telemetryRef.current = null
+          setCloudPacketStatus(null)
+          setLastPacketAt(undefined)
           setConnectionStatus('disconnected')
           setStatus('connecting')
           setConnectionError(undefined)
@@ -373,13 +383,17 @@ export function useTelemetry({
         handleEsp32Payload(
           latest.payload,
           packetReceivedAt,
-          `cloud:${latest.node ?? cloudNode}:${latest.updated_at ?? packetReceivedAt}`
+          `cloud:${latest.node ?? cloudNode}:${latest.updated_at ?? packetReceivedAt}`,
+          {
+            node: latest.node ?? cloudNode,
+            updatedAt: latest.updated_at,
+          }
         )
       } catch (error) {
         if (cloudSessionRef.current !== sessionId) return
 
-        setConnectionStatus('error')
-        setStatus('error')
+        setConnectionStatus('disconnected')
+        setStatus('disconnected')
         setConnectionError(
           error instanceof DOMException && error.name === 'AbortError'
             ? 'Cloud telemetry request timed out.'
@@ -407,6 +421,7 @@ export function useTelemetry({
     cloudAbortControllerRef.current?.abort()
     cloudAbortControllerRef.current = null
     cloudPollInFlightRef.current = false
+    setCloudPacketStatus(null)
   }
 
   function handleEsp32Packet(rawJson: string) {
@@ -425,7 +440,8 @@ export function useTelemetry({
   function handleEsp32Payload(
     payload: unknown,
     packetReceivedAt?: number,
-    packetKey?: string
+    packetKey?: string,
+    cloudContext?: Pick<CloudTelemetryPacketStatus, 'node' | 'updatedAt'>
   ) {
     try {
       const packet =
@@ -433,18 +449,40 @@ export function useTelemetry({
       const nextTelemetry = parseEsp32TelemetryPacket(
         packet as Esp32TelemetryPacket
       )
+      const nextCloudPacketStatus =
+        source === 'cloud'
+          ? extractCloudPacketStatus(packet, cloudContext)
+          : null
+      const nextTelemetryWithCloud = nextCloudPacketStatus
+        ? {
+            ...nextTelemetry,
+            cloudNode: nextCloudPacketStatus.node,
+            cloudUpdatedAt: nextCloudPacketStatus.updatedAt ?? undefined,
+          }
+        : nextTelemetry
       const lastPacketTimestamp = packetReceivedAt ?? nextTelemetry.timestamp
       const lastPacketAgeSeconds = Math.max(
         0,
         Math.round((Date.now() - lastPacketTimestamp) / 1000)
       )
+      const freshness = classifyTelemetryFreshness(lastPacketAgeSeconds)
 
-      telemetryRef.current = nextTelemetry
-      setTelemetry(nextTelemetry)
-      recordTelemetryHistory(nextTelemetry)
+      if (process.env.NODE_ENV === 'development' && source === 'cloud') {
+        console.debug('[telemetry:cloud]', {
+          source,
+          node: cloudNode,
+          latestCloudPayload: packet,
+          normalizedTelemetry: nextTelemetryWithCloud,
+        })
+      }
+
+      telemetryRef.current = nextTelemetryWithCloud
+      setTelemetry(nextTelemetryWithCloud)
+      setCloudPacketStatus(nextCloudPacketStatus)
+      recordTelemetryHistory(nextTelemetryWithCloud)
       setLastPacketAt(lastPacketTimestamp)
-      setConnectionStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
-      setStatus(lastPacketAgeSeconds > 15 ? 'disconnected' : 'connected')
+      setConnectionStatus(connectionStatusForFreshness(freshness))
+      setStatus(statusForFreshness(freshness))
       setConnectionError(undefined)
       recordPacket(
         lastPacketTimestamp,
@@ -463,6 +501,7 @@ export function useTelemetry({
     packetTimestampsRef.current = []
     lastPacketKeyRef.current = null
     setPacketStats(emptyPacketStats)
+    setCloudPacketStatus(null)
     setTelemetryHistory([])
   }
 
@@ -552,6 +591,7 @@ export function useTelemetry({
     packetStats,
     telemetryHistory,
     cloudHealth,
+    cloudPacketStatus,
     cloudNode,
     connect,
     disconnect,
@@ -566,6 +606,40 @@ function parseTimestamp(value: string | null | undefined) {
   const timestamp = Date.parse(value)
 
   return Number.isFinite(timestamp) ? timestamp : undefined
+}
+
+function extractCloudPacketStatus(
+  packet: unknown,
+  context?: Pick<CloudTelemetryPacketStatus, 'node' | 'updatedAt'>
+): CloudTelemetryPacketStatus {
+  const payload = isRecord(packet) ? packet : {}
+
+  return {
+    source: stringValue(payload.source),
+    node: context?.node,
+    updatedAt: context?.updatedAt,
+    connectionStatus: stringValue(payload.connectionStatus),
+    telemetryFresh: booleanValue(payload.telemetryFresh),
+    packetRateHz: finiteNumber(payload.packetRateHz),
+    lastPacketAgeMs: finiteNumber(payload.lastPacketAgeMs),
+    lastCloudStatus: finiteNumber(payload.lastCloudStatus),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function finiteNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function booleanValue(value: unknown) {
+  return typeof value === 'boolean' ? value : undefined
 }
 
 function deriveEffectiveTelemetryStatus({

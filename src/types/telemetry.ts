@@ -1,4 +1,7 @@
-export type NormalizedTelemetrySource = 'simulator' | 'esp32' | 'manual'
+export type NormalizedTelemetrySource =
+  | 'simulator'
+  | 'esp32'
+  | 'manual'
 
 export type TelemetryData = {
   timestamp: number
@@ -19,7 +22,21 @@ export type TelemetryData = {
   controllerTempC?: number
   motorRpm?: number
   throttlePercent?: number
+  throttleVoltage?: number
   motorPowerWatts?: number
+  phaseA?: number
+  phaseC?: number
+  modulation?: number
+  gear?: number
+  controllerSerial?: string
+  bleConnected?: boolean
+  telemetryFresh?: boolean
+  packetRateHz?: number
+  lastPacketAgeMs?: number
+  lastCloudStatus?: number
+  cloudConnectionStatus?: string
+  cloudUpdatedAt?: string
+  cloudNode?: TelemetryNodeId
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
@@ -98,7 +115,21 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
       input.throttlePercent === undefined
         ? undefined
         : clampPercent(input.throttlePercent),
+    throttleVoltage: input.throttleVoltage,
     motorPowerWatts: input.motorPowerWatts,
+    phaseA: input.phaseA,
+    phaseC: input.phaseC,
+    modulation: input.modulation,
+    gear: input.gear,
+    controllerSerial: input.controllerSerial,
+    bleConnected: input.bleConnected,
+    telemetryFresh: input.telemetryFresh,
+    packetRateHz: input.packetRateHz,
+    lastPacketAgeMs: input.lastPacketAgeMs,
+    lastCloudStatus: input.lastCloudStatus,
+    cloudConnectionStatus: input.cloudConnectionStatus,
+    cloudUpdatedAt: input.cloudUpdatedAt,
+    cloudNode: input.cloudNode,
     mpptVoltage,
     mpptCurrent,
     mpptPowerWatts,
@@ -188,6 +219,17 @@ export type CloudTelemetryHealth = {
     ageSeconds: number | null
   }>
   error?: string
+}
+
+export type CloudTelemetryPacketStatus = {
+  source?: string
+  node?: TelemetryNodeId
+  updatedAt?: string | null
+  connectionStatus?: string
+  telemetryFresh?: boolean
+  packetRateHz?: number
+  lastPacketAgeMs?: number
+  lastCloudStatus?: number
 }
 
 export type TelemetrySource =
