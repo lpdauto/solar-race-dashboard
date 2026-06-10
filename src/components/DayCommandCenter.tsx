@@ -2655,7 +2655,7 @@ function classifyDataFreshness(ageSeconds?: number) {
     return { label: 'disconnected', tone: 'danger' as const }
   }
   if (ageSeconds < 5) return { label: 'connected', tone: 'healthy' as const }
-  if (ageSeconds <= 15) return { label: 'stale', tone: 'warning' as const }
+  if (ageSeconds <= 30) return { label: 'stale', tone: 'warning' as const }
   return { label: 'disconnected', tone: 'danger' as const }
 }
 
@@ -2818,15 +2818,12 @@ function ConnectionStatusPanel({
   cloudHealth: CloudTelemetryHealth | null
   geolocation: ReturnType<typeof useGeolocation>
 }) {
-  const esp32PacketAgeSeconds =
-    cloudPacketStatus?.lastPacketAgeMs !== undefined
-      ? cloudPacketStatus.lastPacketAgeMs / 1000
-      : undefined
   const vehicleFreshness = classifyDataFreshness(
-    source === 'cloud' && esp32PacketAgeSeconds !== undefined
-      ? esp32PacketAgeSeconds
-      : packetAgeSeconds
+    packetAgeSeconds
   )
+  const canTrustCloudPacket =
+    source === 'cloud' && vehicleFreshness.label !== 'disconnected'
+  const trustedCloudPacketStatus = canTrustCloudPacket ? cloudPacketStatus : null
   const mpptAge = latestMpptAgeSeconds(telemetryHistory, telemetry)
   const mpptFreshness = classifyDataFreshness(mpptAge ?? undefined)
   const missingMpptFields = mpptFields.filter((field) => telemetry?.[field] === undefined).length
@@ -2835,17 +2832,33 @@ function ConnectionStatusPanel({
     : undefined
   const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
   const displayedPacketRateHz =
-    source === 'cloud' && cloudPacketStatus?.packetRateHz !== undefined
-      ? cloudPacketStatus.packetRateHz
+    trustedCloudPacketStatus?.packetRateHz !== undefined
+      ? trustedCloudPacketStatus.packetRateHz
+      : vehicleFreshness.label === 'disconnected'
+      ? 0
       : packetStats.packetsPerMinute / 60
   const displayedSource =
     source === 'cloud'
-      ? cloudPacketStatus?.source ?? telemetrySourceDisplay(source)
+      ? trustedCloudPacketStatus?.source ?? telemetrySourceDisplay(source)
       : telemetrySourceDisplay(source)
   const displayedConnectionStatus =
-    source === 'cloud'
-      ? cloudPacketStatus?.connectionStatus ?? connectionStatus
+    vehicleFreshness.label === 'disconnected'
+      ? 'disconnected'
+      : vehicleFreshness.label === 'stale'
+      ? 'stale'
+      : source === 'cloud'
+      ? trustedCloudPacketStatus?.connectionStatus ?? connectionStatus
       : connectionStatus
+  const displayedTelemetryFresh =
+    trustedCloudPacketStatus?.telemetryFresh === undefined
+      ? vehicleFreshness.label === 'disconnected'
+        ? 'false'
+        : '--'
+      : vehicleFreshness.label === 'connected'
+      ? trustedCloudPacketStatus.telemetryFresh
+        ? 'true'
+        : 'false'
+      : vehicleFreshness.label
   const lastCloudUpdateAt =
     cloudPacketStatus?.updatedAt ?? cloudHealth?.latestVehicleUpdatedAt ?? null
 
@@ -2863,13 +2876,7 @@ function ConnectionStatusPanel({
           <StatusMetric label="Telemetry" value={telemetryStatus} />
           <StatusMetric
             label="Telemetry Fresh"
-            value={
-              cloudPacketStatus?.telemetryFresh === undefined
-                ? '--'
-                : cloudPacketStatus.telemetryFresh
-                ? 'true'
-                : 'false'
-            }
+            value={displayedTelemetryFresh}
           />
           <StatusMetric
             label="Last Cloud Status"
@@ -2881,7 +2888,7 @@ function ConnectionStatusPanel({
           />
           <StatusMetric
             label="ESP32 Packet Age"
-            value={formatMilliseconds(cloudPacketStatus?.lastPacketAgeMs)}
+            value={formatMilliseconds(trustedCloudPacketStatus?.lastPacketAgeMs)}
           />
         </div>
       </MiniPanel>
