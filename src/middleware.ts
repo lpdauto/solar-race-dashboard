@@ -33,6 +33,8 @@ function isPublicPath(pathname: string) {
   return (
     pathname === '/login' ||
     pathname === '/api/login' ||
+    pathname === '/race-tracker' ||
+    pathname === '/api/public-race-status' ||
     pathname.startsWith('/api/telemetry/') ||
     pathname === '/manifest.webmanifest' ||
     pathname === '/sw.js' ||

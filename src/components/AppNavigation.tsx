@@ -37,6 +37,11 @@ export default function AppNavigation() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false)
+
+  if (pathname === '/race-tracker' || pathname.startsWith('/race-tracker/')) {
+    return null
+  }
+
   const currentDay = dayFromPath(pathname)
   const activeSection = sectionFromRoute(pathname, searchParams)
   const activeItem =
