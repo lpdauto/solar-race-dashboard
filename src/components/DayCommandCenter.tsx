@@ -862,27 +862,15 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                     <div className="grid gap-3 sm:grid-cols-3">
                       <StatusMetric
                         label="Battery"
-                        value={
-                          telemetryController.telemetry?.batteryTempC !== undefined
-                            ? `${telemetryController.telemetry.batteryTempC.toFixed(1)} C`
-                            : '--'
-                        }
+                        value={formatTemperatureF(telemetryController.telemetry?.batteryTempC)}
                       />
                       <StatusMetric
                         label="Controller"
-                        value={
-                          telemetryController.telemetry?.controllerTempC !== undefined
-                            ? `${telemetryController.telemetry.controllerTempC.toFixed(1)} C`
-                            : '--'
-                        }
+                        value={formatTemperatureF(telemetryController.telemetry?.controllerTempC)}
                       />
                       <StatusMetric
                         label="Motor"
-                        value={
-                          telemetryController.telemetry?.motorTempC !== undefined
-                            ? `${telemetryController.telemetry.motorTempC.toFixed(1)} C`
-                            : '--'
-                        }
+                        value={formatTemperatureF(telemetryController.telemetry?.motorTempC)}
                       />
                     </div>
                     </MiniPanel>
@@ -1391,19 +1379,11 @@ function MobileTelemetryCards({
         />
         <CompactMetric
           label="Motor Temp"
-          value={
-            telemetry?.motorTempC !== undefined
-              ? `${telemetry.motorTempC.toFixed(1)} C`
-              : '--'
-          }
+          value={formatTemperatureF(telemetry?.motorTempC)}
         />
         <CompactMetric
           label="Controller"
-          value={
-            telemetry?.controllerTempC !== undefined
-              ? `${telemetry.controllerTempC.toFixed(1)} C`
-              : '--'
-          }
+          value={formatTemperatureF(telemetry?.controllerTempC)}
         />
       </div>
       <CompactMetric label="Telemetry" value={connectionStatus} />
@@ -2686,6 +2666,45 @@ function telemetrySourceDisplay(source: TelemetrySource) {
   return 'local'
 }
 
+function formatTimestamp(value?: string | number | null) {
+  if (value === undefined || value === null) return '--'
+
+  const timestamp =
+    typeof value === 'number' ? value : Date.parse(value)
+
+  if (!Number.isFinite(timestamp)) return '--'
+
+  return new Date(timestamp).toLocaleTimeString()
+}
+
+function formatSeconds(value?: number | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return '--'
+  }
+
+  return `${Math.max(0, Math.round(value))}s`
+}
+
+function formatMilliseconds(value?: number | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return '--'
+  }
+
+  return `${Math.max(0, Math.round(value))} ms`
+}
+
+function formatTemperatureF(valueC?: number | null) {
+  if (valueC === undefined || valueC === null || !Number.isFinite(valueC)) {
+    return '--'
+  }
+
+  return `${celsiusToFahrenheit(valueC).toFixed(1)} F`
+}
+
+function celsiusToFahrenheit(valueC: number) {
+  return valueC * 1.8 + 32
+}
+
 function MpptLivePanel({
   telemetry,
   telemetryHistory,
@@ -2799,7 +2818,15 @@ function ConnectionStatusPanel({
   cloudHealth: CloudTelemetryHealth | null
   geolocation: ReturnType<typeof useGeolocation>
 }) {
-  const vehicleFreshness = classifyDataFreshness(packetAgeSeconds)
+  const esp32PacketAgeSeconds =
+    cloudPacketStatus?.lastPacketAgeMs !== undefined
+      ? cloudPacketStatus.lastPacketAgeMs / 1000
+      : undefined
+  const vehicleFreshness = classifyDataFreshness(
+    source === 'cloud' && esp32PacketAgeSeconds !== undefined
+      ? esp32PacketAgeSeconds
+      : packetAgeSeconds
+  )
   const mpptAge = latestMpptAgeSeconds(telemetryHistory, telemetry)
   const mpptFreshness = classifyDataFreshness(mpptAge ?? undefined)
   const missingMpptFields = mpptFields.filter((field) => telemetry?.[field] === undefined).length
@@ -2819,14 +2846,16 @@ function ConnectionStatusPanel({
     source === 'cloud'
       ? cloudPacketStatus?.connectionStatus ?? connectionStatus
       : connectionStatus
+  const lastCloudUpdateAt =
+    cloudPacketStatus?.updatedAt ?? cloudHealth?.latestVehicleUpdatedAt ?? null
 
   return (
     <section className="grid gap-4">
       <MiniPanel title="Vehicle Telemetry">
         <div className="grid gap-3 sm:grid-cols-3">
           <ConnectionField label="Status" value={vehicleFreshness.label} tone={vehicleFreshness.tone} />
-          <StatusMetric label="Last Packet" value={lastPacketAt ? new Date(lastPacketAt).toLocaleTimeString() : '--'} />
-          <StatusMetric label="Packet Age" value={packetAgeSeconds !== undefined ? `${packetAgeSeconds}s` : '--'} />
+          <StatusMetric label="Last Cloud Update" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
+          <StatusMetric label="Cloud Update Age" value={formatSeconds(packetAgeSeconds)} />
           <StatusMetric label="Packet Rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
           <StatusMetric label="Source" value={displayedSource} />
           <StatusMetric label="Node" value={cloudNode} />
@@ -2852,11 +2881,7 @@ function ConnectionStatusPanel({
           />
           <StatusMetric
             label="ESP32 Packet Age"
-            value={
-              cloudPacketStatus?.lastPacketAgeMs !== undefined
-                ? `${cloudPacketStatus.lastPacketAgeMs} ms`
-                : '--'
-            }
+            value={formatMilliseconds(cloudPacketStatus?.lastPacketAgeMs)}
           />
         </div>
       </MiniPanel>
@@ -2877,10 +2902,10 @@ function ConnectionStatusPanel({
             tone={cloudHealth?.redis === 'connected' ? 'healthy' : cloudHealth?.redis === 'error' ? 'danger' : 'neutral'}
           />
           <ConnectionField label="API Status" value={cloudHealth?.ok ? 'healthy' : 'unavailable'} tone={cloudHealth?.ok ? 'healthy' : 'neutral'} />
-          <StatusMetric label="Last Cloud Packet" value={cloudHealth?.latestVehicleUpdatedAt ? new Date(cloudHealth.latestVehicleUpdatedAt).toLocaleTimeString() : '--'} />
+          <StatusMetric label="Last Cloud Packet" value={formatTimestamp(cloudHealth?.latestVehicleUpdatedAt)} />
           <StatusMetric label="Health Node" value={cloudHealth?.latestVehicleNode ?? '--'} />
-          <StatusMetric label="Health Age" value={cloudHealth?.latestVehiclePacketAgeSeconds !== null && cloudHealth?.latestVehiclePacketAgeSeconds !== undefined ? `${cloudHealth.latestVehiclePacketAgeSeconds}s` : '--'} />
-          <StatusMetric label="Latest Updated" value={cloudPacketStatus?.updatedAt ? new Date(cloudPacketStatus.updatedAt).toLocaleTimeString() : '--'} />
+          <StatusMetric label="Health Age" value={formatSeconds(cloudHealth?.latestVehiclePacketAgeSeconds)} />
+          <StatusMetric label="Latest Updated" value={formatTimestamp(cloudPacketStatus?.updatedAt)} />
         </div>
       </MiniPanel>
       <MiniPanel title="GPS">

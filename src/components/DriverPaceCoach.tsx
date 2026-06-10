@@ -38,6 +38,14 @@ const eventLabels: Record<RouteSegment['type'], string> = {
   caution: 'Caution',
 }
 
+function formatTemperatureF(valueC?: number | null) {
+  if (valueC === undefined || valueC === null || !Number.isFinite(valueC)) {
+    return '--'
+  }
+
+  return `${(valueC * 1.8 + 32).toFixed(1)} F`
+}
+
 export default function DriverPaceCoach({
   telemetry,
   predictiveStrategy,
@@ -114,8 +122,8 @@ export default function DriverPaceCoach({
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <SmallMetric label="Controller" value={controllerTemp ? `${controllerTemp.toFixed(0)} C` : '--'} />
-            <SmallMetric label="Motor" value={motorTemp ? `${motorTemp.toFixed(0)} C` : '--'} />
+            <SmallMetric label="Controller" value={formatTemperatureF(telemetry?.controllerTempC)} />
+            <SmallMetric label="Motor" value={formatTemperatureF(telemetry?.motorTempC)} />
             <SmallMetric label="Next Event" value={nextEvent} />
           </div>
         </div>

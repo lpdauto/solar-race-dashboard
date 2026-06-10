@@ -56,6 +56,12 @@ const telemetrySources: TelemetrySource[] = [
   'canbus',
 ]
 
+function celsiusToFahrenheit(valueC?: number | null) {
+  return valueC === undefined || valueC === null
+    ? undefined
+    : valueC * 1.8 + 32
+}
+
 export default function TelemetryDashboard({
   telemetry,
   status,
@@ -212,8 +218,8 @@ export default function TelemetryDashboard({
         <TelemetryGauge label="Battery Current" value={telemetry?.batteryCurrent} unit="A" min={-30} max={130} warningThreshold={85} dangerThreshold={105} precision={1} />
         <TelemetryGauge label="Battery Power" value={telemetry?.batteryPowerWatts !== undefined ? telemetry.batteryPowerWatts / 1000 : null} unit="kW" min={-2} max={10} warningThreshold={6.5} dangerThreshold={8.5} precision={2} />
         <TelemetryGauge label="Solar Power" value={telemetry?.solarPowerWatts ?? telemetry?.mpptPowerWatts} unit="W" min={0} max={2200} precision={0} />
-        <TelemetryGauge label="Controller Temp" value={telemetry?.controllerTempC} unit="C" min={20} max={100} warningThreshold={75} dangerThreshold={85} precision={1} />
-        <TelemetryGauge label="Motor Temp" value={telemetry?.motorTempC} unit="C" min={20} max={110} warningThreshold={85} dangerThreshold={95} precision={1} />
+        <TelemetryGauge label="Controller Temp" value={celsiusToFahrenheit(telemetry?.controllerTempC)} unit="F" min={68} max={212} warningThreshold={167} dangerThreshold={185} precision={1} />
+        <TelemetryGauge label="Motor Temp" value={celsiusToFahrenheit(telemetry?.motorTempC)} unit="F" min={68} max={230} warningThreshold={185} dangerThreshold={203} precision={1} />
         <TelemetryGauge label="Efficiency" value={telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile} unit="Wh/mi" min={20} max={190} warningThreshold={120} dangerThreshold={140} precision={0} />
         <TelemetryGauge label="Regen Power" value={telemetry?.regenWatts} unit="W" min={0} max={2000} precision={0} />
       </div>
