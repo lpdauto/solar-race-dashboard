@@ -6,6 +6,17 @@ export type PublicRoutePoint = {
 
 export type LatLngTuple = [number, number]
 
+export type PublicRouteProgress = {
+  lat: number
+  lng: number
+  routeProgressPct: number
+  milesCompleted: number
+  milesLeft: number
+  totalMiles: number
+  distanceFromRouteMeters: number
+  confidence: 'high' | 'medium' | 'low' | 'off-route'
+}
+
 export const publicSccRoute: PublicRoutePoint[] = [
   { label: 'Northwest ISD District Office', lat: 33.03047, lng: -97.320738 },
   { label: 'Godley High School and Middle School', lat: 32.456855, lng: -97.546999 },
@@ -144,6 +155,70 @@ export function calculateCompletedRoutePercentage({
   return Math.min(100, Math.max(0, (milesCompleted / totalMiles) * 100))
 }
 
+export function calculatePublicRouteProgress({
+  lat,
+  lng,
+  course = publicSccCourseCoordinates,
+}: {
+  lat: number
+  lng: number
+  course?: LatLngTuple[]
+}): PublicRouteProgress | null {
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    course.length < 2
+  ) {
+    return null
+  }
+
+  const totalMiles = routeDistanceMiles(course)
+  let traveledMilesBeforeSegment = 0
+  let best:
+    | {
+        point: LatLngTuple
+        distanceMeters: number
+        milesCompleted: number
+      }
+    | null = null
+
+  for (let index = 1; index < course.length; index += 1) {
+    const start = course[index - 1]
+    const end = course[index]
+    const segmentMiles = distanceBetweenMiles(start, end)
+    const projection = projectPointToSegment([lat, lng], start, end)
+    const segmentCompletedMiles = segmentMiles * projection.ratio
+
+    if (!best || projection.distanceMeters < best.distanceMeters) {
+      best = {
+        point: projection.point,
+        distanceMeters: projection.distanceMeters,
+        milesCompleted: traveledMilesBeforeSegment + segmentCompletedMiles,
+      }
+    }
+
+    traveledMilesBeforeSegment += segmentMiles
+  }
+
+  if (!best) return null
+
+  const milesCompleted = Math.min(totalMiles, Math.max(0, best.milesCompleted))
+
+  return {
+    lat: best.point[0],
+    lng: best.point[1],
+    routeProgressPct: calculateCompletedRoutePercentage({
+      milesCompleted,
+      totalMiles,
+    }),
+    milesCompleted,
+    milesLeft: Math.max(0, totalMiles - milesCompleted),
+    totalMiles,
+    distanceFromRouteMeters: best.distanceMeters,
+    confidence: classifyPublicRouteConfidence(best.distanceMeters),
+  }
+}
+
 export function splitRouteByCompletion(
   route: LatLngTuple[],
   completedPercent: number
@@ -222,11 +297,98 @@ function routeDistance(route: LatLngTuple[]) {
   }, 0)
 }
 
+function routeDistanceMiles(route: LatLngTuple[]) {
+  return route.reduce((sum, point, index) => {
+    if (index === 0) return sum
+
+    return sum + distanceBetweenMiles(route[index - 1], point)
+  }, 0)
+}
+
 function distanceBetween(left: LatLngTuple, right: LatLngTuple) {
   const latDistance = right[0] - left[0]
   const lngDistance = right[1] - left[1]
 
   return Math.sqrt(latDistance * latDistance + lngDistance * lngDistance)
+}
+
+function distanceBetweenMiles(left: LatLngTuple, right: LatLngTuple) {
+  return haversineDistanceMeters(left, right) / 1609.344
+}
+
+function projectPointToSegment(
+  point: LatLngTuple,
+  start: LatLngTuple,
+  end: LatLngTuple
+) {
+  const metersPerDegreeLat = 111_320
+  const averageLatRadians = toRadians((start[0] + end[0]) / 2)
+  const metersPerDegreeLng = metersPerDegreeLat * Math.cos(averageLatRadians)
+  const pointXY = toLocalXY(point, start, metersPerDegreeLat, metersPerDegreeLng)
+  const endXY = toLocalXY(end, start, metersPerDegreeLat, metersPerDegreeLng)
+  const segmentLengthSquared = endXY.x * endXY.x + endXY.y * endXY.y
+  const ratio =
+    segmentLengthSquared > 0
+      ? Math.min(
+          1,
+          Math.max(
+            0,
+            (pointXY.x * endXY.x + pointXY.y * endXY.y) / segmentLengthSquared
+          )
+        )
+      : 0
+  const projectedXY = {
+    x: endXY.x * ratio,
+    y: endXY.y * ratio,
+  }
+  const projectedPoint: LatLngTuple = [
+    start[0] + projectedXY.y / metersPerDegreeLat,
+    start[1] + projectedXY.x / metersPerDegreeLng,
+  ]
+  const dx = pointXY.x - projectedXY.x
+  const dy = pointXY.y - projectedXY.y
+
+  return {
+    point: projectedPoint,
+    ratio,
+    distanceMeters: Math.sqrt(dx * dx + dy * dy),
+  }
+}
+
+function toLocalXY(
+  point: LatLngTuple,
+  origin: LatLngTuple,
+  metersPerDegreeLat: number,
+  metersPerDegreeLng: number
+) {
+  return {
+    x: (point[1] - origin[1]) * metersPerDegreeLng,
+    y: (point[0] - origin[0]) * metersPerDegreeLat,
+  }
+}
+
+function haversineDistanceMeters(left: LatLngTuple, right: LatLngTuple) {
+  const earthRadiusMeters = 6_371_000
+  const lat1 = toRadians(left[0])
+  const lat2 = toRadians(right[0])
+  const deltaLat = toRadians(right[0] - left[0])
+  const deltaLng = toRadians(right[1] - left[1])
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2
+
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function classifyPublicRouteConfidence(distanceMeters: number) {
+  if (distanceMeters <= 75) return 'high'
+  if (distanceMeters <= 250) return 'medium'
+  if (distanceMeters <= 1000) return 'low'
+  return 'off-route'
+}
+
+function toRadians(degrees: number) {
+  return (degrees * Math.PI) / 180
 }
 
 function interpolatePoint(

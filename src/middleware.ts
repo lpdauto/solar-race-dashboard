@@ -36,6 +36,7 @@ function isPublicPath(pathname: string) {
     pathname === '/race-tracker' ||
     pathname === '/api/public-race-status' ||
     isBearerAuthenticatedApiPath(pathname) ||
+    pathname.startsWith('/race-images/') ||
     pathname === '/manifest.webmanifest' ||
     pathname === '/sw.js' ||
     pathname.startsWith('/icons/') ||

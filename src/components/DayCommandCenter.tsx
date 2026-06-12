@@ -1,5 +1,6 @@
 ﻿'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -22,6 +23,11 @@ import type {
   SegmentType,
 } from '@/data/raceRoute'
 import { raceRoute } from '@/data/raceRoute'
+import {
+  findTeamMemberById,
+  teamMembers,
+  type TeamMember,
+} from '@/data/teamMembers'
 import { useElevationProfile } from '@/hooks/useElevationProfile'
 import { useGeolocation } from '@/hooks/useGeolocation'
 import { useRouteWeather } from '@/hooks/useRouteWeather'
@@ -71,6 +77,12 @@ import {
   type RaceEvent,
   type TraileringSession,
 } from '@/lib/raceEvents'
+import {
+  emptyPublicRaceCrew,
+  readStoredPublicRaceCrew,
+  writeStoredPublicRaceCrew,
+  type PublicRaceCrewSelection,
+} from '@/lib/publicRaceCrew'
 import { rx2Config } from '@/lib/race/rx2Config'
 import {
   createInitialRaceBatteryState,
@@ -214,6 +226,11 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   const [manualNoteError, setManualNoteError] = useState('')
   const [preRaceChecklist, setPreRaceChecklist] = useState<Record<string, boolean>>({})
   const [daySummary, setDaySummary] = useState<DaySummary | null>(null)
+  const [currentCrewDraft, setCurrentCrewDraft] =
+    useState<PublicRaceCrewSelection>(emptyPublicRaceCrew)
+  const [currentCrewSaved, setCurrentCrewSaved] =
+    useState<PublicRaceCrewSelection>(emptyPublicRaceCrew)
+  const [currentCrewSaveStatus, setCurrentCrewSaveStatus] = useState('')
   const sortedSegments = useMemo(
     () => [...raceDay.segments].sort((a, b) => a.mileStart - b.mileStart),
     [raceDay.segments]
@@ -477,6 +494,13 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   }, [])
 
   useEffect(() => {
+    const storedCrew = readStoredPublicRaceCrew()
+
+    setCurrentCrewDraft(storedCrew)
+    setCurrentCrewSaved(storedCrew)
+  }, [])
+
+  useEffect(() => {
     setPreRaceChecklist(readStoredPreRaceChecklist(raceDay.day))
   }, [raceDay.day])
 
@@ -546,6 +570,20 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   function persistRaceEvents(events: RaceEvent[]) {
     setRaceEvents(events)
     writeStoredRaceEvents(events)
+  }
+
+  function saveCurrentCrew() {
+    if (
+      currentCrewDraft.driverId &&
+      currentCrewDraft.driverId === currentCrewDraft.passengerId
+    ) {
+      setCurrentCrewSaveStatus('Driver and passenger must be different students.')
+      return
+    }
+
+    writeStoredPublicRaceCrew(currentCrewDraft)
+    setCurrentCrewSaved(currentCrewDraft)
+    setCurrentCrewSaveStatus('Current crew saved for this browser.')
   }
 
   function startTrailering() {
@@ -1007,6 +1045,17 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
 
         {prototypeRole === 'operations' ? (
           <>
+            <CurrentCrewPanel
+              draft={currentCrewDraft}
+              saved={currentCrewSaved}
+              saveStatus={currentCrewSaveStatus}
+              onChange={(selection) => {
+                setCurrentCrewDraft(selection)
+                setCurrentCrewSaveStatus('')
+              }}
+              onSave={saveCurrentCrew}
+            />
+
             <AccordionSection title="Setup" lazy>
               <div className="grid gap-4">
                 <CarSetupPanel />
@@ -1137,6 +1186,17 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         </section>
 
         <AccordionSection title="Operations">
+          <CurrentCrewPanel
+            draft={currentCrewDraft}
+            saved={currentCrewSaved}
+            saveStatus={currentCrewSaveStatus}
+            onChange={(selection) => {
+              setCurrentCrewDraft(selection)
+              setCurrentCrewSaveStatus('')
+            }}
+            onSave={saveCurrentCrew}
+          />
+
           <PreRaceChecklist
             checklist={preRaceChecklist}
             onItemChange={updatePreRaceChecklistItem}
@@ -5446,6 +5506,147 @@ function RouteSegmentsPanel({
         ))}
       </div>
     </div>
+  )
+}
+
+function CurrentCrewPanel({
+  draft,
+  saved,
+  saveStatus,
+  onChange,
+  onSave,
+}: {
+  draft: PublicRaceCrewSelection
+  saved: PublicRaceCrewSelection
+  saveStatus: string
+  onChange: (selection: PublicRaceCrewSelection) => void
+  onSave: () => void
+}) {
+  const driver = findTeamMemberById(draft.driverId)
+  const passenger = findTeamMemberById(draft.passengerId)
+  const hasUnsavedChanges =
+    draft.driverId !== saved.driverId || draft.passengerId !== saved.passengerId
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-400">
+            Current Crew
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            Saves the public tracker driver/passenger selection in this browser.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onSave}
+          className="rounded-md border border-[#ff3ea5]/40 bg-[#ff3ea5]/15 px-4 py-2 text-sm font-black text-white transition hover:bg-[#ff3ea5]/25"
+        >
+          Save
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <TeamMemberSelect
+          label="Driver"
+          value={draft.driverId}
+          excludeId={draft.passengerId}
+          onChange={(driverId) => onChange({ ...draft, driverId })}
+        />
+        <TeamMemberSelect
+          label="Passenger"
+          value={draft.passengerId}
+          excludeId={draft.driverId}
+          onChange={(passengerId) => onChange({ ...draft, passengerId })}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <CrewPreviewCard label="Driver" member={driver} />
+        <CrewPreviewCard label="Passenger" member={passenger} />
+      </div>
+
+      <p className="mt-3 text-xs font-bold text-slate-400">
+        {saveStatus ||
+          (hasUnsavedChanges
+            ? 'Unsaved crew change.'
+            : 'Current crew is saved locally.')}
+      </p>
+    </section>
+  )
+}
+
+function TeamMemberSelect({
+  label,
+  value,
+  excludeId,
+  onChange,
+}: {
+  label: string
+  value: string
+  excludeId: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-black uppercase tracking-[0.14em] text-[#ff8fcb]">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm font-bold text-white outline-none focus:border-[#ff3ea5]/60"
+      >
+        <option value="">Unassigned</option>
+        {teamMembers
+          .filter((member) => member.id !== excludeId)
+          .map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name} - {member.role}
+            </option>
+          ))}
+      </select>
+    </label>
+  )
+}
+
+function CrewPreviewCard({
+  label,
+  member,
+}: {
+  label: 'Driver' | 'Passenger'
+  member: TeamMember | null
+}) {
+  return (
+    <article className="flex items-center gap-3 rounded-md border border-white/10 bg-black/30 p-3">
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
+        {member?.imageSrc ? (
+          <Image
+            src={member.imageSrc}
+            alt={member.imageAlt}
+            fill
+            sizes="56px"
+            className="object-cover"
+          />
+        ) : (
+          <div className="grid h-full w-full place-items-center text-xl font-black text-slate-500">
+            ?
+          </div>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+          {label}
+        </p>
+        <p className="truncate text-base font-black text-white">
+          {member?.name ?? 'Unassigned'}
+        </p>
+        <p className="text-sm font-bold text-slate-400">
+          {member?.role ?? 'Select a student'}
+        </p>
+      </div>
+    </article>
   )
 }
 

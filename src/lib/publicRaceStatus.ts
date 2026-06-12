@@ -1,4 +1,12 @@
-import { calculateCompletedRoutePercentage } from '@/lib/publicRaceRoute'
+import { parseEsp32TelemetryPacket } from '@/lib/esp32Telemetry'
+import {
+  calculateCompletedRoutePercentage,
+  calculatePublicRouteProgress,
+  nextStopForProgress,
+  publicSccRoute,
+  type PublicRouteProgress,
+} from '@/lib/publicRaceRoute'
+import type { TelemetryLatestRow } from '@/lib/redisTelemetry'
 
 export type PublicSponsor = {
   name: string
@@ -7,6 +15,11 @@ export type PublicSponsor = {
 }
 
 export type PublicRaceStatus = {
+  dataSource: 'telemetry' | 'mock'
+  telemetryAgeSeconds: number | null
+  telemetryUpdatedAt: string | null
+  routeConfidence: PublicRouteProgress['confidence'] | 'unavailable'
+  distanceFromRouteMeters: number | null
   speedMph: number
   avgSpeedMph: number
   currentPlace: string
@@ -101,6 +114,11 @@ export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
   const totalMiles = milesCompleted + milesLeft
 
   return {
+    dataSource: 'mock',
+    telemetryAgeSeconds: null,
+    telemetryUpdatedAt: null,
+    routeConfidence: 'unavailable',
+    distanceFromRouteMeters: null,
     speedMph: 28.4,
     avgSpeedMph: 26.9,
     currentPlace: '3rd',
@@ -133,6 +151,77 @@ export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
   }
 }
 
+export function getPublicRaceStatusFromTelemetry(
+  latestRow: TelemetryLatestRow | null | undefined,
+  now = new Date()
+): PublicRaceStatus {
+  if (!latestRow) {
+    return getMockPublicRaceStatus(now)
+  }
+
+  const telemetry = parseEsp32TelemetryPacket(
+    (latestRow.payload ?? {}) as Parameters<typeof parseEsp32TelemetryPacket>[0]
+  )
+  const progress =
+    telemetry.gpsLat !== undefined && telemetry.gpsLng !== undefined
+      ? calculatePublicRouteProgress({
+          lat: telemetry.gpsLat,
+          lng: telemetry.gpsLng,
+        })
+      : null
+
+  if (!progress) {
+    return {
+      ...getMockPublicRaceStatus(now),
+      dataSource: 'telemetry',
+      telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
+      telemetryUpdatedAt: latestRow.updated_at,
+      routeConfidence: 'unavailable',
+      speedMph: telemetry.speedMph,
+      status: statusFromTelemetryAge(latestRow.updated_at, now),
+      currentTime: formatPublicTime(now),
+      standingsLastUpdated: formatPublicDateTime(now),
+    }
+  }
+
+  const nextStop = nextStopForProgress(publicSccRoute, progress.routeProgressPct)
+  const currentSegment = currentSegmentForProgress(progress.routeProgressPct)
+
+  return {
+    dataSource: 'telemetry',
+    telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
+    telemetryUpdatedAt: latestRow.updated_at,
+    routeConfidence: progress.confidence,
+    distanceFromRouteMeters: Math.round(progress.distanceFromRouteMeters),
+    speedMph: telemetry.speedMph,
+    avgSpeedMph: telemetry.speedMph,
+    currentPlace: 'TBD',
+    placeTotal: 22,
+    standingsSourceUrl: 'https://www.solarcarchallenge.org/',
+    standingsLastUpdated: 'Official standings pending',
+    milesCompleted: progress.milesCompleted,
+    milesLeft: progress.milesLeft,
+    totalMiles: progress.totalMiles,
+    currentTime: formatPublicTime(now),
+    weatherLocation: nextStop?.label ?? 'On course',
+    weatherTempF: 91,
+    weatherCondition: 'Weather pending',
+    weatherWindMph: 0,
+    weatherWindDirection: '--',
+    currentDay: dayForProgress(progress.routeProgressPct),
+    totalDays: 5,
+    currentSegment,
+    nextStop: nextStop?.label ?? 'Finish',
+    eta: etaFromSpeed(progress.milesLeft, telemetry.speedMph, now),
+    status: statusFromTelemetryAge(latestRow.updated_at, now, progress.confidence),
+    lat: progress.lat,
+    lng: progress.lng,
+    routeProgressPct: progress.routeProgressPct,
+    instagramUrl: 'https://www.instagram.com/',
+    sponsors: publicRaceSponsors,
+  }
+}
+
 function formatPublicTime(value: Date) {
   return new Intl.DateTimeFormat('en-US', {
     hour: 'numeric',
@@ -149,4 +238,51 @@ function formatPublicDateTime(value: Date) {
     minute: '2-digit',
     timeZone: 'America/Chicago',
   }).format(value)
+}
+
+function ageSeconds(updatedAt: string | null | undefined, now: Date) {
+  if (!updatedAt) return null
+
+  const updatedAtMs = Date.parse(updatedAt)
+  if (!Number.isFinite(updatedAtMs)) return null
+
+  return Math.max(0, Math.round((now.getTime() - updatedAtMs) / 1000))
+}
+
+function statusFromTelemetryAge(
+  updatedAt: string | null | undefined,
+  now: Date,
+  confidence: PublicRouteProgress['confidence'] | 'unavailable' = 'unavailable'
+) {
+  const age = ageSeconds(updatedAt, now)
+
+  if (age !== null && age > 60) return 'Telemetry delayed'
+  if (confidence === 'unavailable') return 'Waiting for GPS'
+  if (confidence === 'off-route') return 'GPS off course'
+  if (confidence === 'low') return 'GPS approximate'
+  return 'Live on course'
+}
+
+function etaFromSpeed(milesLeft: number, speedMph: number, now: Date) {
+  if (!Number.isFinite(speedMph) || speedMph < 5) return 'Calculating'
+
+  const eta = new Date(now.getTime() + (milesLeft / speedMph) * 60 * 60 * 1000)
+  return formatPublicTime(eta)
+}
+
+function dayForProgress(routeProgressPct: number) {
+  return Math.min(5, Math.max(1, Math.floor(routeProgressPct / 20) + 1))
+}
+
+function currentSegmentForProgress(routeProgressPct: number) {
+  const nextStop = nextStopForProgress(publicSccRoute, routeProgressPct)
+  const nextIndex = nextStop
+    ? publicSccRoute.findIndex((point) => point.label === nextStop.label)
+    : -1
+  const previousStop =
+    nextIndex > 0 ? publicSccRoute[nextIndex - 1] : publicSccRoute[0]
+
+  if (!nextStop) return 'Finish'
+
+  return `${previousStop.label} to ${nextStop.label}`
 }
