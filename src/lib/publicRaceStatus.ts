@@ -53,58 +53,62 @@ export const publicRaceSponsors: PublicSponsor[] = [
     name: 'Off Road Performance',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/9841a2d2-1e34-4f6c-bb07-1574302c52a9/Asset+1%402x.png?format=750w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://www.rpm-garage.com/',
   },
   {
     name: 'Highland',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/9e5826a9-199e-409b-9111-2c0c228160e8/Highland_wordmark_black-3-scaled.png?format=750w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://highlandfleets.com/',
   },
   {
     name: 'Sherfab',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/3e2c56c7-2c6a-4802-bf1d-8403792c6718/sherfab-logo-h.webp?format=500w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://www.sherfab.com/',
   },
   {
     name: 'Motivo',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/3835cb31-41a8-411a-96c1-030ba629c9e6/Motivo-PNG-1.webp?format=750w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://www.motivo.com/',
   },
   { name: 'Precise Pharmacy, Inc', sponsorUrl: '#' },
   {
     name: 'Land Bank of Taiwan',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/fe6dd1cc-e7fe-4d9c-b921-ada63919b0eb/Logo-Landban.png?format=500w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://www.landbank.com.tw/En',
   },
   {
-    name: 'Brightmore Neon Sign',
+    name: 'Biltmore Metal Fabricators',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/45caafba-b420-484d-8629-711c16be636e/Race+Suit+Draft.png?format=750w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://biltmf.com/',
   },
   {
-    name: 'This is STEM',
+    name: 'LA STEM Collective',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/eff00a4f-1783-4df2-bdb3-3c1fa6655624/LA-STEM-Logo.png?format=500w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://lastemcollective.org/',
   },
   {
     name: 'Mission Solar Energy',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/1df779be-5eea-417d-8852-913f184cce3a/Race+Suit+Draft+%282%29.png?format=750w',
-    sponsorUrl: '#',
+    sponsorUrl: 'https://www.missionsolar.com/',
   },
   {
     name: 'Temple City',
     logoUrl:
       'https://images.squarespace-cdn.com/content/v1/68d4fc48910e771ca9142c46/d0ac6b6f-31af-4584-a138-52026763958b/Document.png?format=300w',
+    sponsorUrl: 'https://www.templecityca.gov/',
+  },
+  {
+    name: 'Ed Chen',
+    logoUrl: '/race-images/sponsors/temple-city.png',
     sponsorUrl: '#',
   },
-  { name: 'Ed Chen', sponsorUrl: '#' },
   { name: 'Thomas Hunsucker', sponsorUrl: '#' },
 ]
 

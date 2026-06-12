@@ -274,26 +274,26 @@ export default function RaceTrackerClient() {
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <MetricTile label="Current Speed" value={`${raceStatus.speedMph.toFixed(1)} mph`} accent="blue" />
-          <MetricTile label="Average Speed" value={`${raceStatus.avgSpeedMph.toFixed(1)} mph`} accent="pink" />
+          <MetricTile label="Current Speed" value={`${raceStatus.speedMph.toFixed(1)} mph`} accent="hot" />
+          <MetricTile label="Average Speed" value={`${raceStatus.avgSpeedMph.toFixed(1)} mph`} accent="rose" />
           <MetricTile
             label="Current Place"
             value={`${raceStatus.currentPlace} of ${raceStatus.placeTotal}`}
             detail={`Standings ${raceStatus.standingsLastUpdated}`}
-            accent="green"
+            accent="blush"
           />
           <MetricTile
             label="Total Miles Completed / Miles Left"
             value={`${raceStatus.milesCompleted.toFixed(1)} / ${raceStatus.milesLeft.toFixed(1)}`}
             detail={`${progressPercent.toFixed(0)}% complete`}
-            accent="orange"
+            accent="magenta"
           />
-          <MetricTile label="Current Time" value={raceStatus.currentTime} accent="yellow" />
+          <MetricTile label="Current Time" value={raceStatus.currentTime} accent="pale" />
           <MetricTile
             label="Weather"
             value={`${raceStatus.weatherTempF}°F`}
             detail={`${raceStatus.weatherCondition} · ${raceStatus.weatherLocation} · Wind ${raceStatus.weatherWindMph} mph ${raceStatus.weatherWindDirection}`}
-            accent="white"
+            accent="soft"
           />
         </section>
 
@@ -382,10 +382,10 @@ function FuelTheCrewWidget({
   onTierClick: (tierId: DonationTierId) => void
 }) {
   return (
-    <section className="rounded-lg border border-[#39ff14]/25 bg-[#071007] p-4 shadow-xl shadow-black/20">
+    <section className="rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-4 shadow-xl shadow-black/20">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#39ff14]">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
             Support the Road Crew
           </p>
           <h2 className="mt-1 text-2xl font-black text-white">Fuel the Crew</h2>
@@ -393,7 +393,7 @@ function FuelTheCrewWidget({
             Pick a small boost for the students keeping the race day moving.
           </p>
         </div>
-        <span className="rounded-md border border-[#39ff14]/30 bg-[#39ff14]/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#b7ffad]">
+        <span className="rounded-md border border-[#ff8fcb]/35 bg-[#ff3ea5]/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#ffd6e9]">
           {featuredTier === 'coffee'
             ? 'Morning boost'
             : featuredTier === 'lunch'
@@ -415,7 +415,7 @@ function FuelTheCrewWidget({
               onClick={() => onTierClick(tier.id)}
               className={`rounded-md border p-4 transition hover:-translate-y-0.5 ${
                 isFeatured
-                  ? 'border-[#39ff14]/55 bg-[#39ff14]/12 shadow-[0_0_24px_rgba(57,255,20,0.12)]'
+                  ? 'border-[#ff8fcb]/60 bg-[#ff3ea5]/15 shadow-[0_0_24px_rgba(255,62,165,0.16)]'
                   : 'border-white/10 bg-black/25 hover:border-[#ff3ea5]/35'
               }`}
             >
@@ -429,7 +429,7 @@ function FuelTheCrewWidget({
                 {tier.description}
               </p>
               {clickCounts[tier.id] > 0 ? (
-                <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-[#39ff14]">
+                <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-[#ff8fcb]">
                   Opened {clickCounts[tier.id]} time
                   {clickCounts[tier.id] === 1 ? '' : 's'} here
                 </p>
@@ -558,12 +558,12 @@ function PublicCrewCard({
   member: TeamMember | null
 }) {
   return (
-    <section className="rounded-lg border border-[#39ff14]/35 bg-[#071007] p-3 shadow-xl shadow-black/20">
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#39ff14]">
+    <section className="rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-3 shadow-xl shadow-black/20">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff8fcb]">
         Current {label}
       </p>
       <div className="mt-3 grid gap-3">
-        <div className="relative aspect-square w-full overflow-hidden rounded-md border border-[#39ff14]/30 bg-black">
+        <div className="relative aspect-square w-full overflow-hidden rounded-md border border-[#ff8fcb]/35 bg-black">
           {member?.imageSrc ? (
             <Image
               src={member.imageSrc}
@@ -573,7 +573,7 @@ function PublicCrewCard({
               className="object-cover"
             />
           ) : (
-            <div className="grid h-full w-full place-items-center text-5xl font-black text-[#39ff14]/70">
+            <div className="grid h-full w-full place-items-center text-5xl font-black text-[#ff8fcb]/70">
               ?
             </div>
           )}
@@ -610,15 +610,23 @@ function SponsorLogo({
 }: {
   sponsor: { name: string; logoUrl?: string; sponsorUrl?: string }
 }) {
+  const showNameWithLogo = sponsor.name === 'Ed Chen'
   const content = (
     <>
       {sponsor.logoUrl ? (
-        <img
-          src={sponsor.logoUrl}
-          alt={`${sponsor.name} logo`}
-          loading="lazy"
-          className="max-h-14 w-full object-contain"
-        />
+        <span className="flex w-full flex-col items-center gap-2">
+          <img
+            src={sponsor.logoUrl}
+            alt={`${sponsor.name} logo`}
+            loading="lazy"
+            className="max-h-14 w-full object-contain"
+          />
+          {showNameWithLogo ? (
+            <span className="text-center text-xs font-black text-slate-950">
+              {sponsor.name}
+            </span>
+          ) : null}
+        </span>
       ) : (
         <span className="text-center text-sm font-black text-slate-950">
           {sponsor.name}
@@ -660,24 +668,24 @@ function MetricTile({
   label: string
   value: string
   detail?: string
-  accent: 'blue' | 'pink' | 'green' | 'orange' | 'yellow' | 'white'
+  accent: 'hot' | 'rose' | 'blush' | 'magenta' | 'pale' | 'soft'
 }) {
   const colorClass = {
-    blue: 'text-sky-300',
-    pink: 'text-[#ff8fcb]',
-    green: 'text-emerald-300',
-    orange: 'text-orange-300',
-    yellow: 'text-yellow-200',
-    white: 'text-white',
+    hot: 'text-[#ff3ea5]',
+    rose: 'text-[#ff74bd]',
+    blush: 'text-[#ff9fce]',
+    magenta: 'text-[#ff5bb4]',
+    pale: 'text-[#ffd6e9]',
+    soft: 'text-[#ffc1df]',
   }[accent]
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#101010] p-4 shadow-xl shadow-black/20">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+    <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#120a10] p-4 shadow-xl shadow-black/20">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#d58aad]">
         {label}
       </p>
       <p className={`mt-3 text-2xl font-black ${colorClass}`}>{value}</p>
-      {detail ? <p className="mt-1 text-sm font-bold text-slate-400">{detail}</p> : null}
+      {detail ? <p className="mt-1 text-sm font-bold text-[#caa0b6]">{detail}</p> : null}
     </div>
   )
 }
