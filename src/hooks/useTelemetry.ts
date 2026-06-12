@@ -13,6 +13,9 @@ import {
   type ContinuousEnergyState,
 } from '@/lib/continuousEnergy'
 import { generateTelemetryFrame } from '@/lib/telemetrySimulator'
+import {
+  classifyVehicleNodeStatusFromAgeMs,
+} from '@/lib/vehicleTelemetryStatus'
 import type {
   CloudTelemetryHealth,
   CloudTelemetryPacketStatus,
@@ -791,8 +794,10 @@ function classifyTelemetryFreshness(
   ageSeconds?: number | null
 ): TelemetryFreshness {
   if (ageSeconds === undefined || ageSeconds === null) return 'idle'
-  if (ageSeconds < 5) return 'healthy'
-  if (ageSeconds <= 15) return 'warning'
+  const vehicleStatus = classifyVehicleNodeStatusFromAgeMs(ageSeconds * 1000)
+
+  if (vehicleStatus === 'online') return 'healthy'
+  if (vehicleStatus === 'stale') return 'warning'
 
   return 'stale'
 }
@@ -810,7 +815,7 @@ function statusForFreshness(
 function connectionStatusForFreshness(
   freshness: TelemetryFreshness
 ): TelemetryConnectionState {
-  if (freshness === 'stale') return 'disconnected'
+  if (freshness === 'warning' || freshness === 'stale') return 'disconnected'
   if (freshness === 'idle') return 'connecting'
 
   return 'connected'

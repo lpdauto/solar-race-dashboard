@@ -201,6 +201,7 @@ export type KnownTelemetryNode = (typeof telemetryNodeOptions)[number]
 export type TelemetryNodeId = KnownTelemetryNode | (string & {})
 
 export type TelemetryFreshness = 'idle' | 'healthy' | 'warning' | 'stale'
+export type VehicleNodeStatus = 'online' | 'stale' | 'offline'
 
 export type TelemetryEffectiveStatusSource =
   | 'health'
@@ -217,10 +218,16 @@ export type TelemetryPacketStats = {
 
 export type CloudTelemetryHealth = {
   ok: boolean
+  cloudBackendStatus?: 'connected' | 'error'
+  healthEndpointStatus?: 'healthy' | 'error'
   redis: 'connected' | 'error' | 'not_configured'
   latestVehiclePacketAgeSeconds: number | null
+  latestVehiclePacketAgeMs?: number | null
   latestVehicleUpdatedAt: string | null
   latestVehicleNode: TelemetryNodeId | null
+  vehicleNodeStatus?: VehicleNodeStatus
+  vehicleTelemetryFresh?: boolean
+  lastRedisReadAt?: string | null
   nodes?: Array<{
     node: TelemetryNodeId
     updated_at: string | null

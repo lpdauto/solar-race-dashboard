@@ -94,6 +94,10 @@ import {
 } from '@/lib/racePrediction'
 import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import { appendStrategyEventLogEntry } from '@/lib/strategyEventLog'
+import {
+  classifyVehicleNodeStatusFromAgeMs,
+  vehicleNodeStatusLabel,
+} from '@/lib/vehicleTelemetryStatus'
 import type {
   CloudTelemetryHealth,
   CloudTelemetryPacketStatus,
@@ -3519,12 +3523,18 @@ function integrateMpptChargeEnergyWh(telemetryHistory: TelemetryHistorySample[])
 }
 
 function classifyDataFreshness(ageSeconds?: number) {
-  if (ageSeconds === undefined) {
-    return { label: 'disconnected', tone: 'danger' as const }
+  const vehicleStatus = classifyVehicleNodeStatusFromAgeMs(
+    ageSeconds === undefined ? null : ageSeconds * 1000
+  )
+
+  if (vehicleStatus === 'online') {
+    return { label: 'online', tone: 'healthy' as const, vehicleStatus }
   }
-  if (ageSeconds < 5) return { label: 'connected', tone: 'healthy' as const }
-  if (ageSeconds <= 30) return { label: 'stale', tone: 'warning' as const }
-  return { label: 'disconnected', tone: 'danger' as const }
+  if (vehicleStatus === 'stale') {
+    return { label: 'stale', tone: 'warning' as const, vehicleStatus }
+  }
+
+  return { label: 'offline', tone: 'danger' as const, vehicleStatus }
 }
 
 function telemetrySourceDisplay(source: TelemetrySource) {
@@ -3690,7 +3700,7 @@ function ConnectionStatusPanel({
     packetAgeSeconds
   )
   const canTrustCloudPacket =
-    source === 'cloud' && vehicleFreshness.label !== 'disconnected'
+    source === 'cloud' && vehicleFreshness.vehicleStatus !== 'offline'
   const trustedCloudPacketStatus = canTrustCloudPacket ? cloudPacketStatus : null
   const mpptAge = latestMpptAgeSeconds(telemetryHistory, telemetry)
   const mpptFreshness = classifyDataFreshness(mpptAge ?? undefined)
@@ -3700,33 +3710,30 @@ function ConnectionStatusPanel({
     : undefined
   const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
   const displayedPacketRateHz =
-    trustedCloudPacketStatus?.packetRateHz !== undefined
-      ? trustedCloudPacketStatus.packetRateHz
-      : vehicleFreshness.label === 'disconnected'
+    vehicleFreshness.vehicleStatus === 'offline'
       ? 0
-      : packetStats.packetsPerMinute / 60
+      : trustedCloudPacketStatus?.packetRateHz !== undefined
+        ? trustedCloudPacketStatus.packetRateHz
+        : packetStats.packetsPerMinute / 60
   const displayedSource =
     source === 'cloud'
       ? trustedCloudPacketStatus?.source ?? telemetrySourceDisplay(source)
       : telemetrySourceDisplay(source)
-  const displayedConnectionStatus =
-    vehicleFreshness.label === 'disconnected'
-      ? 'disconnected'
-      : vehicleFreshness.label === 'stale'
-      ? 'stale'
-      : source === 'cloud'
-      ? trustedCloudPacketStatus?.connectionStatus ?? connectionStatus
-      : connectionStatus
+  const displayedVehicleNodeStatus = vehicleNodeStatusLabel(
+    vehicleFreshness.vehicleStatus
+  )
+  const displayedBackendStatus =
+    cloudHealth?.cloudBackendStatus ??
+    (source === 'cloud' || connectionStatus === 'connected'
+      ? 'connected'
+      : 'error')
+  const displayedHealthEndpoint =
+    cloudHealth?.healthEndpointStatus ?? (cloudHealth?.ok ? 'healthy' : 'error')
   const displayedTelemetryFresh =
-    trustedCloudPacketStatus?.telemetryFresh === undefined
-      ? vehicleFreshness.label === 'disconnected'
-        ? 'false'
-        : '--'
-      : vehicleFreshness.label === 'connected'
-      ? trustedCloudPacketStatus.telemetryFresh
-        ? 'true'
-        : 'false'
-      : vehicleFreshness.label
+    vehicleFreshness.vehicleStatus === 'online' &&
+    trustedCloudPacketStatus?.telemetryFresh !== false
+      ? 'true'
+      : 'false'
   const lastCloudUpdateAt =
     cloudPacketStatus?.updatedAt ?? cloudHealth?.latestVehicleUpdatedAt ?? null
 
@@ -3734,14 +3741,18 @@ function ConnectionStatusPanel({
     <section className="grid gap-4">
       <MiniPanel title="Vehicle Telemetry">
         <div className="grid gap-3 sm:grid-cols-3">
-          <ConnectionField label="Status" value={vehicleFreshness.label} tone={vehicleFreshness.tone} />
-          <StatusMetric label="Last Cloud Update" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
-          <StatusMetric label="Cloud Update Age" value={formatSeconds(packetAgeSeconds)} />
+          <ConnectionField
+            label="Vehicle ESP32"
+            value={displayedVehicleNodeStatus}
+            tone={vehicleFreshness.tone}
+          />
+          <StatusMetric label="Last Vehicle Packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
+          <StatusMetric label="Vehicle Packet Age" value={formatSeconds(packetAgeSeconds)} />
           <StatusMetric label="Packet Rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
           <StatusMetric label="Source" value={displayedSource} />
           <StatusMetric label="Node" value={cloudNode} />
-          <StatusMetric label="Connection" value={displayedConnectionStatus} />
-          <StatusMetric label="Telemetry" value={telemetryStatus} />
+          <StatusMetric label="Vehicle Node Status" value={vehicleFreshness.label} />
+          <StatusMetric label="Telemetry State" value={telemetryStatus} />
           <StatusMetric
             label="Telemetry Fresh"
             value={displayedTelemetryFresh}
@@ -3772,14 +3783,24 @@ function ConnectionStatusPanel({
       <MiniPanel title="Cloud Telemetry">
         <div className="grid gap-3 sm:grid-cols-3">
           <ConnectionField
+            label="Cloud Backend"
+            value={displayedBackendStatus === 'connected' ? 'connected' : 'unavailable'}
+            tone={displayedBackendStatus === 'connected' ? 'healthy' : 'danger'}
+          />
+          <ConnectionField
             label="Redis"
             value={cloudHealth?.redis ?? 'not_configured'}
             tone={cloudHealth?.redis === 'connected' ? 'healthy' : cloudHealth?.redis === 'error' ? 'danger' : 'neutral'}
           />
-          <ConnectionField label="API Status" value={cloudHealth?.ok ? 'healthy' : 'unavailable'} tone={cloudHealth?.ok ? 'healthy' : 'neutral'} />
-          <StatusMetric label="Last Cloud Packet" value={formatTimestamp(cloudHealth?.latestVehicleUpdatedAt)} />
+          <ConnectionField
+            label="Health Endpoint"
+            value={displayedHealthEndpoint}
+            tone={displayedHealthEndpoint === 'healthy' ? 'healthy' : 'danger'}
+          />
+          <StatusMetric label="Last Redis Read" value={formatTimestamp(cloudHealth?.lastRedisReadAt)} />
+          <StatusMetric label="Last Vehicle Packet" value={formatTimestamp(cloudHealth?.latestVehicleUpdatedAt)} />
           <StatusMetric label="Health Node" value={cloudHealth?.latestVehicleNode ?? '--'} />
-          <StatusMetric label="Health Age" value={formatSeconds(cloudHealth?.latestVehiclePacketAgeSeconds)} />
+          <StatusMetric label="Vehicle Packet Age" value={formatSeconds(cloudHealth?.latestVehiclePacketAgeSeconds)} />
           <StatusMetric label="Latest Updated" value={formatTimestamp(cloudPacketStatus?.updatedAt)} />
         </div>
       </MiniPanel>

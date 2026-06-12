@@ -1,10 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import {
+  summarizeVehicleTelemetryStatus,
+  vehicleNodeStatusLabel,
+} from '@/lib/vehicleTelemetryStatus'
 import type {
   CloudTelemetryHealth,
-  TelemetryFreshness,
   TelemetryNodeId,
+  VehicleNodeStatus,
 } from '@/types/telemetry'
 
 type CloudTelemetryStatusCardProps = {
@@ -14,11 +18,10 @@ type CloudTelemetryStatusCardProps = {
   lastPacketAt?: number
 }
 
-const freshnessStyles: Record<TelemetryFreshness, string> = {
-  idle: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
-  healthy: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
-  warning: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
-  stale: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
+const vehicleStatusStyles: Record<VehicleNodeStatus, string> = {
+  online: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
+  stale: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-100',
+  offline: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
 
 export default function CloudTelemetryStatusCard({
@@ -42,13 +45,15 @@ export default function CloudTelemetryStatusCard({
   const lastPacketTimestamp =
     selectedNodeHealth?.updated_at ??
     (lastPacketAt ? new Date(lastPacketAt).toISOString() : null)
-  const freshness = classifyFreshness(packetAgeSeconds)
-  const redisStatus = health?.redis ?? (enabled ? 'checking' : 'idle')
-  const displayedConnectionStatus = getDisplayedConnectionStatus({
-    health,
-    freshness,
-    fallbackConnectionStatus: connectionStatus,
+  const vehicleStatus = summarizeVehicleTelemetryStatus({
+    packetAgeSeconds,
   })
+  const redisStatus = health?.redis ?? (enabled ? 'checking' : 'idle')
+  const cloudBackendStatus =
+    health?.cloudBackendStatus ??
+    (health?.redis === 'connected' || connectionStatus === 'connected'
+      ? 'connected'
+      : 'error')
 
   useEffect(() => {
     if (!enabled) return
@@ -105,18 +110,17 @@ export default function CloudTelemetryStatusCard({
             Vercel API to Upstash Redis to dashboard read path.
           </p>
         </div>
-        <StatusPill label={freshness} tone={freshness} />
+        <VehicleStatusPill status={vehicleStatus.vehicleNodeStatus} />
       </div>
 
-      {freshness === 'warning' ? (
+      {vehicleStatus.vehicleNodeStatus === 'stale' ? (
         <StatusBanner tone="warning">
-          Cloud telemetry packet is older than 5 seconds.
+          Vehicle ESP32 packet is older than 10 seconds.
         </StatusBanner>
       ) : null}
-      {freshness === 'stale' ? (
+      {vehicleStatus.vehicleNodeStatus === 'offline' ? (
         <StatusBanner tone="stale">
-          Cloud telemetry is stale. Confirm ESP32 hotspot uplink and Vercel
-          ingest token.
+          Vehicle ESP32 is offline. Cloud backend may still be connected.
         </StatusBanner>
       ) : null}
       {healthError ? (
@@ -125,10 +129,17 @@ export default function CloudTelemetryStatusCard({
 
       <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
         <StatusMetric label="Node" value={node} />
-        <StatusMetric label="Connection" value={displayedConnectionStatus} />
+        <StatusMetric
+          label="Cloud Backend"
+          value={cloudBackendStatus === 'connected' ? 'Connected' : 'Unavailable'}
+        />
+        <StatusMetric
+          label="Vehicle ESP32"
+          value={vehicleNodeStatusLabel(vehicleStatus.vehicleNodeStatus)}
+        />
         <StatusMetric label="Redis" value={redisStatus} />
         <StatusMetric
-          label="Last packet"
+          label="Last Vehicle Packet"
           value={
             lastPacketTimestamp
               ? new Date(lastPacketTimestamp).toLocaleTimeString()
@@ -136,12 +147,21 @@ export default function CloudTelemetryStatusCard({
           }
         />
         <StatusMetric
-          label="Packet age"
-          value={packetAgeSeconds !== undefined ? `${packetAgeSeconds}s` : '--'}
+          label="Vehicle Packet Age"
+          value={
+            typeof packetAgeSeconds === 'number' &&
+            Number.isFinite(packetAgeSeconds)
+              ? `${packetAgeSeconds}s`
+              : '--'
+          }
         />
       </div>
 
       <div className="grid gap-3 text-sm sm:grid-cols-3">
+        <StatusMetric
+          label="Telemetry Fresh"
+          value={vehicleStatus.telemetryFresh ? 'true' : 'false'}
+        />
         <StatusMetric
           label="Health node"
           value={selectedNodeHealth?.node ?? '--'}
@@ -168,18 +188,12 @@ export default function CloudTelemetryStatusCard({
   )
 }
 
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string
-  tone: TelemetryFreshness
-}) {
+function VehicleStatusPill({ status }: { status: VehicleNodeStatus }) {
   return (
     <span
-      className={`rounded border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${freshnessStyles[tone]}`}
+      className={`rounded border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${vehicleStatusStyles[status]}`}
     >
-      {label}
+      {vehicleNodeStatusLabel(status)}
     </span>
   )
 }
@@ -194,9 +208,9 @@ function StatusBanner({
   return (
     <p
       className={`rounded-md border p-3 text-sm font-semibold ${
-        tone === 'warning'
-          ? freshnessStyles.warning
-          : freshnessStyles.stale
+            tone === 'warning'
+          ? vehicleStatusStyles.stale
+          : vehicleStatusStyles.offline
       }`}
     >
       {children}
@@ -213,14 +227,6 @@ function StatusMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-words font-bold text-white">{value}</p>
     </div>
   )
-}
-
-function classifyFreshness(ageSeconds?: number): TelemetryFreshness {
-  if (ageSeconds === undefined) return 'idle'
-  if (ageSeconds < 5) return 'healthy'
-  if (ageSeconds <= 15) return 'warning'
-
-  return 'stale'
 }
 
 function findSelectedNodeHealth(
@@ -250,21 +256,4 @@ function getFallbackPacketAgeSeconds(lastPacketAt?: number) {
   return lastPacketAt
     ? Math.max(0, Math.round((Date.now() - lastPacketAt) / 1000))
     : undefined
-}
-
-function getDisplayedConnectionStatus({
-  health,
-  freshness,
-  fallbackConnectionStatus,
-}: {
-  health: CloudTelemetryHealth | null
-  freshness: TelemetryFreshness
-  fallbackConnectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-}) {
-  if (!health) return fallbackConnectionStatus
-  if (health.redis !== 'connected') return 'error'
-  if (freshness === 'stale') return 'disconnected'
-  if (freshness === 'idle') return 'connecting'
-
-  return 'connected'
 }
