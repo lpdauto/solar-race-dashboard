@@ -34,6 +34,7 @@ function isPublicPath(pathname: string) {
     pathname === '/login' ||
     pathname === '/api/login' ||
     pathname === '/race-tracker' ||
+    pathname === '/api/public-race-crew' ||
     pathname === '/api/public-race-status' ||
     isBearerAuthenticatedApiPath(pathname) ||
     pathname.startsWith('/race-images/') ||

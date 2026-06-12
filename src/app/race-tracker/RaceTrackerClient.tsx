@@ -6,9 +6,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { findTeamMemberById, type TeamMember } from '@/data/teamMembers'
 import {
   emptyPublicRaceCrew,
+  loadPublicRaceCrew,
   publicRaceCrewChangedEventName,
   publicRaceCrewStorageKey,
-  readStoredPublicRaceCrew,
   type PublicRaceCrewSelection,
 } from '@/lib/publicRaceCrew'
 import {
@@ -147,8 +147,14 @@ export default function RaceTrackerClient() {
   }, [])
 
   useEffect(() => {
-    function syncCurrentCrew() {
-      setCurrentCrew(readStoredPublicRaceCrew())
+    let cancelled = false
+
+    async function syncCurrentCrew() {
+      const nextCrew = await loadPublicRaceCrew()
+
+      if (!cancelled) {
+        setCurrentCrew(nextCrew)
+      }
     }
 
     function syncStoredCurrentCrew(event: StorageEvent) {
@@ -158,10 +164,13 @@ export default function RaceTrackerClient() {
     }
 
     syncCurrentCrew()
+    const intervalId = window.setInterval(syncCurrentCrew, 15_000)
     window.addEventListener(publicRaceCrewChangedEventName, syncCurrentCrew)
     window.addEventListener('storage', syncStoredCurrentCrew)
 
     return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
       window.removeEventListener(publicRaceCrewChangedEventName, syncCurrentCrew)
       window.removeEventListener('storage', syncStoredCurrentCrew)
     }

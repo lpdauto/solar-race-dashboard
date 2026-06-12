@@ -37,6 +37,61 @@ export function writeStoredPublicRaceCrew(selection: PublicRaceCrewSelection) {
   window.dispatchEvent(new CustomEvent(publicRaceCrewChangedEventName))
 }
 
+export async function loadPublicRaceCrew(): Promise<PublicRaceCrewSelection> {
+  try {
+    const response = await fetch('/api/public-race-crew', {
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      return readStoredPublicRaceCrew()
+    }
+
+    return normalizePublicRaceCrew(await response.json())
+  } catch {
+    return readStoredPublicRaceCrew()
+  }
+}
+
+export async function savePublicRaceCrew(
+  selection: PublicRaceCrewSelection
+): Promise<{ ok: boolean; source: 'server' | 'local'; error?: string }> {
+  const normalized = normalizePublicRaceCrew(selection)
+
+  try {
+    const response = await fetch('/api/public-race-crew', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(normalized),
+    })
+
+    if (response.ok) {
+      writeStoredPublicRaceCrew(normalized)
+      return { ok: true, source: 'server' }
+    }
+
+    const body = (await response.json().catch(() => null)) as {
+      error?: string
+    } | null
+
+    writeStoredPublicRaceCrew(normalized)
+    return {
+      ok: false,
+      source: 'local',
+      error: body?.error ?? 'Crew was saved locally only.',
+    }
+  } catch {
+    writeStoredPublicRaceCrew(normalized)
+    return {
+      ok: false,
+      source: 'local',
+      error: 'Crew was saved locally only.',
+    }
+  }
+}
+
 export function normalizePublicRaceCrew(value: unknown): PublicRaceCrewSelection {
   if (!value || typeof value !== 'object') return emptyPublicRaceCrew
 

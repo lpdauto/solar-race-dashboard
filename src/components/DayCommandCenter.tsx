@@ -79,8 +79,8 @@ import {
 } from '@/lib/raceEvents'
 import {
   emptyPublicRaceCrew,
-  readStoredPublicRaceCrew,
-  writeStoredPublicRaceCrew,
+  loadPublicRaceCrew,
+  savePublicRaceCrew,
   type PublicRaceCrewSelection,
 } from '@/lib/publicRaceCrew'
 import { rx2Config } from '@/lib/race/rx2Config'
@@ -494,10 +494,22 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   }, [])
 
   useEffect(() => {
-    const storedCrew = readStoredPublicRaceCrew()
+    let cancelled = false
 
-    setCurrentCrewDraft(storedCrew)
-    setCurrentCrewSaved(storedCrew)
+    async function syncCurrentCrew() {
+      const storedCrew = await loadPublicRaceCrew()
+
+      if (!cancelled) {
+        setCurrentCrewDraft(storedCrew)
+        setCurrentCrewSaved(storedCrew)
+      }
+    }
+
+    syncCurrentCrew()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -572,7 +584,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     writeStoredRaceEvents(events)
   }
 
-  function saveCurrentCrew() {
+  async function saveCurrentCrew() {
     if (
       currentCrewDraft.driverId &&
       currentCrewDraft.driverId === currentCrewDraft.passengerId
@@ -581,9 +593,15 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
       return
     }
 
-    writeStoredPublicRaceCrew(currentCrewDraft)
+    setCurrentCrewSaveStatus('Saving current crew...')
+    const result = await savePublicRaceCrew(currentCrewDraft)
+
     setCurrentCrewSaved(currentCrewDraft)
-    setCurrentCrewSaveStatus('Current crew saved for this browser.')
+    setCurrentCrewSaveStatus(
+      result.source === 'server'
+        ? 'Current crew saved for the public tracker.'
+        : result.error ?? 'Current crew saved for this browser.'
+    )
   }
 
   function startTrailering() {
