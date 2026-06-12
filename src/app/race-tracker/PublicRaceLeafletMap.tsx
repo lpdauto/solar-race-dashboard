@@ -50,7 +50,7 @@ export default function PublicRaceLeafletMap({
     [currentPosition]
   )
   return (
-    <div className="relative h-[420px] w-full md:h-[560px]">
+    <div className="relative h-[300px] w-full sm:h-[420px] md:h-[560px]">
       <MapContainer
         bounds={bounds}
         className="h-full w-full"
