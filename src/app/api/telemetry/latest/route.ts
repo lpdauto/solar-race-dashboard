@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const data = await loadLatestTelemetry(node)
 
     if (!data) {
-      return NextResponse.json(
+      return noStoreJson(
         {
           ok: false,
           node,
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.json({
+    return noStoreJson({
       ok: true,
       node,
       payload: data.payload,
@@ -35,9 +35,15 @@ export async function GET(request: Request) {
   } catch (error) {
     logTelemetryApiError('/api/telemetry/latest', error, { node })
 
-    return NextResponse.json(
+    return noStoreJson(
       telemetryErrorJson(error, 'Failed to load latest telemetry packet.'),
       { status: 500 }
     )
   }
+}
+
+function noStoreJson(data: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(data, init)
+  response.headers.set('Cache-Control', 'no-store')
+  return response
 }

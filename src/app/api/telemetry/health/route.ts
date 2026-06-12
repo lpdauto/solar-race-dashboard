@@ -14,7 +14,7 @@ export async function GET() {
       packetAgeSeconds: latestVehicle?.ageSeconds,
     })
 
-    return NextResponse.json({
+    return noStoreJson({
       ok: true,
       cloudBackendStatus: 'connected',
       healthEndpointStatus: 'healthy',
@@ -31,7 +31,7 @@ export async function GET() {
   } catch (error) {
     logTelemetryApiError('/api/telemetry/health', error)
 
-    return NextResponse.json(
+    return noStoreJson(
       {
         ok: false,
         cloudBackendStatus: 'error',
@@ -54,4 +54,10 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+function noStoreJson(data: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(data, init)
+  response.headers.set('Cache-Control', 'no-store')
+  return response
 }

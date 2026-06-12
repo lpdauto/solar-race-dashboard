@@ -2,6 +2,11 @@
 
 import { useEffect } from 'react'
 
+const serviceWorkerCacheNames = [
+  'solar-race-dashboard-v1',
+  'solar-race-dashboard-v2',
+]
+
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -15,7 +20,11 @@ export default function ServiceWorkerRegister() {
         .then((registrations) =>
           Promise.all(registrations.map((registration) => registration.unregister()))
         )
-        .then(() => caches.delete('solar-race-dashboard-v1'))
+        .then(() =>
+          Promise.all(
+            serviceWorkerCacheNames.map((cacheName) => caches.delete(cacheName))
+          )
+        )
         .then(() => {
           console.info('Solar Race service worker disabled for local development.')
         })
@@ -29,6 +38,7 @@ export default function ServiceWorkerRegister() {
       .register('/sw.js')
       .then((registration) => {
         console.info('Solar Race service worker registered:', registration.scope)
+        void registration.update()
       })
       .catch((error) => {
         console.error('Solar Race service worker registration failed:', error)

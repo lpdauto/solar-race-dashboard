@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
-const cacheName = 'solar-race-dashboard-v1'
+const cacheName = 'solar-race-dashboard-v2'
 const requiredCachedUrls = [
   '/',
   '/manifest.webmanifest',

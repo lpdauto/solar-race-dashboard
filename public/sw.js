@@ -1,4 +1,4 @@
-const CACHE_NAME = 'solar-race-dashboard-v1'
+const CACHE_NAME = 'solar-race-dashboard-v2'
 const PRECACHE_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -41,6 +41,11 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  if (requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request))
+    return
+  }
+
   if (requestUrl.origin === self.location.origin) {
     event.respondWith(cacheFirstSameOrigin(request))
     return
@@ -79,6 +84,10 @@ async function networkFirstNavigation(request) {
 }
 
 async function cacheFirstSameOrigin(request) {
+  if (request.method !== 'GET') {
+    return fetch(request)
+  }
+
   const cache = await caches.open(CACHE_NAME)
   const cached = await cache.match(request)
 
@@ -88,7 +97,7 @@ async function cacheFirstSameOrigin(request) {
 
   const response = await fetch(request)
 
-  if (response.ok && request.method === 'GET') {
+  if (response.ok) {
     cache.put(request, response.clone())
   }
 
