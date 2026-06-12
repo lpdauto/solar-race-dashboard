@@ -16,6 +16,7 @@ type CloudTelemetryStatusCardProps = {
   node: TelemetryNodeId
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   lastPacketAt?: number
+  health?: CloudTelemetryHealth | null
 }
 
 const vehicleStatusStyles: Record<VehicleNodeStatus, string> = {
@@ -29,9 +30,11 @@ export default function CloudTelemetryStatusCard({
   node,
   connectionStatus,
   lastPacketAt,
+  health: providedHealth,
 }: CloudTelemetryStatusCardProps) {
-  const [health, setHealth] = useState<CloudTelemetryHealth | null>(null)
+  const [fetchedHealth, setFetchedHealth] = useState<CloudTelemetryHealth | null>(null)
   const [healthError, setHealthError] = useState<string | undefined>()
+  const health = providedHealth ?? fetchedHealth
   const selectedNodeHealth = useMemo(
     () => findSelectedNodeHealth(health, node),
     [health, node]
@@ -56,7 +59,7 @@ export default function CloudTelemetryStatusCard({
       : 'error')
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || providedHealth !== undefined) return
 
     let cancelled = false
 
@@ -72,12 +75,12 @@ export default function CloudTelemetryStatusCard({
 
         if (cancelled) return
 
-        setHealth(nextHealth)
+        setFetchedHealth(nextHealth)
         setHealthError(response.ok ? undefined : nextHealth.error)
       } catch (error) {
         if (cancelled) return
 
-        setHealth(null)
+        setFetchedHealth(null)
         setHealthError(
           error instanceof Error
             ? error.message
@@ -95,7 +98,7 @@ export default function CloudTelemetryStatusCard({
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [enabled])
+  }, [enabled, providedHealth])
 
   if (!enabled) {
     return null

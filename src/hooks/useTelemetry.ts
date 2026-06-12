@@ -613,14 +613,21 @@ export function useTelemetry({
     [cloudHealth, cloudNode, connectionStatus, lastPacketAt, source, status]
   )
   const effectivePacketStats = useMemo(
-    () =>
-      effectiveTelemetryStatus.statusSource === 'health'
-        ? {
-            ...packetStats,
-            packetLossEstimatePercent: null,
-          }
-        : packetStats,
-    [effectiveTelemetryStatus.statusSource, packetStats]
+    () => {
+      if (effectiveTelemetryStatus.statusSource !== 'health') {
+        return packetStats
+      }
+
+      if (effectiveTelemetryStatus.status !== 'connected') {
+        return emptyPacketStats
+      }
+
+      return {
+        ...packetStats,
+        packetLossEstimatePercent: null,
+      }
+    },
+    [effectiveTelemetryStatus.status, effectiveTelemetryStatus.statusSource, packetStats]
   )
 
   return {

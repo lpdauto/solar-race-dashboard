@@ -979,6 +979,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                   connectionError={telemetryController.connectionError}
                   lastPacketAt={telemetryController.effectiveLastPacketAt}
                   cloudNode={telemetryController.cloudNode}
+                  cloudHealth={telemetryController.cloudHealth}
                   connect={telemetryController.connect}
                   disconnect={telemetryController.disconnect}
                   setSource={telemetryController.setSource}
@@ -3697,7 +3698,9 @@ function ConnectionStatusPanel({
   geolocation: ReturnType<typeof useGeolocation>
 }) {
   const vehicleFreshness = classifyDataFreshness(
-    packetAgeSeconds
+    source === 'cloud' && cloudHealth
+      ? cloudHealth.latestVehiclePacketAgeSeconds ?? undefined
+      : packetAgeSeconds
   )
   const canTrustCloudPacket =
     source === 'cloud' && vehicleFreshness.vehicleStatus !== 'offline'
@@ -3731,11 +3734,18 @@ function ConnectionStatusPanel({
     cloudHealth?.healthEndpointStatus ?? (cloudHealth?.ok ? 'healthy' : 'error')
   const displayedTelemetryFresh =
     vehicleFreshness.vehicleStatus === 'online' &&
+    cloudHealth?.vehicleTelemetryFresh !== false &&
     trustedCloudPacketStatus?.telemetryFresh !== false
       ? 'true'
       : 'false'
   const lastCloudUpdateAt =
-    cloudPacketStatus?.updatedAt ?? cloudHealth?.latestVehicleUpdatedAt ?? null
+    source === 'cloud' && cloudHealth
+      ? cloudHealth.latestVehicleUpdatedAt
+      : cloudPacketStatus?.updatedAt ?? cloudHealth?.latestVehicleUpdatedAt ?? null
+  const displayedPacketAgeSeconds =
+    source === 'cloud' && cloudHealth
+      ? cloudHealth.latestVehiclePacketAgeSeconds ?? undefined
+      : packetAgeSeconds
 
   return (
     <section className="grid gap-4">
@@ -3747,7 +3757,7 @@ function ConnectionStatusPanel({
             tone={vehicleFreshness.tone}
           />
           <StatusMetric label="Last Vehicle Packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
-          <StatusMetric label="Vehicle Packet Age" value={formatSeconds(packetAgeSeconds)} />
+          <StatusMetric label="Vehicle Packet Age" value={formatSeconds(displayedPacketAgeSeconds)} />
           <StatusMetric label="Packet Rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
           <StatusMetric label="Source" value={displayedSource} />
           <StatusMetric label="Node" value={cloudNode} />
@@ -4358,6 +4368,7 @@ function TelemetrySourceSetup({
   connectionError,
   lastPacketAt,
   cloudNode,
+  cloudHealth,
   connect,
   disconnect,
   setSource,
@@ -4370,6 +4381,7 @@ function TelemetrySourceSetup({
   connectionError?: string
   lastPacketAt?: number
   cloudNode: TelemetryNodeId
+  cloudHealth: CloudTelemetryHealth | null
   connect: () => void
   disconnect: () => void
   setSource: (source: TelemetrySource) => void
@@ -4382,6 +4394,26 @@ function TelemetrySourceSetup({
         (telemetrySource) =>
           telemetrySource === 'cloud' || telemetrySource === 'esp32'
       )
+  const vehicleSourceStatus =
+    source === 'cloud' && cloudHealth?.vehicleNodeStatus
+      ? cloudHealth.vehicleNodeStatus
+      : null
+  const sourceStatusLabel = vehicleSourceStatus
+    ? vehicleNodeStatusLabel(vehicleSourceStatus)
+    : status
+  const sourceStatusClass = vehicleSourceStatus
+    ? vehicleSourceStatus === 'online'
+      ? statusStyles.connected
+      : vehicleSourceStatus === 'stale'
+        ? statusStyles.warning
+        : statusStyles.disconnected
+    : statusStyles[status]
+  const cloudConnectionLabel =
+    source === 'cloud'
+      ? cloudHealth?.cloudBackendStatus === 'connected'
+        ? 'Cloud Backend Connected'
+        : 'Cloud Backend Unavailable'
+      : connectionStatus
 
   return (
     <section className="rounded-lg border border-white/10 bg-black/20 p-3 sm:p-4">
@@ -4394,7 +4426,7 @@ function TelemetrySourceSetup({
             Select simulator, local ESP32, or Cloud Telemetry for hosted race updates.
           </p>
         </div>
-        <Badge label={status} className={statusStyles[status]} />
+        <Badge label={sourceStatusLabel} className={sourceStatusClass} />
       </div>
 
       <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end">
@@ -4460,15 +4492,23 @@ function TelemetrySourceSetup({
           node={cloudNode}
           connectionStatus={connectionStatus}
           lastPacketAt={lastPacketAt}
+          health={cloudHealth}
         />
       </div>
 
       <div className="mt-3 grid gap-3 rounded-md border border-white/10 bg-white/[0.035] p-3 text-sm sm:grid-cols-3">
         <LogMetric label="Source" value={telemetrySourceLabel(source)} />
-        <LogMetric label="Connection" value={connectionStatus} />
         <LogMetric
-          label="Last packet"
-          value={formatLastPacketAge(lastPacketAt)}
+          label={source === 'cloud' ? 'Cloud Backend' : 'Connection'}
+          value={cloudConnectionLabel}
+        />
+        <LogMetric
+          label="Last Vehicle Packet"
+          value={
+            source === 'cloud' && cloudHealth
+              ? formatSeconds(cloudHealth.latestVehiclePacketAgeSeconds)
+              : formatLastPacketAge(lastPacketAt)
+          }
         />
       </div>
 
