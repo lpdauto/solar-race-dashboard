@@ -1,9 +1,7 @@
 node_modules
 .next
 .env
-.env.local
+.env.*
 *.log
 mission-control-cleanup-*.png
-dist
-out
-.vercel
+tsconfig.tsbuildinfo
