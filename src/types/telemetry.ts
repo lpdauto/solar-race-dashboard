@@ -51,6 +51,10 @@ export type TelemetryData = {
   mpptFault?: string
   mpptChargeState?: string
   regenWatts?: number
+  netPowerWatts?: number
+  energyConsumedWh?: number
+  energyRecoveredWh?: number
+  batteryEnergyWh?: number
   whPerMile?: number
   solarPowerWatts?: number
   solarCurrent?: number
@@ -144,6 +148,10 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     mpptFault: input.mpptFault,
     mpptChargeState: input.mpptChargeState,
     regenWatts: input.regenWatts,
+    netPowerWatts: input.netPowerWatts,
+    energyConsumedWh: input.energyConsumedWh,
+    energyRecoveredWh: input.energyRecoveredWh,
+    batteryEnergyWh: input.batteryEnergyWh,
     whPerMile,
     solarPowerWatts: input.solarPowerWatts ?? mpptChargePowerWatts ?? mpptPowerWatts,
     solarCurrent: input.solarCurrent ?? mpptCurrent,

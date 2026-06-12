@@ -7,6 +7,11 @@ import {
   parseEsp32TelemetryPacket,
   simulatorTelemetryToEsp32Packet,
 } from '@/lib/esp32Telemetry'
+import {
+  deriveContinuousEnergyTelemetry,
+  initialContinuousEnergyState,
+  type ContinuousEnergyState,
+} from '@/lib/continuousEnergy'
 import { generateTelemetryFrame } from '@/lib/telemetrySimulator'
 import type {
   CloudTelemetryHealth,
@@ -56,6 +61,10 @@ export type TelemetryHistorySample = {
   batteryPowerWatts?: number
   mpptChargePowerWatts?: number
   mpptDailyEnergyWh?: number
+  netPowerWatts?: number
+  energyConsumedWh?: number
+  energyRecoveredWh?: number
+  batteryEnergyWh?: number
   speedMph: number
 }
 
@@ -95,6 +104,9 @@ export function useTelemetry({
   const lastPacketKeyRef = useRef<string | null>(null)
   const currentMileRef = useRef(currentMile)
   const currentSegmentRef = useRef(currentSegment)
+  const continuousEnergyStateRef = useRef<ContinuousEnergyState>({
+    ...initialContinuousEnergyState,
+  })
 
   useEffect(() => {
     currentMileRef.current = currentMile
@@ -188,13 +200,18 @@ export function useTelemetry({
             )
           : simulatorTelemetry
 
-      telemetryRef.current = nextTelemetry
-      setTelemetry(nextTelemetry)
-      recordTelemetryHistory(nextTelemetry)
+      const continuousTelemetry = applyContinuousEnergy(nextTelemetry)
+
+      telemetryRef.current = continuousTelemetry
+      setTelemetry(continuousTelemetry)
+      recordTelemetryHistory(continuousTelemetry)
       setStatus('simulated')
       setConnectionStatus('connected')
-      setLastPacketAt(nextTelemetry.timestamp)
-      recordPacket(nextTelemetry.timestamp, `${source}:${nextTelemetry.timestamp}`)
+      setLastPacketAt(continuousTelemetry.timestamp)
+      recordPacket(
+        continuousTelemetry.timestamp,
+        `${source}:${continuousTelemetry.timestamp}`
+      )
     }
 
     tick()
@@ -476,10 +493,15 @@ export function useTelemetry({
         })
       }
 
-      telemetryRef.current = nextTelemetryWithCloud
-      setTelemetry(nextTelemetryWithCloud)
+      const continuousTelemetry = applyContinuousEnergy(
+        nextTelemetryWithCloud,
+        lastPacketTimestamp
+      )
+
+      telemetryRef.current = continuousTelemetry
+      setTelemetry(continuousTelemetry)
       setCloudPacketStatus(nextCloudPacketStatus)
-      recordTelemetryHistory(nextTelemetryWithCloud)
+      recordTelemetryHistory(continuousTelemetry, lastPacketTimestamp)
       setLastPacketAt(lastPacketTimestamp)
       setConnectionStatus(connectionStatusForFreshness(freshness))
       setStatus(statusForFreshness(freshness))
@@ -500,6 +522,7 @@ export function useTelemetry({
   function resetPacketStats() {
     packetTimestampsRef.current = []
     lastPacketKeyRef.current = null
+    continuousEnergyStateRef.current = { ...initialContinuousEnergyState }
     setPacketStats(emptyPacketStats)
     setCloudPacketStatus(null)
     setTelemetryHistory([])
@@ -523,17 +546,35 @@ export function useTelemetry({
     refreshPacketStats()
   }
 
-  function recordTelemetryHistory(nextTelemetry: TelemetryData) {
+  function applyContinuousEnergy(
+    nextTelemetry: TelemetryData,
+    timestampMs = nextTelemetry.timestamp
+  ) {
+    const result = deriveContinuousEnergyTelemetry({
+      telemetry: nextTelemetry,
+      previousState: continuousEnergyStateRef.current,
+      timestampMs,
+    })
+
+    continuousEnergyStateRef.current = result.state
+
+    return result.telemetry
+  }
+
+  function recordTelemetryHistory(
+    nextTelemetry: TelemetryData,
+    timestampMs = nextTelemetry.timestamp
+  ) {
     setTelemetryHistory((currentHistory) =>
       [
         ...currentHistory,
         {
-          timestamp: nextTelemetry.timestamp,
+          timestamp: timestampMs,
           distanceMiles:
             nextTelemetry.odometerMiles ??
             nextTelemetry.distanceMiles ??
             currentMileRef.current,
-          batteryEnergyUsedWh: undefined,
+          batteryEnergyUsedWh: nextTelemetry.energyConsumedWh,
           batteryPowerWatts:
             nextTelemetry.batteryPowerWatts ??
             multiplyIfNumbers(
@@ -542,6 +583,10 @@ export function useTelemetry({
             ),
           mpptChargePowerWatts: nextTelemetry.mpptChargePowerWatts,
           mpptDailyEnergyWh: nextTelemetry.mpptDailyEnergyWh,
+          netPowerWatts: nextTelemetry.netPowerWatts,
+          energyConsumedWh: nextTelemetry.energyConsumedWh,
+          energyRecoveredWh: nextTelemetry.energyRecoveredWh,
+          batteryEnergyWh: nextTelemetry.batteryEnergyWh,
           speedMph: nextTelemetry.speedMph,
         },
       ].slice(-maxTelemetryHistorySamples)

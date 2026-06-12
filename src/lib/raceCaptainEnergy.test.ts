@@ -26,8 +26,8 @@ const mockRaceDay: RaceDay = {
   terrainSummary: 'Fixed deterministic route.',
   strategySummary: 'Fixed deterministic strategy.',
   simulation: {
-    estimatedWhPerMile: 126,
-    estimatedBatteryUse: '12.6 kWh',
+    estimatedWhPerMile: 40,
+    estimatedBatteryUse: '4.0 kWh',
     solarRecovery: '2.7 kWh',
     regenOpportunity: 'Low',
   },
@@ -77,14 +77,14 @@ const mockRaceDay: RaceDay = {
 }
 
 const baseEnergySimulation: EnergySimulationResult = {
-  flatRoadWh: 10_000,
-  climbWh: 2_000,
-  regenWh: 500,
-  solarWh: 2_700,
-  netWh: 8_800,
-  netKwh: 8.8,
+  flatRoadWh: 3_200,
+  climbWh: 800,
+  regenWh: 200,
+  solarWh: 700,
+  netWh: 3_300,
+  netKwh: 3.3,
   batteryPercentUsed: 40,
-  estimatedWhPerMile: 126,
+  estimatedWhPerMile: 40,
   predictedFinishSocPercent: 60,
   riskLevel: 'low',
 }
@@ -92,9 +92,9 @@ const baseEnergySimulation: EnergySimulationResult = {
 const baseTelemetry: TelemetryData = {
   timestamp: fixedNow.getTime(),
   source: 'manual',
-  speedMph: 30,
+  speedMph: 35,
   batteryVoltage: 100,
-  batteryCurrent: 30,
+  batteryCurrent: 14,
   batterySocPercent: 64,
   batterySocPercentValid: true,
   gpsLat: 31.0,
@@ -103,8 +103,12 @@ const baseTelemetry: TelemetryData = {
   mpptChargePowerWatts: 700,
   mpptPvPowerWatts: 760,
   mpptDailyEnergyWh: 2710,
-  efficiencyWhPerMile: 126,
-  whPerMile: 126,
+  netPowerWatts: -700,
+  batteryEnergyWh: 3200,
+  energyConsumedWh: 120,
+  energyRecoveredWh: 45,
+  efficiencyWhPerMile: 40,
+  whPerMile: 40,
 }
 
 const carSetup = {
@@ -190,9 +194,9 @@ function rollingDistanceHistory(): TelemetryHistorySample[] {
   return Array.from({ length: 11 }, (_, index) => ({
     timestamp: fixedNow.getTime() + index * 60_000,
     distanceMiles: index,
-    batteryEnergyUsedWh: index * 126,
-    batteryPowerWatts: 3_780,
-    speedMph: 30,
+    batteryEnergyUsedWh: index * 40,
+    batteryPowerWatts: 1_400,
+    speedMph: 35,
   }))
 }
 
@@ -200,8 +204,8 @@ describe('Race Captain Energy Command Center calculations', () => {
   it('calculates current, required, projected SOC, inventory, and energy balance from fixed inputs', () => {
     const { model, strategy } = buildModel()
 
-    expect(model.currentWhPerMile).toBeCloseTo(126, 1)
-    expect(model.requiredWhPerMile).toBeCloseTo(126, 1)
+    expect(model.currentWhPerMile).toBeCloseTo(40, 1)
+    expect(model.requiredWhPerMile).toBeCloseTo(40, 1)
     expect(model.projectedFinishSoc).toBeCloseTo(strategy.projectedFinishSoc, 6)
     expect(model.projectedArrivalSoc).toBeCloseTo(strategy.swapAdvice.projectedSocIfContinue, 6)
     expect(model.activeBatteryKwh).toBeCloseTo(3.2, 2)
@@ -212,8 +216,12 @@ describe('Race Captain Energy Command Center calculations', () => {
     expect(model.solarInputIsEstimated).toBe(false)
     expect(model.solarCapturedKwh).toBeCloseTo(2.71, 3)
     expect(model.solarCapturedIsEstimated).toBe(false)
-    expect(model.energyUsedKwh).toBeCloseTo(12, 3)
-    expect(model.netEnergyLossKwh).toBeCloseTo(8.8, 3)
+    expect(model.energyUsedKwh).toBeCloseTo(4, 3)
+    expect(model.netEnergyLossKwh).toBeCloseTo(3.3, 3)
+    expect(model.netPowerWatts).toBeCloseTo(-700, 6)
+    expect(model.batteryEnergyWh).toBeCloseTo(3200, 6)
+    expect(model.energyConsumedWh).toBeCloseTo(120, 6)
+    expect(model.energyRecoveredWh).toBeCloseTo(45, 6)
     expect(model.solarInputIsSimulated).toBe(false)
   })
 
@@ -222,35 +230,35 @@ describe('Race Captain Energy Command Center calculations', () => {
 
     expect(result.mode).toBe('distance')
     expect(result.label).toBe('Rolling 10 mi')
-    expect(result.value).toBeCloseTo(126, 6)
+    expect(result.value).toBeCloseTo(40, 6)
   })
 
   it('calculates Rolling partial when less than 10 miles of valid distance exists', () => {
     const history = Array.from({ length: 6 }, (_, index) => ({
       timestamp: fixedNow.getTime() + index * 60_000,
       distanceMiles: index,
-      batteryEnergyUsedWh: index * 135,
-      batteryPowerWatts: 4_050,
-      speedMph: 30,
+      batteryEnergyUsedWh: index * 50,
+      batteryPowerWatts: 1_750,
+      speedMph: 35,
     }))
     const result = calculateRollingWhPerMile(history)
 
     expect(result.mode).toBe('partial')
     expect(result.label).toBe('Rolling partial')
-    expect(result.value).toBeCloseTo(135, 6)
+    expect(result.value).toBeCloseTo(50, 6)
   })
 
   it('falls back to a time-window estimate when distance is unavailable', () => {
     const history = Array.from({ length: 11 }, (_, index) => ({
       timestamp: fixedNow.getTime() + index * 60_000,
-      batteryPowerWatts: 6_000,
-      speedMph: 30,
+      batteryPowerWatts: 1_400,
+      speedMph: 35,
     }))
     const result = calculateRollingWhPerMile(history)
 
     expect(result.mode).toBe('estimated')
     expect(result.label).toBe('Rolling estimated')
-    expect(result.value).toBeCloseTo(200, 6)
+    expect(result.value).toBeCloseTo(40, 6)
   })
 
   it('protects against invalid data, low speeds, divide-by-zero, and extreme values', () => {
@@ -263,8 +271,8 @@ describe('Race Captain Energy Command Center calculations', () => {
 
     expect(
       calculateRollingWhPerMile([
-        { timestamp: fixedNow.getTime(), distanceMiles: 0, batteryEnergyUsedWh: 0, speedMph: 30 },
-        { timestamp: fixedNow.getTime() + 60_000, distanceMiles: 1, batteryEnergyUsedWh: 10_000, speedMph: 30 },
+        { timestamp: fixedNow.getTime(), distanceMiles: 0, batteryEnergyUsedWh: 0, speedMph: 35 },
+        { timestamp: fixedNow.getTime() + 60_000, distanceMiles: 1, batteryEnergyUsedWh: 10_000, speedMph: 35 },
       ]).value
     ).toBe(maxExpectedRollingWhPerMile())
   })
@@ -341,7 +349,7 @@ describe('Race Captain scenario decisions', () => {
   })
 
   it('high consumption climb increases conservation pressure', () => {
-    const telemetry = { ...baseTelemetry, batterySocPercent: 40, efficiencyWhPerMile: 190, whPerMile: 190 }
+    const telemetry = { ...baseTelemetry, batterySocPercent: 40, efficiencyWhPerMile: 70, whPerMile: 70 }
     const { strategy } = buildModel({ telemetry, currentMile: 35 })
 
     expect(strategy.raceMode).toBe('Conserve')
@@ -349,7 +357,7 @@ describe('Race Captain scenario decisions', () => {
   })
 
   it('low SOC approaching stop recommends an urgent swap decision', () => {
-    const telemetry = { ...baseTelemetry, batterySocPercent: 12, efficiencyWhPerMile: 180, whPerMile: 180 }
+    const telemetry = { ...baseTelemetry, batterySocPercent: 12, efficiencyWhPerMile: 70, whPerMile: 70 }
     const { strategy } = buildModel({ telemetry, currentMile: 55, spareBatterySocPercent: 90 })
 
     expect(strategy.swapAdvice.action).toBe('SWAP_NOW')
@@ -367,21 +375,21 @@ describe('Race Captain scenario decisions', () => {
   })
 
   it('poor solar day lowers captured solar and offset', () => {
-    const poorSolar = { ...baseEnergySimulation, solarWh: 500, netWh: 11_000, netKwh: 11 }
+    const poorSolar = { ...baseEnergySimulation, solarWh: 200, netWh: 3_800, netKwh: 3.8 }
     const telemetry = { ...baseTelemetry, mpptDailyEnergyWh: undefined }
     const { model } = buildModel({ telemetry, energySimulation: poorSolar, telemetryHistory: [] })
 
-    expect(model.solarCapturedKwh).toBeCloseTo(0.5, 3)
+    expect(model.solarCapturedKwh).toBeCloseTo(0.2, 3)
     expect(model.solarCapturedIsEstimated).toBe(true)
-    expect(model.solarOffsetPercent).toBeCloseTo(4.166, 2)
+    expect(model.solarOffsetPercent).toBeCloseTo(5, 2)
   })
 
   it('strong solar day raises captured solar and offset', () => {
-    const strongSolar = { ...baseEnergySimulation, solarWh: 6_000, netWh: 5_500, netKwh: 5.5 }
+    const strongSolar = { ...baseEnergySimulation, solarWh: 2_000, netWh: 2_000, netKwh: 2 }
     const telemetry = { ...baseTelemetry, mpptDailyEnergyWh: undefined }
     const { model } = buildModel({ telemetry, energySimulation: strongSolar, telemetryHistory: [] })
 
-    expect(model.solarCapturedKwh).toBeCloseTo(6, 3)
+    expect(model.solarCapturedKwh).toBeCloseTo(2, 3)
     expect(model.solarCapturedIsEstimated).toBe(true)
     expect(model.solarOffsetPercent).toBeCloseTo(50, 2)
   })
@@ -389,8 +397,8 @@ describe('Race Captain scenario decisions', () => {
   it('uses integrated MPPT charge power for solar captured when daily MPPT energy is missing', () => {
     const telemetry = { ...baseTelemetry, mpptDailyEnergyWh: undefined }
     const telemetryHistory: TelemetryHistorySample[] = [
-      { timestamp: fixedNow.getTime(), speedMph: 30, mpptChargePowerWatts: 600 },
-      { timestamp: fixedNow.getTime() + 60 * 60_000, speedMph: 30, mpptChargePowerWatts: 600 },
+      { timestamp: fixedNow.getTime(), speedMph: 35, mpptChargePowerWatts: 600 },
+      { timestamp: fixedNow.getTime() + 60 * 60_000, speedMph: 35, mpptChargePowerWatts: 600 },
     ]
     const { model } = buildModel({ telemetry, telemetryHistory })
 
@@ -398,13 +406,25 @@ describe('Race Captain scenario decisions', () => {
     expect(model.solarCapturedIsEstimated).toBe(false)
   })
 
-  it('prioritizes MPPT charge power, then PV power, then legacy solar power, then setup estimate', () => {
+  it('prioritizes MPPT charge power, then MPPT power, then PV power, then legacy solar power, then setup estimate', () => {
     expect(buildModel().model.solarInputWatts).toBe(700)
     expect(
       buildModel({
         telemetry: {
           ...baseTelemetry,
           mpptChargePowerWatts: undefined,
+          mpptPowerWatts: 780,
+          mpptPvPowerWatts: 760,
+          solarPowerWatts: 742,
+        },
+      }).model.solarInputWatts
+    ).toBe(780)
+    expect(
+      buildModel({
+        telemetry: {
+          ...baseTelemetry,
+          mpptChargePowerWatts: undefined,
+          mpptPowerWatts: undefined,
           mpptPvPowerWatts: 760,
           solarPowerWatts: 742,
         },
@@ -415,6 +435,7 @@ describe('Race Captain scenario decisions', () => {
         telemetry: {
           ...baseTelemetry,
           mpptChargePowerWatts: undefined,
+          mpptPowerWatts: undefined,
           mpptPvPowerWatts: undefined,
           solarPowerWatts: 742,
         },
@@ -424,6 +445,7 @@ describe('Race Captain scenario decisions', () => {
       telemetry: {
         ...baseTelemetry,
         mpptChargePowerWatts: undefined,
+        mpptPowerWatts: undefined,
         mpptPvPowerWatts: undefined,
         solarPowerWatts: undefined,
       },

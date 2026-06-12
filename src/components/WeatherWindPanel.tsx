@@ -10,6 +10,7 @@ type WeatherWindPanelProps = {
   routePoints: RoutePoint[]
   currentMile?: number
   currentRaceSpeedMph?: number
+  mode?: 'strategy' | 'facts'
 }
 
 const riskStyles: Record<WeatherRisk, string> = {
@@ -24,6 +25,7 @@ export default function WeatherWindPanel({
   routePoints,
   currentMile,
   currentRaceSpeedMph,
+  mode = 'strategy',
 }: WeatherWindPanelProps) {
   const {
     forecasts,
@@ -46,16 +48,22 @@ export default function WeatherWindPanel({
     <section className="grid gap-4 rounded-lg border border-white/10 bg-white/[0.035] p-4">
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
         <div>
-          <h3 className="text-base font-bold text-white">Weather + Wind Engine</h3>
+          <h3 className="text-base font-bold text-white">
+            {mode === 'facts' ? 'Weather + Wind' : 'Weather + Wind Engine'}
+          </h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Weather adjustments are advisory in Phase 11. Phase 12/13 can feed wind and solar radiation into the energy model.
+            {mode === 'facts'
+              ? 'Current factual weather and wind context for the route.'
+              : 'Weather adjustments are advisory in Phase 11. Phase 12/13 can feed wind and solar radiation into the energy model.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge
-            label={strategySummary.weatherRisk}
-            className={riskStyles[strategySummary.weatherRisk]}
-          />
+          {mode === 'strategy' ? (
+            <Badge
+              label={strategySummary.weatherRisk}
+              className={riskStyles[strategySummary.weatherRisk]}
+            />
+          ) : null}
           <Badge
             label={sourceSummary}
             className="border-violet-300/30 bg-violet-300/10 text-violet-100"
@@ -72,7 +80,7 @@ export default function WeatherWindPanel({
 
       {loading ? (
         <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm font-semibold text-[#ff8fcb]">
-          Loading weather strategy...
+          Loading weather...
         </div>
       ) : null}
 
@@ -88,24 +96,30 @@ export default function WeatherWindPanel({
         <Metric label="Max crosswind" value={`${strategySummary.maxCrosswindMph.toFixed(1)} mph`} />
         <Metric label="Avg cloud cover" value={`${strategySummary.averageCloudCoverPercent.toFixed(0)}%`} />
         <Metric label="Avg solar" value={`${strategySummary.averageSolarRadiationWm2.toFixed(0)} W/m2`} />
-        <Metric label="Speed adjustment" value={`${strategySummary.recommendedSpeedAdjustmentMph} mph`} />
+        {mode === 'strategy' ? (
+          <Metric label="Speed adjustment" value={`${strategySummary.recommendedSpeedAdjustmentMph} mph`} />
+        ) : null}
       </div>
 
-      <WindStrategyCard
-        summary={strategySummary}
-        hottestForecast={hottestForecast}
-      />
+      {mode === 'strategy' ? (
+        <WindStrategyCard
+          summary={strategySummary}
+          hottestForecast={hottestForecast}
+        />
+      ) : null}
 
-      <div className="grid gap-2">
-        {strategySummary.notes.map((note) => (
-          <div
-            key={note}
-            className="rounded-md border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-200"
-          >
-            {note}
-          </div>
-        ))}
-      </div>
+      {mode === 'strategy' ? (
+        <div className="grid gap-2">
+          {strategySummary.notes.map((note) => (
+            <div
+              key={note}
+              className="rounded-md border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-200"
+            >
+              {note}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-3">
         <Metric

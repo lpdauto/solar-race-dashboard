@@ -35,12 +35,20 @@ function isPublicPath(pathname: string) {
     pathname === '/api/login' ||
     pathname === '/race-tracker' ||
     pathname === '/api/public-race-status' ||
-    pathname.startsWith('/api/telemetry/') ||
+    isBearerAuthenticatedApiPath(pathname) ||
     pathname === '/manifest.webmanifest' ||
     pathname === '/sw.js' ||
     pathname.startsWith('/icons/') ||
     pathname.startsWith('/_next/') ||
     pathname.match(/\.(?:png|jpg|jpeg|gif|svg|ico|webp|css|js|map|txt)$/)
+  )
+}
+
+function isBearerAuthenticatedApiPath(pathname: string) {
+  return (
+    pathname.startsWith('/api/telemetry/') ||
+    pathname === '/api/vehicle/display' ||
+    pathname.startsWith('/api/tft/')
   )
 }
 

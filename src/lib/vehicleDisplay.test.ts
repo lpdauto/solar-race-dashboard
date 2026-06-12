@@ -5,17 +5,17 @@ describe('buildVehicleDisplayData', () => {
   it('maps latest vehicle telemetry into driver display data', () => {
     expect(
       buildVehicleDisplayData({
-        speedMph: 30,
-        packPowerWatts: 4350,
+        speedMph: 35,
+        packPowerWatts: 1400,
         packSoc: 82,
       })
     ).toEqual({
       soc: 82,
-      whPerMile: 145,
+      whPerMile: 40,
       checkpointDistanceMiles: null,
       arrival: '--:--',
       status: 'ON TARGET',
-      targetSpeedMph: 30,
+      targetSpeedMph: 35,
     })
   })
 
@@ -36,13 +36,13 @@ describe('buildVehicleDisplayData', () => {
   it('classifies high Wh per mile as a slow-down status', () => {
     expect(
       buildVehicleDisplayData({
-        speedMph: 20,
-        packPowerWatts: 5000,
+        speedMph: 35,
+        packPowerWatts: 2450,
         soc: 71,
       })
     ).toMatchObject({
       soc: 71,
-      whPerMile: 250,
+      whPerMile: 70,
       status: 'SLOW DOWN',
     })
   })

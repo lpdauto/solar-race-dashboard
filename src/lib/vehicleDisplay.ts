@@ -7,7 +7,7 @@ export type VehicleDisplayData = {
   targetSpeedMph: number
 }
 
-const defaultTargetSpeedMph = 30
+const defaultTargetSpeedMph = 35
 
 export function buildVehicleDisplayData(payload: unknown): VehicleDisplayData {
   const packet = isJsonObject(payload) ? payload : {}
@@ -19,21 +19,39 @@ export function buildVehicleDisplayData(payload: unknown): VehicleDisplayData {
     finiteNumber(packet.packSoc) ??
     finiteNumber(packet.soc) ??
     finiteNumber(packet.batterySocPercent)
+  const checkpointDistanceMiles =
+    finiteNumber(packet.checkpointDistanceMiles) ??
+    finiteNumber(packet.distanceToNextEventMiles) ??
+    finiteNumber(packet.nextStopMiles)
+  const arrival = stringValue(packet.arrival) ?? stringValue(packet.eta)
+  const directWhPerMile =
+    finiteNumber(packet.whPerMile) ??
+    finiteNumber(packet.efficiencyWhPerMile) ??
+    finiteNumber(packet.predictedWhPerMile) ??
+    finiteNumber(packet.currentWhPerMile)
+  const targetSpeedMph =
+    finiteNumber(packet.targetSpeedMph) ??
+    finiteNumber(packet.recommendedSpeedMph) ??
+    defaultTargetSpeedMph
   const whPerMile =
-    speedMph !== undefined &&
+    directWhPerMile ??
+    (speedMph !== undefined &&
     speedMph > 1 &&
     packPowerWatts !== undefined &&
     packPowerWatts > 0
       ? packPowerWatts / speedMph
-      : null
+      : null)
 
   return {
     soc: soc === undefined ? null : Math.round(clamp(soc, 0, 100)),
     whPerMile: whPerMile === null ? null : Math.round(whPerMile),
-    checkpointDistanceMiles: null,
-    arrival: '--:--',
-    status: classifyDriverStatus({ speedMph, packPowerWatts, whPerMile }),
-    targetSpeedMph: defaultTargetSpeedMph,
+    checkpointDistanceMiles: checkpointDistanceMiles ?? null,
+    arrival: arrival ?? '--:--',
+    status:
+      stringValue(packet.status) ??
+      stringValue(packet.command) ??
+      classifyDriverStatus({ speedMph, packPowerWatts, whPerMile }),
+    targetSpeedMph: Math.round(targetSpeedMph),
   }
 }
 
@@ -56,9 +74,9 @@ function classifyDriverStatus({
     return 'WAITING DATA'
   }
 
-  if (whPerMile < 130) return 'EXCELLENT'
-  if (whPerMile < 170) return 'ON TARGET'
-  if (whPerMile < 220) return 'WATCH EFF'
+  if (whPerMile < 30) return 'EXCELLENT'
+  if (whPerMile < 45) return 'ON TARGET'
+  if (whPerMile < 65) return 'WATCH EFF'
   return 'SLOW DOWN'
 }
 
@@ -68,6 +86,10 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 
 function finiteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function clamp(value: number, min: number, max: number) {

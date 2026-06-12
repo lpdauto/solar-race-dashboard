@@ -56,6 +56,10 @@ export type Esp32TelemetryPacket = {
   mpptStatus?: string
   mpptFault?: string
   regenWatts?: number
+  netPowerWatts?: number
+  energyConsumedWh?: number
+  energyRecoveredWh?: number
+  batteryEnergyWh?: number
 }
 
 export const mockEsp32TelemetryPacket: Esp32TelemetryPacket = {
@@ -135,6 +139,10 @@ export function parseEsp32TelemetryPacket(
     mpptStatus: stringValue(packet.mpptStatus),
     mpptFault: stringValue(packet.mpptFault),
     regenWatts: finiteNumber(packet.regenWatts),
+    netPowerWatts: finiteNumber(packet.netPowerWatts),
+    energyConsumedWh: finiteNumber(packet.energyConsumedWh),
+    energyRecoveredWh: finiteNumber(packet.energyRecoveredWh),
+    batteryEnergyWh: finiteNumber(packet.batteryEnergyWh),
   } satisfies TelemetryInput)
 }
 

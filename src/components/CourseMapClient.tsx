@@ -32,6 +32,7 @@ type CourseMapProps = {
   }
   heightClass?: string
   showAllDays?: boolean
+  showRiskAnnotations?: boolean
 }
 
 type RouteLine = {
@@ -79,6 +80,7 @@ export default function CourseMapClient({
   currentLocation,
   heightClass = 'h-[360px] md:h-[500px]',
   showAllDays = true,
+  showRiskAnnotations = true,
 }: CourseMapProps) {
   const mapRef = useRef<L.Map | null>(null)
   const visibleDays = useMemo(
@@ -176,13 +178,16 @@ export default function CourseMapClient({
               key={line.key}
               positions={line.positions}
               pathOptions={{
-                color: getSeverityColor(line.severity),
+                color: showRiskAnnotations ? getSeverityColor(line.severity) : '#22c55e',
                 opacity: line.isCurrentDay ? 0.98 : 0.5,
                 weight: line.isCurrentSegment ? 9 : line.isCurrentDay ? 7 : 4,
               }}
             >
               <Popup>
-                <ElevationMapPopupLine line={line} />
+                <ElevationMapPopupLine
+                  line={line}
+                  showRiskAnnotations={showRiskAnnotations}
+                />
               </Popup>
             </Polyline>
           )) : routeLines.map((line) => (
@@ -193,13 +198,16 @@ export default function CourseMapClient({
                 [line.pointB.lat, line.pointB.lng],
               ]}
               pathOptions={{
-                color: getSeverityColor(line.severity),
+                color: showRiskAnnotations ? getSeverityColor(line.severity) : '#22c55e',
                 opacity: line.isCurrentDay ? 0.98 : 0.48,
                 weight: line.isCurrentSegment ? 9 : line.isCurrentDay ? 7 : 4,
               }}
             >
               <Popup>
-                <MapPopupLine line={line} />
+                <MapPopupLine
+                  line={line}
+                  showRiskAnnotations={showRiskAnnotations}
+                />
               </Popup>
             </Polyline>
           ))}
@@ -265,7 +273,9 @@ export default function CourseMapClient({
               <MapMetric label="Current day" value={currentDayNumber ? `Day ${currentDayNumber}` : 'Full route'} />
               <MapMetric label="Current mile" value={currentMile !== undefined ? currentMile.toFixed(1) : '--'} />
               <MapMetric label="Remaining" value={distanceRemaining !== null ? `${distanceRemaining.toFixed(1)} mi` : '--'} />
-              <MapMetric label="Segment severity" value={currentSegment?.risk ?? currentDay?.riskLevel ?? '--'} />
+              {showRiskAnnotations ? (
+                <MapMetric label="Segment severity" value={currentSegment?.risk ?? currentDay?.riskLevel ?? '--'} />
+              ) : null}
             </dl>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
@@ -290,11 +300,20 @@ export default function CourseMapClient({
               Legend
             </p>
             <div className="mt-2 grid gap-1.5 text-xs font-semibold text-[#cfcfcf]">
-              <LegendItem color="#22c55e" label="Low elevation severity" />
-              <LegendItem color="#facc15" label="Moderate" />
-              <LegendItem color="#fb923c" label="High" />
-              <LegendItem color="#ef4444" label="Severe" />
-              <LegendItem color="#38bdf8" label="Current vehicle" />
+              {showRiskAnnotations ? (
+                <>
+                  <LegendItem color="#22c55e" label="Low elevation severity" />
+                  <LegendItem color="#facc15" label="Moderate" />
+                  <LegendItem color="#fb923c" label="High" />
+                  <LegendItem color="#ef4444" label="Severe" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                </>
+              ) : (
+                <>
+                  <LegendItem color="#22c55e" label="Route segment" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -419,7 +438,13 @@ function FitBounds({ bounds }: { bounds: Array<[number, number]> }) {
   return null
 }
 
-function MapPopupLine({ line }: { line: RouteLine }) {
+function MapPopupLine({
+  line,
+  showRiskAnnotations,
+}: {
+  line: RouteLine
+  showRiskAnnotations: boolean
+}) {
   const midpoint = (line.pointA.mile + line.pointB.mile) / 2
   const segment = findSegmentForMile(line.day, midpoint)
 
@@ -429,7 +454,7 @@ function MapPopupLine({ line }: { line: RouteLine }) {
       <span>
         Mile {line.pointA.mile.toFixed(1)} to {line.pointB.mile.toFixed(1)}
       </span>
-      <span>Severity: {line.severity}</span>
+      {showRiskAnnotations ? <span>Severity: {line.severity}</span> : null}
       <span>
         {line.pointA.label ?? 'Route point'} to {line.pointB.label ?? 'route point'}
       </span>
@@ -438,14 +463,22 @@ function MapPopupLine({ line }: { line: RouteLine }) {
   )
 }
 
-function ElevationMapPopupLine({ line }: { line: ElevationRouteLine }) {
+function ElevationMapPopupLine({
+  line,
+  showRiskAnnotations,
+}: {
+  line: ElevationRouteLine
+  showRiskAnnotations: boolean
+}) {
   return (
     <div className="grid gap-1 text-sm">
       <strong>Day {line.day.day} elevation sector</strong>
       <span>
         Mile {line.startMile.toFixed(1)} to {line.endMile.toFixed(1)}
       </span>
-      <span>Elevation severity: {line.severity}</span>
+      {showRiskAnnotations ? (
+        <span>Elevation severity: {line.severity}</span>
+      ) : null}
       <span>Gain: {line.elevationGainFt.toFixed(0)} ft</span>
       <span>Loss: {line.elevationLossFt.toFixed(0)} ft</span>
       <span>

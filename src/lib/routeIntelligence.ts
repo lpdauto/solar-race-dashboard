@@ -372,7 +372,9 @@ function classifyTraileringAction({
       (segment.risk === 'high' || segment.risk === 'severe')
   )
   const hasSevereRisk = segments.some((segment) => segment.risk === 'severe')
+  const hasHighEnergySection = hasHighRiskClimb || hasSevereRisk
   const highEnergyButSafe =
+    hasHighEnergySection &&
     estimatedEnergySavedWh > rx2Config.mainBatteryUsableWh * 0.08 &&
     projectedSocIfDriven >= reserveSocPercent
 

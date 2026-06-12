@@ -2,18 +2,16 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import CarSetupPanel from '@/components/CarSetupPanel'
 import CloudTelemetryStatusCard from '@/components/CloudTelemetryStatusCard'
 import CommandTile, { type CommandTileRisk } from '@/components/CommandTile'
 import CourseMap from '@/components/CourseMap'
-import DriverPaceCoach from '@/components/DriverPaceCoach'
 import ElevationProfile from '@/components/ElevationProfile'
 import EnergySimulationPanel from '@/components/EnergySimulationPanel'
 import ExpandablePanel from '@/components/ExpandablePanel'
 import GpsStatusPanel from '@/components/GpsStatusPanel'
 import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
-import PredictiveStrategyPanel from '@/components/PredictiveStrategyPanel'
 import RaceNavigator from '@/components/RaceNavigator'
 import TelemetryDashboard from '@/components/TelemetryDashboard'
 import WeatherWindPanel from '@/components/WeatherWindPanel'
@@ -44,6 +42,15 @@ import {
   type DaySummary,
 } from '@/lib/daySummary'
 import {
+  buildAuthoritativeStrategyState,
+  type AuthoritativeStrategyState,
+  type MissionStatus,
+  type RaceHealthSummary as RaceHealth,
+} from '@/lib/authoritativeStrategyState'
+import {
+  type StrategyRecommendation as DeterministicStrategyRecommendation,
+} from '@/lib/deterministicStrategyRecommendation'
+import {
   createRaceSnapshot,
   exportRaceSnapshotsToCsv,
   trimSnapshotHistory,
@@ -66,12 +73,27 @@ import {
 } from '@/lib/raceEvents'
 import { rx2Config } from '@/lib/race/rx2Config'
 import {
+  createInitialRaceBatteryState,
+  executeBatterySwap,
+  setActivePack as setActiveRaceBatteryPack,
+  setBatteryPackSoc,
+  updateRaceBatteryStateFromTelemetry,
+  type BatteryPackId,
+  type RaceBatteryState,
+  type SwapRecommendation as BatterySwapRecommendation,
+} from '@/lib/raceBatteryStrategy'
+import {
   buildRaceCaptainEnergyModel,
   buildTargetRows,
   formatSignedPercent,
   formatSwapAction,
 } from '@/lib/raceCaptainEnergy'
+import {
+  type PredictionConfidence,
+  type RacePrediction,
+} from '@/lib/racePrediction'
 import { generatePredictiveStrategy } from '@/lib/strategyEngine'
+import { appendStrategyEventLogEntry } from '@/lib/strategyEventLog'
 import type {
   CloudTelemetryHealth,
   CloudTelemetryPacketStatus,
@@ -118,43 +140,6 @@ type DayNavigationSection =
   | 'telemetry'
   | 'setup'
   | 'reports'
-
-type MissionStatus =
-  | 'ON_TARGET'
-  | 'CONSERVE'
-  | 'AT_RISK'
-  | 'SWAP_RECOMMENDED'
-  | 'TRAILERING_RECOMMENDED'
-  | 'FINISH_PUSH'
-  | 'CRITICAL_ENERGY'
-
-type RaceHealth = {
-  score: number
-  label: 'Excellent' | 'Good' | 'Caution' | 'Recovery'
-  breakdown: RaceHealthBreakdown
-}
-
-type RaceHealthBreakdown = {
-  baseScore: number
-  healthBasis: string
-  primaryHealthSocPercent: number
-  secondaryForecastSocPercent: number
-  socMarginPercent: number
-  socMarginBonus: number
-  swapPenalty: number
-  traileringPenalty: number
-  nextOpportunityPenalty: number
-  fullDayEnergyCautionPenalty: number
-  routeRiskPenalty: number
-  telemetryPenalty: number
-  highestRouteSeverity: 'LOW' | 'MEDIUM' | 'HIGH' | 'SEVERE'
-  isFinalDay: boolean
-  activeReserveSocPercent: number
-  finalDayTargetReserveSocPercent: number
-  absoluteMinimumSocPercent: number
-  endgameModeActive: boolean
-  finalScore: number
-}
 
 const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
@@ -215,6 +200,9 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   const [segmentRiskFilter, setSegmentRiskFilter] = useState<'all' | RiskLevel>('all')
   const [showUpcomingOnly, setShowUpcomingOnly] = useState(true)
   const [carSetup, setCarSetup] = useState<CarSetup>(defaultCarSetup)
+  const [raceBatteryState, setRaceBatteryState] = useState<RaceBatteryState>(() =>
+    createInitialRaceBatteryState()
+  )
   const [snapshots, setSnapshots] = useState<RaceSnapshot[]>([])
   const [raceEvents, setRaceEvents] = useState<RaceEvent[]>([])
   const [traileringWarning, setTraileringWarning] = useState('')
@@ -326,6 +314,37 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
       telemetryController.source,
     ]
   )
+  const authoritativeStrategy = useMemo(
+    () =>
+      buildAuthoritativeStrategyState({
+        raceDay,
+        currentMile,
+        currentSegment,
+        telemetry: telemetryController.telemetry,
+        telemetryHistory: telemetryController.telemetryHistory,
+        telemetryTimestampMs: telemetryController.effectiveLastPacketAt,
+        telemetryAgeSeconds: telemetryController.effectivePacketAgeSeconds,
+        telemetrySource: telemetryController.source,
+        telemetryStatus: telemetryController.effectiveStatus,
+        connectionStatus: telemetryController.effectiveConnectionStatus,
+        raceBatteryState,
+        isTraileringActive: Boolean(activeTraileringSession),
+      }),
+    [
+      activeTraileringSession,
+      currentMile,
+      currentSegment,
+      raceBatteryState,
+      raceDay,
+      telemetryController.effectiveConnectionStatus,
+      telemetryController.effectiveLastPacketAt,
+      telemetryController.effectivePacketAgeSeconds,
+      telemetryController.effectiveStatus,
+      telemetryController.source,
+      telemetryController.telemetry,
+      telemetryController.telemetryHistory,
+    ]
+  )
   const generatedDaySummary = useMemo(
     () =>
       generateDaySummary({
@@ -342,13 +361,8 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     setDaySummary(generatedDaySummary)
   }, [generatedDaySummary])
 
-  const missionStatus = classifyMissionStatus(predictiveStrategy)
-  const raceHealth = calculateRaceHealth({
-    strategy: predictiveStrategy,
-    telemetrySource: telemetryController.source,
-    telemetryStatus: telemetryController.effectiveStatus,
-    connectionStatus: telemetryController.effectiveConnectionStatus,
-  })
+  const missionStatus = authoritativeStrategy.missionStatus
+  const raceHealth = authoritativeStrategy.raceHealth
 
   const visibleTiles = buildTiles({
     raceDay,
@@ -364,7 +378,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     telemetryMotorTemp: telemetryController.telemetry?.motorTempC,
     telemetrySoc: telemetryController.telemetry?.batterySocPercent,
     energySimulation,
-    predictiveStrategy,
+    authoritativeStrategy,
     weatherRisk: weather.strategySummary.weatherRisk,
     weatherSpeedAdjustment: weather.strategySummary.recommendedSpeedAdjustmentMph,
     weatherSource: weather.sourceSummary,
@@ -385,16 +399,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     telemetryController.effectiveStatus === 'disconnected'
       ? `Telemetry is ${telemetryController.effectiveStatus}.`
       : '',
-    predictiveStrategy.swapAdvice.urgency === 'HIGH' ||
-    predictiveStrategy.swapAdvice.urgency === 'CRITICAL'
-      ? `Battery swap urgency is ${predictiveStrategy.swapAdvice.urgency}.`
-      : '',
-    predictiveStrategy.routeIntelligence.traileringOption.action ===
-      'TRAILER_REQUIRED' ||
-    predictiveStrategy.routeIntelligence.traileringOption.action ===
-      'TRAILER_RECOMMENDED'
-      ? `Trailering action: ${predictiveStrategy.routeIntelligence.traileringOption.action}.`
-      : '',
+    ...authoritativeStrategy.alerts,
   ].filter(Boolean)
   const upcomingRiskCount = sortedSegments.filter(
     (segment) =>
@@ -406,7 +411,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         segment.type === 'stop')
   ).length
   const upcomingOpportunityCount =
-    predictiveStrategy.routeIntelligence.opportunities.length
+    authoritativeStrategy.routeIntelligence.opportunities.length
   const filteredSegments = sortedSegments.filter((segment) => {
     if (showUpcomingOnly && segment.mileEnd < currentMile) return false
     if (segmentTypeFilter !== 'all' && segment.type !== segmentTypeFilter) {
@@ -474,12 +479,27 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
   useEffect(() => {
     if (!telemetryController.telemetry) return
 
+    setRaceBatteryState((currentState) =>
+      updateRaceBatteryStateFromTelemetry({
+        state: currentState,
+        telemetry: telemetryController.telemetry as TelemetryData,
+        timestampMs: telemetryEnergyTimestamp(
+          telemetryController.telemetry as TelemetryData,
+          telemetryController.effectiveLastPacketAt
+        ),
+      })
+    )
+  }, [telemetryController.effectiveLastPacketAt, telemetryController.telemetry])
+
+  useEffect(() => {
+    if (!telemetryController.telemetry) return
+
     const snapshot = createRaceSnapshot({
       telemetry: telemetryController.telemetry,
       telemetrySource: telemetryController.source,
       currentDay: raceDay.day,
       currentMile,
-      strategy: predictiveStrategy,
+      strategyState: authoritativeStrategy,
       warningsCount: countTelemetryWarnings(telemetryController.telemetry),
     })
 
@@ -487,12 +507,32 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
       trimSnapshotHistory([...currentSnapshots, snapshot])
     )
   }, [
+    authoritativeStrategy,
     currentMile,
-    predictiveStrategy,
     raceDay.day,
     telemetryController.source,
     telemetryController.telemetry,
   ])
+
+  function handleSetActiveBatteryPack(packId: BatteryPackId) {
+    setRaceBatteryState((currentState) =>
+      setActiveRaceBatteryPack(currentState, packId)
+    )
+  }
+
+  function handleSetBatteryPackSoc(packId: BatteryPackId, socPercent: number) {
+    setRaceBatteryState((currentState) =>
+      setBatteryPackSoc({
+        state: currentState,
+        packId,
+        socPercent,
+      })
+    )
+  }
+
+  function handleExecuteBatterySwap() {
+    setRaceBatteryState((currentState) => executeBatterySwap(currentState))
+  }
 
   function handleManualMileChange(mile: number) {
     setManualMode(true)
@@ -550,7 +590,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         type: 'BATTERY_SWAP',
         day: raceDay.day,
         mile: currentMile,
-        note: `Battery swap logged manually. Current advisor action: ${predictiveStrategy.swapAdvice.action}.`,
+        note: `Battery swap logged manually. Current advisor action: ${authoritativeStrategy.swapRecommendation.action}.`,
       }),
     ])
   }
@@ -621,19 +661,19 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         {prototypeRole === 'race-captain' ? (
           <>
             <MobileRaceCaptainPanel
-              recommendedSpeedMph={predictiveStrategy.recommendedSpeedMph}
+              recommendedSpeedMph={authoritativeStrategy.recommendedSpeedMph}
               missionStatus={missionStatus}
               currentSocPercent={telemetryController.telemetry?.batterySocPercent}
               nextCriticalEvent={nextImportantSegment}
               alerts={raceCaptainAlerts}
               raceHealth={raceHealth}
-              driverAction={predictiveStrategy.driverAction}
+              driverAction={authoritativeStrategy.strategyRecommendation.reason}
             />
             <section className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-6">
               <CommandMetric
                 label="Recommended Speed"
-                value={`${predictiveStrategy.recommendedSpeedMph} mph`}
-                detail={predictiveStrategy.driverAction}
+                value={formatSpeed(authoritativeStrategy.recommendedSpeedMph)}
+                detail={authoritativeStrategy.strategyRecommendation.reason}
               />
               <CommandMetric
                 label="Mission Status"
@@ -671,12 +711,16 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 currentMile={currentMile}
                 distanceRemaining={distanceRemaining}
                 telemetry={telemetryController.telemetry}
+                telemetryAgeSeconds={telemetryController.effectivePacketAgeSeconds}
                 telemetryHistory={telemetryController.telemetryHistory}
+                raceBatteryState={raceBatteryState}
+                authoritativeStrategy={authoritativeStrategy}
+                raceHealth={raceHealth}
+                onSetActivePack={handleSetActiveBatteryPack}
+                onSetPackSoc={handleSetBatteryPackSoc}
+                onExecuteSwap={handleExecuteBatterySwap}
                 energySimulation={energySimulation}
-                predictiveStrategy={predictiveStrategy}
                 carSetup={carSetup}
-                swapAdvice={predictiveStrategy.swapAdvice}
-                traileringOption={predictiveStrategy.routeIntelligence.traileringOption}
                 activeTraileringSession={Boolean(activeTraileringSession)}
               />
             </div>
@@ -706,37 +750,78 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         {prototypeRole === 'strategy' ? (
           <>
             <MissionStatusBanner status={missionStatus} raceHealth={raceHealth} />
+            <StrategyEngineeringCenter
+              raceDay={raceDay}
+              currentMile={currentMile}
+              distanceRemaining={distanceRemaining}
+              telemetry={telemetryController.telemetry}
+              telemetryAgeSeconds={telemetryController.effectivePacketAgeSeconds}
+              telemetryHistory={telemetryController.telemetryHistory}
+              raceBatteryState={raceBatteryState}
+              authoritativeStrategy={authoritativeStrategy}
+              onSetActivePack={handleSetActiveBatteryPack}
+              onSetPackSoc={handleSetBatteryPackSoc}
+              onExecuteSwap={handleExecuteBatterySwap}
+              energySimulation={energySimulation}
+              carSetup={carSetup}
+              activeTraileringSession={Boolean(activeTraileringSession)}
+            />
+            <section className="grid gap-3 lg:grid-cols-2">
+              <UpcomingRisksPanel
+                segments={sortedSegments}
+                currentMile={currentMile}
+              />
+              <UpcomingOpportunitiesPanel
+                opportunities={authoritativeStrategy.routeIntelligence.opportunities}
+              />
+            </section>
+            <WeatherWindPanel
+              dayNumber={raceDay.day}
+              routePoints={raceDay.routePoints}
+              currentMile={currentMile}
+              currentRaceSpeedMph={telemetryController.telemetry?.speedMph}
+            />
             <section className="grid gap-4 lg:grid-cols-2">
               <MiniPanel title="Swap Advisor">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <StatusMetric label="Action" value={predictiveStrategy.swapAdvice.action} />
-                  <StatusMetric label="Urgency" value={predictiveStrategy.swapAdvice.urgency} />
                   <StatusMetric
-                    label="Continue SOC"
-                    value={`${predictiveStrategy.swapAdvice.projectedSocIfContinue.toFixed(1)}%`}
+                    label="Action"
+                    value={formatSwapPlannerAction(authoritativeStrategy.swapRecommendation.action)}
                   />
                   <StatusMetric
-                    label="Swap SOC"
-                    value={`${predictiveStrategy.swapAdvice.projectedSocAfterSwap.toFixed(1)}%`}
+                    label="Confidence"
+                    value={authoritativeStrategy.swapRecommendation.confidence}
+                  />
+                  <StatusMetric
+                    label="Next Stop SOC"
+                    value={formatPredictionSoc(authoritativeStrategy.swapRecommendation.projectedNextStopSocPercent)}
+                  />
+                  <StatusMetric
+                    label="End-Day SOC"
+                    value={formatPredictionSoc(authoritativeStrategy.swapRecommendation.projectedEndDaySocPercent)}
                   />
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  {predictiveStrategy.swapAdvice.reason}
+                  {authoritativeStrategy.swapRecommendation.reason}
                 </p>
               </MiniPanel>
               <MiniPanel title="Trailering">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <StatusMetric
                     label="Action"
-                    value={predictiveStrategy.routeIntelligence.traileringOption.action}
+                    value={authoritativeStrategy.traileringRecommendation?.action ?? 'DRIVE'}
                   />
                   <StatusMetric
                     label="Energy Saved"
-                    value={`${predictiveStrategy.routeIntelligence.traileringOption.estimatedEnergySavedWh.toFixed(0)} Wh`}
+                    value={formatEnergyWh(authoritativeStrategy.traileringRecommendation?.estimatedEnergySavedWh)}
                   />
                   <StatusMetric
                     label="Mileage Penalty"
-                    value={`${predictiveStrategy.routeIntelligence.traileringOption.mileagePenalty.toFixed(1)} mi`}
+                    value={
+                      authoritativeStrategy.traileringRecommendation
+                        ? `${authoritativeStrategy.traileringRecommendation.mileagePenalty.toFixed(1)} mi`
+                        : '--'
+                    }
                   />
                   <StatusMetric
                     label="Active"
@@ -744,7 +829,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                   />
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  {predictiveStrategy.routeIntelligence.traileringOption.reason}
+                  {authoritativeStrategy.traileringRecommendation?.reason ?? 'Drive the current route section.'}
                 </p>
               </MiniPanel>
             </section>
@@ -780,8 +865,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
             <MobileNavigationPanel
               currentSegment={currentSegment ?? null}
               nextEvent={nextImportantSegment}
-              upcomingRiskCount={upcomingRiskCount}
-              upcomingOpportunityCount={upcomingOpportunityCount}
+              distanceRemaining={distanceRemaining}
             />
             <section className="hidden overflow-hidden rounded-lg border border-white/10 bg-white/[0.045] shadow-xl shadow-black/20 md:block">
               <CourseMap
@@ -789,6 +873,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 currentDayNumber={raceDay.day}
                 currentMile={currentMile}
                 heightClass="h-[420px] md:h-[620px]"
+                showRiskAnnotations={false}
               />
             </section>
             <section className="grid gap-2 rounded-lg border border-white/10 bg-black/20 p-2 md:hidden">
@@ -806,30 +891,17 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                     currentDayNumber={raceDay.day}
                     currentMile={currentMile}
                     heightClass="h-[360px]"
+                    showRiskAnnotations={false}
                   />
                 </div>
               ) : null}
             </section>
             <div className="hidden md:block">
-              <MiniPanel title="Current Segment">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge label={currentSegment?.risk ?? 'low'} className={riskStyles[currentSegment?.risk ?? 'low']} />
-                <span className="text-sm font-semibold text-slate-200">
-                  Mile {currentSegment?.mileStart} to {currentSegment?.mileEnd}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                {currentSegment?.strategy}
-              </p>
-              </MiniPanel>
-            </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <UpcomingRisksPanel
-                segments={sortedSegments}
-                currentMile={currentMile}
-              />
-              <UpcomingOpportunitiesPanel
-                opportunities={predictiveStrategy.routeIntelligence.opportunities}
+              <NavigationFactsPanel
+                currentSegment={currentSegment ?? null}
+                nextEvent={nextImportantSegment}
+                distanceRemaining={distanceRemaining}
+                currentSpeedMph={telemetryController.telemetry?.speedMph}
               />
             </div>
             <WeatherWindPanel
@@ -837,6 +909,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               routePoints={raceDay.routePoints}
               currentMile={currentMile}
               currentRaceSpeedMph={telemetryController.telemetry?.speedMph}
+              mode="facts"
             />
           </>
         ) : null}
@@ -894,29 +967,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
               />
             ) : null}
             {telemetrySubview === 'connections' ? (
-              <ConnectionStatusPanel
-                telemetry={telemetryController.telemetry}
-                telemetryHistory={telemetryController.telemetryHistory}
-                telemetryStatus={telemetryController.effectiveStatus}
-                connectionStatus={telemetryController.effectiveConnectionStatus}
-                lastPacketAt={telemetryController.effectiveLastPacketAt}
-                packetAgeSeconds={telemetryController.effectivePacketAgeSeconds}
-                packetStats={telemetryController.effectivePacketStats}
-                cloudPacketStatus={telemetryController.cloudPacketStatus}
-                source={telemetryController.source}
-                cloudNode={telemetryController.cloudNode}
-                cloudHealth={telemetryController.cloudHealth}
-                geolocation={geolocation}
-              />
-            ) : null}
-          </>
-        ) : null}
-
-        {prototypeRole === 'operations' ? (
-          <>
-            <AccordionSection title="Setup" lazy>
-              <div className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
-                <CarSetupPanel />
+              <section className="grid gap-4">
                 <TelemetrySourceSetup
                   status={telemetryController.effectiveStatus}
                   source={telemetryController.source}
@@ -930,6 +981,30 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                   setCloudNode={telemetryController.setCloudNode}
                   showDevelopmentSources={carSetup.appProfile === 'owner'}
                 />
+                <ConnectionStatusPanel
+                  telemetry={telemetryController.telemetry}
+                  telemetryHistory={telemetryController.telemetryHistory}
+                  telemetryStatus={telemetryController.effectiveStatus}
+                  connectionStatus={telemetryController.effectiveConnectionStatus}
+                  lastPacketAt={telemetryController.effectiveLastPacketAt}
+                  packetAgeSeconds={telemetryController.effectivePacketAgeSeconds}
+                  packetStats={telemetryController.effectivePacketStats}
+                  cloudPacketStatus={telemetryController.cloudPacketStatus}
+                  source={telemetryController.source}
+                  cloudNode={telemetryController.cloudNode}
+                  cloudHealth={telemetryController.cloudHealth}
+                  geolocation={geolocation}
+                />
+              </section>
+            ) : null}
+          </>
+        ) : null}
+
+        {prototypeRole === 'operations' ? (
+          <>
+            <AccordionSection title="Setup" lazy>
+              <div className="grid gap-4">
+                <CarSetupPanel />
               </div>
             </AccordionSection>
             <AccordionSection title="Reports" lazy>
@@ -1000,7 +1075,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
 
         <RaceCommandCard
           raceDay={raceDay}
-          predictiveStrategy={predictiveStrategy}
+          authoritativeStrategy={authoritativeStrategy}
         />
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.85fr)]">
@@ -1039,7 +1114,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 currentMile={currentMile}
               />
               <UpcomingOpportunitiesPanel
-                opportunities={predictiveStrategy.routeIntelligence.opportunities}
+                opportunities={authoritativeStrategy.routeIntelligence.opportunities}
               />
             </div>
           </div>
@@ -1099,21 +1174,8 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
         </AccordionSection>
 
         <AccordionSection title="Setup">
-          <div className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
+          <div className="grid gap-4">
             <CarSetupPanel />
-            <TelemetrySourceSetup
-              status={telemetryController.effectiveStatus}
-              source={telemetryController.source}
-              connectionStatus={telemetryController.effectiveConnectionStatus}
-              connectionError={telemetryController.connectionError}
-              lastPacketAt={telemetryController.effectiveLastPacketAt}
-              cloudNode={telemetryController.cloudNode}
-              connect={telemetryController.connect}
-              disconnect={telemetryController.disconnect}
-              setSource={telemetryController.setSource}
-              setCloudNode={telemetryController.setCloudNode}
-              showDevelopmentSources={carSetup.appProfile === 'owner'}
-            />
           </div>
         </AccordionSection>
 
@@ -1241,7 +1303,7 @@ function MobileRaceCaptainPanel({
   raceHealth,
   driverAction,
 }: {
-  recommendedSpeedMph: number
+  recommendedSpeedMph?: number
   missionStatus: MissionStatus
   currentSocPercent?: number
   nextCriticalEvent: RouteSegment | null
@@ -1257,7 +1319,7 @@ function MobileRaceCaptainPanel({
             Speed
           </p>
           <p className="text-4xl font-black leading-none text-white">
-            {recommendedSpeedMph}
+            {recommendedSpeedMph ?? '--'}
             <span className="ml-1 text-base text-slate-300">mph</span>
           </p>
         </div>
@@ -1298,13 +1360,11 @@ function MobileRaceCaptainPanel({
 function MobileNavigationPanel({
   currentSegment,
   nextEvent,
-  upcomingRiskCount,
-  upcomingOpportunityCount,
+  distanceRemaining,
 }: {
   currentSegment: RouteSegment | null
   nextEvent: RouteSegment | null
-  upcomingRiskCount: number
-  upcomingOpportunityCount: number
+  distanceRemaining: number
 }) {
   return (
     <section className="grid gap-2 rounded-lg border border-white/10 bg-black/20 p-3 md:hidden">
@@ -1317,10 +1377,9 @@ function MobileNavigationPanel({
             {currentSegment?.title ?? 'Ready'}
           </p>
         </div>
-        <Badge
-          label={currentSegment?.risk ?? 'low'}
-          className={riskStyles[currentSegment?.risk ?? 'low']}
-        />
+        <p className="text-right text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+          Route facts
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <CompactMetric
@@ -1328,13 +1387,12 @@ function MobileNavigationPanel({
           value={nextEvent?.title ?? 'Clear'}
           detail={nextEvent ? `Mile ${nextEvent.mileStart}` : 'No event'}
         />
-        <CompactMetric label="Risks" value={String(upcomingRiskCount)} />
         <CompactMetric
-          label="Opportunities"
-          value={String(upcomingOpportunityCount)}
+          label="Remaining"
+          value={`${distanceRemaining.toFixed(1)} mi`}
         />
         <CompactMetric
-          label="Miles"
+          label="Segment Miles"
           value={
             currentSegment
               ? `${currentSegment.mileStart}-${currentSegment.mileEnd}`
@@ -1343,6 +1401,66 @@ function MobileNavigationPanel({
         />
       </div>
     </section>
+  )
+}
+
+function NavigationFactsPanel({
+  currentSegment,
+  nextEvent,
+  distanceRemaining,
+  currentSpeedMph,
+}: {
+  currentSegment: RouteSegment | null
+  nextEvent: RouteSegment | null
+  distanceRemaining: number
+  currentSpeedMph?: number
+}) {
+  const nextDistance =
+    nextEvent !== null && currentSegment !== null
+      ? Math.max(0, nextEvent.mileStart - currentSegment.mileStart)
+      : undefined
+
+  return (
+    <MiniPanel title="Route Facts">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatusMetric
+          label="Current Segment"
+          value={
+            currentSegment
+              ? `${currentSegment.title} (${currentSegment.mileStart}-${currentSegment.mileEnd})`
+              : 'No segment'
+          }
+        />
+        <StatusMetric
+          label="Next Event"
+          value={nextEvent ? `${nextEvent.title} (${nextEvent.mileStart})` : 'Clear'}
+        />
+        <StatusMetric
+          label="Remaining Route"
+          value={`${distanceRemaining.toFixed(1)} mi`}
+        />
+        <StatusMetric
+          label="Current Speed"
+          value={formatSpeed(currentSpeedMph)}
+        />
+        <StatusMetric
+          label="Segment Type"
+          value={currentSegment?.type ?? '--'}
+        />
+        <StatusMetric
+          label="Segment Distance"
+          value={
+            currentSegment
+              ? `${Math.max(0, currentSegment.mileEnd - currentSegment.mileStart).toFixed(1)} mi`
+              : '--'
+          }
+        />
+        <StatusMetric
+          label="Distance to Next Event"
+          value={nextDistance !== undefined ? `${nextDistance.toFixed(1)} mi` : '--'}
+        />
+      </div>
+    </MiniPanel>
   )
 }
 
@@ -1526,7 +1644,7 @@ function buildTiles({
   telemetryMotorTemp,
   telemetrySoc,
   energySimulation,
-  predictiveStrategy,
+  authoritativeStrategy,
   weatherRisk,
   weatherSpeedAdjustment,
   weatherSource,
@@ -1548,7 +1666,7 @@ function buildTiles({
   telemetryMotorTemp?: number
   telemetrySoc?: number
   energySimulation: ReturnType<typeof simulateDayEnergy>
-  predictiveStrategy: ReturnType<typeof generatePredictiveStrategy>
+  authoritativeStrategy: AuthoritativeStrategyState
   weatherRisk: WeatherRisk
   weatherSpeedAdjustment: number
   weatherSource: string
@@ -1560,11 +1678,15 @@ function buildTiles({
   const currentSpeed =
     telemetrySpeed !== undefined
       ? telemetrySpeed
-      : predictiveStrategy.recommendedSpeedMph
-  const speedDelta = currentSpeed - predictiveStrategy.recommendedSpeedMph
+      : authoritativeStrategy.recommendedSpeedMph ?? rx2Config.defaultTargetSpeedMph
+  const recommendedSpeed =
+    authoritativeStrategy.recommendedSpeedMph ?? rx2Config.defaultTargetSpeedMph
+  const speedDelta = currentSpeed - recommendedSpeed
   const paceStatus = getPaceStatus({
     speedDelta,
-    projectedFinishSoc: predictiveStrategy.projectedFinishSoc,
+    projectedFinishSoc:
+      authoritativeStrategy.projectedEndDaySocPercent ??
+      authoritativeStrategy.prediction.currentSocPercent,
     controllerTemp: telemetryControllerTemp ?? 0,
     motorTemp: telemetryMotorTemp ?? 0,
   })
@@ -1577,7 +1699,7 @@ function buildTiles({
       mainValue: currentSpeed.toFixed(1),
       mainUnit: 'mph',
       supportingItems: [
-        { label: 'Target', value: `${predictiveStrategy.recommendedSpeedMph} mph` },
+        { label: 'Target', value: `${recommendedSpeed} mph` },
         { label: 'Delta', value: `${speedDelta >= 0 ? '+' : ''}${speedDelta.toFixed(1)} mph` },
         { label: 'Next', value: nextImportantSegment?.title ?? currentSegment?.title ?? 'Ready' },
       ],
@@ -1606,17 +1728,22 @@ function buildTiles({
     },
     {
       id: 'strategy',
-      title: 'Predictive Strategy',
-      mainValue: String(predictiveStrategy.recommendedSpeedMph),
+      title: 'Strategy',
+      mainValue: String(recommendedSpeed),
       mainUnit: 'mph',
       supportingItems: [
-        { label: 'Mode', value: predictiveStrategy.raceMode },
-        { label: 'Finish SOC', value: `${predictiveStrategy.projectedFinishSoc.toFixed(0)}%` },
-        { label: 'Trailering', value: isTraileringActive ? 'active' : predictiveStrategy.routeIntelligence.traileringOption.action },
+        { label: 'Command', value: authoritativeStrategy.strategyRecommendation.title },
+        { label: 'End-Day SOC', value: formatPredictionSoc(authoritativeStrategy.projectedEndDaySocPercent) },
+        { label: 'Trailering', value: isTraileringActive ? 'active' : authoritativeStrategy.traileringRecommendation?.action ?? 'DRIVE' },
       ],
-      statusLabel: predictiveStrategy.raceMode,
-      riskLevel: predictiveStrategy.raceMode === 'Conserve' ? 'high' : predictiveStrategy.raceMode === 'Attack' ? 'low' : 'medium',
-      actionText: predictiveStrategy.driverAction,
+      statusLabel: authoritativeStrategy.strategyRecommendation.command,
+      riskLevel:
+        authoritativeStrategy.strategyRecommendation.severity === 'urgent'
+          ? 'severe'
+          : authoritativeStrategy.strategyRecommendation.severity === 'caution'
+            ? 'high'
+            : 'low',
+      actionText: authoritativeStrategy.strategyRecommendation.reason,
     },
     {
       id: 'energy',
@@ -1841,27 +1968,40 @@ function RaceCaptainEnergyCommandCenter({
   currentMile,
   distanceRemaining,
   telemetry,
+  telemetryAgeSeconds,
   telemetryHistory,
+  raceBatteryState,
+  authoritativeStrategy,
+  raceHealth,
+  onSetActivePack,
+  onSetPackSoc,
+  onExecuteSwap,
   energySimulation,
-  predictiveStrategy,
   carSetup,
-  swapAdvice,
-  traileringOption,
   activeTraileringSession,
 }: {
   raceDay: RaceDay
   currentMile: number
   distanceRemaining: number
   telemetry: TelemetryData | null
+  telemetryAgeSeconds?: number
   telemetryHistory: TelemetryHistorySample[]
+  raceBatteryState: RaceBatteryState
+  authoritativeStrategy: AuthoritativeStrategyState
+  raceHealth: RaceHealth
+  onSetActivePack: (packId: BatteryPackId) => void
+  onSetPackSoc: (packId: BatteryPackId, socPercent: number) => void
+  onExecuteSwap: () => void
   energySimulation: ReturnType<typeof simulateDayEnergy>
-  predictiveStrategy: ReturnType<typeof generatePredictiveStrategy>
   carSetup: CarSetup
-  swapAdvice: ReturnType<typeof generatePredictiveStrategy>['swapAdvice']
-  traileringOption: ReturnType<typeof generatePredictiveStrategy>['routeIntelligence']['traileringOption']
   activeTraileringSession: boolean
 }) {
   const [currentTime, setCurrentTime] = useState(() => new Date())
+  const racePrediction = authoritativeStrategy.prediction
+  const batterySwapRecommendation = authoritativeStrategy.swapRecommendation
+  const deterministicStrategyRecommendation =
+    authoritativeStrategy.strategyRecommendation
+  const traileringOption = authoritativeStrategy.traileringRecommendation
   const energyModel = buildRaceCaptainEnergyModel({
     raceDay,
     currentMile,
@@ -1869,10 +2009,16 @@ function RaceCaptainEnergyCommandCenter({
     telemetry,
     telemetryHistory,
     energySimulation,
-    predictiveStrategy,
+    authoritativeStrategy,
     carSetup,
     now: currentTime,
   })
+  const strategyLogStateRef = useRef<{
+    command?: DeterministicStrategyRecommendation['command']
+    confidence?: DeterministicStrategyRecommendation['confidence']
+    swapAction?: BatterySwapRecommendation['action']
+    stale?: boolean
+  }>({})
   const {
     currentSocPercent,
     currentSocIsSimulated,
@@ -1911,6 +2057,80 @@ function RaceCaptainEnergyCommandCenter({
     return () => window.clearInterval(intervalId)
   }, [])
 
+  useEffect(() => {
+    const previous = strategyLogStateRef.current
+    const stale = (telemetryAgeSeconds ?? 0) > 10
+    const timestamp = currentTime.getTime()
+
+    if (previous.command && previous.command !== deterministicStrategyRecommendation.command) {
+      appendStrategyEventLogEntry({
+        timestamp,
+        type: 'command_changed',
+        detail: `Strategy command changed from ${previous.command} to ${deterministicStrategyRecommendation.command}.`,
+        command: deterministicStrategyRecommendation.command,
+        confidence: deterministicStrategyRecommendation.confidence,
+        swapAction: batterySwapRecommendation.action,
+      })
+    }
+
+    if (previous.confidence && previous.confidence !== deterministicStrategyRecommendation.confidence) {
+      appendStrategyEventLogEntry({
+        timestamp,
+        type: 'confidence_changed',
+        detail: `Strategy confidence changed from ${previous.confidence} to ${deterministicStrategyRecommendation.confidence}.`,
+        command: deterministicStrategyRecommendation.command,
+        confidence: deterministicStrategyRecommendation.confidence,
+        swapAction: batterySwapRecommendation.action,
+      })
+    }
+
+    if (previous.swapAction && previous.swapAction !== batterySwapRecommendation.action) {
+      appendStrategyEventLogEntry({
+        timestamp,
+        type: 'swap_recommendation_changed',
+        detail: `Swap recommendation changed from ${previous.swapAction} to ${batterySwapRecommendation.action}.`,
+        command: deterministicStrategyRecommendation.command,
+        confidence: deterministicStrategyRecommendation.confidence,
+        swapAction: batterySwapRecommendation.action,
+      })
+    }
+
+    if (previous.stale === false && stale) {
+      appendStrategyEventLogEntry({
+        timestamp,
+        type: 'stale_telemetry_started',
+        detail: 'Telemetry became stale.',
+        command: deterministicStrategyRecommendation.command,
+        confidence: deterministicStrategyRecommendation.confidence,
+        swapAction: batterySwapRecommendation.action,
+      })
+    }
+
+    if (previous.stale === true && !stale) {
+      appendStrategyEventLogEntry({
+        timestamp,
+        type: 'stale_telemetry_cleared',
+        detail: 'Telemetry freshness recovered.',
+        command: deterministicStrategyRecommendation.command,
+        confidence: deterministicStrategyRecommendation.confidence,
+        swapAction: batterySwapRecommendation.action,
+      })
+    }
+
+    strategyLogStateRef.current = {
+      command: deterministicStrategyRecommendation.command,
+      confidence: deterministicStrategyRecommendation.confidence,
+      swapAction: batterySwapRecommendation.action,
+      stale,
+    }
+  }, [
+    batterySwapRecommendation.action,
+    currentTime,
+    deterministicStrategyRecommendation.command,
+    deterministicStrategyRecommendation.confidence,
+    telemetryAgeSeconds,
+  ])
+
   return (
     <section className="grid gap-4">
       <div>
@@ -1919,192 +2139,257 @@ function RaceCaptainEnergyCommandCenter({
         </p>
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.55fr_1.15fr]">
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Swap Recommendation" />
-            <div className="mt-5 flex items-center justify-between gap-4">
-              <p className="text-4xl font-black uppercase tracking-tight text-white">
-                {formatSwapAction(swapAdvice.action)}
-              </p>
-              <div className="grid h-12 w-12 place-items-center rounded-full border-2 border-emerald-400/50 bg-emerald-400/10 text-2xl font-black text-emerald-200">
-                ✓
-              </div>
-            </div>
-            <div className="mt-6 rounded-md border border-white/10 bg-black/20">
-              <DecisionMetric
-                label="Projected Arrival SOC"
-                value={`${projectedArrivalSoc.toFixed(0)}%`}
-              />
-              <DecisionMetric label="Swap Window" value={swapAdvice.urgency} />
-            </div>
-          </NativeEnergyCard>
-
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Projected Finish SOC" info />
-            <div className="mt-3 text-center">
-              <p className="text-6xl font-black tracking-tight text-emerald-200">
-                {formatSignedPercent(projectedFinishSoc)}
-              </p>
-              <p className="mt-1 text-sm font-black uppercase tracking-[0.12em] text-emerald-200">
-                {projectedFinishLabel}
-              </p>
-            </div>
-            <FinishSocScale projectedFinishSoc={projectedFinishSoc} />
-            <p className="mt-5 text-center text-sm text-slate-400">
-              Projected at Current Pace & Conditions
-            </p>
-          </NativeEnergyCard>
-
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Battery Status" />
-            <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <BatteryStatus
-                label="ACTIVE BATTERY"
-                id="A"
-                soc={currentSocPercent}
-                kwh={activeBatteryKwh}
-                color="magenta"
-                simulated={currentSocIsSimulated}
-              />
-              <BatteryStatus
-                label="RESERVE BATTERY"
-                id="B"
-                soc={reserveBatterySocPercent}
-                kwh={reserveBatteryKwh}
-                color="info"
-                simulated
-              />
-            </div>
-            <div className="mt-5 border-t border-white/10 pt-4 text-center">
-              <p className="text-sm font-bold uppercase tracking-[0.12em] text-slate-200">
-                Combined Energy Inventory
-              </p>
-              <div className="mt-2 flex items-end justify-center gap-8">
-                <p className="text-3xl font-black text-white">{combinedEnergyKwh.toFixed(2)} kWh</p>
-                <p className="text-3xl font-black text-emerald-200">{combinedInventoryPercent.toFixed(0)}%</p>
-              </div>
-              <SegmentedInventoryBar
-                activePercent={currentSocPercent}
-                reservePercent={reserveBatterySocPercent}
-              />
-              <p className="mt-2 text-xs text-slate-400">
-                Equivalent to {combinedInventoryPercent.toFixed(0)}% of one full battery
-              </p>
-            </div>
-          </NativeEnergyCard>
+        <section className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
+          <DeterministicStrategyRecommendationPanel
+            recommendation={deterministicStrategyRecommendation}
+          />
+          <MissionControlRaceHealthCard raceHealth={raceHealth} />
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.8fr_1fr]">
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Efficiency Wh/mi" info />
-            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-              <EfficiencyReadout label="Required" value={requiredWhPerMile.toFixed(0)} highlight />
-              <EfficiencyReadout
-                label={rollingWhPerMile.label}
-                value={rollingWhPerMile.value === null ? '--' : rollingWhPerMile.value.toFixed(0)}
-                estimated={rollingWhPerMile.mode === 'estimated'}
-              />
-              <EfficiencyReadout label="Current" value={currentWhPerMile.toFixed(0)} simulated={currentWhIsSimulated} />
-            </div>
-            <EfficiencyRail
-              requiredWhPerMile={requiredWhPerMile}
-              rollingWhPerMile={rollingWhPerMile.value ?? currentWhPerMile}
-              currentWhPerMile={currentWhPerMile}
+        <section className="grid gap-4 xl:grid-cols-3">
+          <PredictionSummaryPanel prediction={racePrediction} />
+          <BatteryStrategySummaryPanel
+            batteryState={raceBatteryState}
+            recommendation={batterySwapRecommendation}
+          />
+          <TraileringStrategyPanel
+            traileringOption={traileringOption}
+            activeTraileringSession={activeTraileringSession}
+          />
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+          <NextEventPanel
+            prediction={racePrediction}
+            speedMph={telemetry?.speedMph}
+          />
+          <RecommendedSpeedPanel
+            recommendation={deterministicStrategyRecommendation}
+            currentSpeedMph={telemetry?.speedMph}
+          />
+        </section>
+
+    </section>
+  )
+}
+
+function StrategyEngineeringCenter({
+  raceDay,
+  currentMile,
+  distanceRemaining,
+  telemetry,
+  telemetryHistory,
+  raceBatteryState,
+  authoritativeStrategy,
+  onSetActivePack,
+  onSetPackSoc,
+  onExecuteSwap,
+  energySimulation,
+  carSetup,
+  activeTraileringSession,
+}: {
+  raceDay: RaceDay
+  currentMile: number
+  distanceRemaining: number
+  telemetry: TelemetryData | null
+  telemetryAgeSeconds?: number
+  telemetryHistory: TelemetryHistorySample[]
+  raceBatteryState: RaceBatteryState
+  authoritativeStrategy: AuthoritativeStrategyState
+  onSetActivePack: (packId: BatteryPackId) => void
+  onSetPackSoc: (packId: BatteryPackId, socPercent: number) => void
+  onExecuteSwap: () => void
+  energySimulation: ReturnType<typeof simulateDayEnergy>
+  carSetup: CarSetup
+  activeTraileringSession: boolean
+}) {
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+  const racePrediction = authoritativeStrategy.prediction
+  const batterySwapRecommendation = authoritativeStrategy.swapRecommendation
+  const traileringOption = authoritativeStrategy.traileringRecommendation
+  const energyModel = buildRaceCaptainEnergyModel({
+    raceDay,
+    currentMile,
+    distanceRemaining,
+    telemetry,
+    telemetryHistory,
+    energySimulation,
+    authoritativeStrategy,
+    carSetup,
+    now: currentTime,
+  })
+  const {
+    currentSocPercent,
+    currentWhPerMile,
+    requiredWhPerMile,
+    currentWhIsSimulated,
+    rollingWhPerMile,
+    solarInputWatts,
+    solarInputIsSimulated,
+    solarInputIsEstimated,
+    solarCapturedKwh,
+    solarCapturedIsEstimated,
+    solarCapturedUnavailable,
+    energyUsedKwh,
+    solarOffsetPercent,
+    netEnergyLossKwh,
+    nextStopDistance,
+    projectedArrivalSoc,
+    projectedFinishSoc,
+    routeSocPoints,
+    upcomingTimelineSegments,
+    timeToSunset,
+  } = energyModel
+  const authoritativeProjectedArrivalSoc =
+    racePrediction.projectedNextStopSocPercent ?? projectedArrivalSoc
+  const authoritativeProjectedFinishSoc =
+    racePrediction.projectedEndDaySocPercent ?? projectedFinishSoc
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return (
+    <section className="grid gap-4">
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
+          Strategy Explanation
+        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-400">
+          Detailed forecast, model assumptions, and strategy reasoning live here.
+        </p>
+      </div>
+
+      <RacePredictionPanel prediction={racePrediction} />
+
+      <BatteryStrategyPanel
+        batteryState={raceBatteryState}
+        recommendation={batterySwapRecommendation}
+        onSetActivePack={onSetActivePack}
+        onSetPackSoc={onSetPackSoc}
+        onExecuteSwap={onExecuteSwap}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.8fr_1fr]">
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Efficiency Wh/mi" info />
+          <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+            <EfficiencyReadout label="Required" value={requiredWhPerMile.toFixed(0)} highlight />
+            <EfficiencyReadout
+              label={rollingWhPerMile.label}
+              value={rollingWhPerMile.value === null ? '--' : rollingWhPerMile.value.toFixed(0)}
+              estimated={rollingWhPerMile.mode === 'estimated'}
             />
-          </NativeEnergyCard>
+            <EfficiencyReadout label="Current" value={currentWhPerMile.toFixed(0)} simulated={currentWhIsSimulated} />
+          </div>
+          <EfficiencyRail
+            requiredWhPerMile={requiredWhPerMile}
+            rollingWhPerMile={rollingWhPerMile.value ?? currentWhPerMile}
+            currentWhPerMile={currentWhPerMile}
+          />
+        </NativeEnergyCard>
 
-          <NativeEnergyCard>
-            <div className="flex items-start justify-between gap-3">
-              <NativeEnergyTitle title="Solar Input" />
-              <div className="text-right">
-                <p className="text-3xl font-black text-white">{solarInputWatts.toFixed(0)}<span className="ml-1 text-xl">w</span></p>
-                {solarInputIsEstimated ? <EstimatedBadge /> : solarInputIsSimulated ? <SimulatedBadge /> : null}
-              </div>
+        <NativeEnergyCard>
+          <div className="flex items-start justify-between gap-3">
+            <NativeEnergyTitle title="Solar Input" />
+            <div className="text-right">
+              <p className="text-3xl font-black text-white">{solarInputWatts.toFixed(0)}<span className="ml-1 text-xl">w</span></p>
+              {solarInputIsEstimated ? <EstimatedBadge /> : solarInputIsSimulated ? <SimulatedBadge /> : null}
             </div>
-            <div className="mt-2 grid grid-cols-[1fr_auto] gap-4">
-              <SolarChart />
-              <div className="self-center text-right">
-                <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Solar Offset</p>
-                <p className="mt-1 text-3xl font-black text-emerald-200">{solarOffsetPercent.toFixed(0)}%</p>
-              </div>
+          </div>
+          <div className="mt-2 grid grid-cols-[1fr_auto] gap-4">
+            <SolarChart />
+            <div className="self-center text-right">
+              <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Solar Offset</p>
+              <p className="mt-1 text-3xl font-black text-emerald-200">{solarOffsetPercent.toFixed(0)}%</p>
             </div>
-          </NativeEnergyCard>
+          </div>
+        </NativeEnergyCard>
 
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Today's Energy Balance" />
-            <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 text-center">
-              <BalanceMetric label="Energy Used" value={energyUsedKwh.toFixed(2)} unit="kWh" />
-              <BalanceMetric
-                label="Solar Captured"
-                value={solarCapturedUnavailable ? '--' : solarCapturedKwh.toFixed(2)}
-                unit="kWh"
-                color="text-emerald-200"
-                badge={solarCapturedIsEstimated ? 'estimated' : undefined}
-              />
-              <BalanceMetric label="Net Loss" value={netEnergyLossKwh.toFixed(2)} unit="kWh" />
-            </div>
-            <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20">
-              <div className="h-full bg-[#ff3ea5]" style={{ width: `${Math.min(100, solarOffsetPercent)}%` }} />
-            </div>
-            <p className="mt-2 text-center text-2xl font-black text-[#ff8fcb]">
-              {solarOffsetPercent.toFixed(0)}% <span className="text-xs uppercase text-slate-300">of used</span>
-            </p>
-          </NativeEnergyCard>
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-[1fr_0.45fr]">
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Route Energy Timeline" info />
-            <RouteEnergyTimeline
-              segments={upcomingTimelineSegments}
-              socPoints={routeSocPoints}
-              currentSocPercent={currentSocPercent}
-              projectedFinishSoc={projectedFinishSoc}
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Today's Energy Balance" />
+          <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 text-center">
+            <BalanceMetric label="Energy Used" value={energyUsedKwh.toFixed(2)} unit="kWh" />
+            <BalanceMetric
+              label="Solar Captured"
+              value={solarCapturedUnavailable ? '--' : solarCapturedKwh.toFixed(2)}
+              unit="kWh"
+              color="text-emerald-200"
+              badge={solarCapturedIsEstimated ? 'estimated' : undefined}
             />
-          </NativeEnergyCard>
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Key Targets" />
-            <div className="mt-3 divide-y divide-white/10">
-              {buildTargetRows({
-                nextStopDistance,
-                distanceRemaining,
-                projectedArrivalSoc,
-                projectedFinishSoc,
-                timeToSunset,
-              }).map((target) => (
-                <div key={target.label} className="flex items-center justify-between gap-4 py-3">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-                    {target.label}
-                  </p>
-                  <p className={`text-xl font-black ${target.color}`}>{target.value}</p>
-                </div>
-              ))}
-            </div>
-          </NativeEnergyCard>
-        </section>
+            <BalanceMetric label="Net Loss" value={netEnergyLossKwh.toFixed(2)} unit="kWh" />
+          </div>
+          <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20">
+            <div className="h-full bg-[#ff3ea5]" style={{ width: `${Math.min(100, solarOffsetPercent)}%` }} />
+          </div>
+          <p className="mt-2 text-center text-2xl font-black text-[#ff8fcb]">
+            {solarOffsetPercent.toFixed(0)}% <span className="text-xs uppercase text-slate-300">of used</span>
+          </p>
+        </NativeEnergyCard>
+      </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Swap Advisor" />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusMetric label="Action" value={swapAdvice.action} />
-              <StatusMetric label="Urgency" value={swapAdvice.urgency} />
-              <StatusMetric label="Continue SOC" value={`${swapAdvice.projectedSocIfContinue.toFixed(1)}%`} />
-              <StatusMetric label="Swap SOC" value={`${swapAdvice.projectedSocAfterSwap.toFixed(1)}%`} />
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-300">{swapAdvice.reason}</p>
-          </NativeEnergyCard>
-          <NativeEnergyCard>
-            <NativeEnergyTitle title="Trailering Advisor" />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusMetric label="Action" value={traileringOption.action} />
-              <StatusMetric label="Energy Saved" value={`${traileringOption.estimatedEnergySavedWh.toFixed(0)} Wh`} />
-              <StatusMetric label="Mileage Penalty" value={`${traileringOption.mileagePenalty.toFixed(1)} mi`} />
-              <StatusMetric label="Active" value={activeTraileringSession ? 'yes' : 'no'} />
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-300">{traileringOption.reason}</p>
-          </NativeEnergyCard>
-        </section>
+      <section className="grid gap-4 xl:grid-cols-[1fr_0.45fr]">
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Route Energy Timeline" info />
+          <RouteEnergyTimeline
+            segments={upcomingTimelineSegments}
+            socPoints={routeSocPoints}
+            currentSocPercent={currentSocPercent}
+            projectedFinishSoc={authoritativeProjectedFinishSoc}
+          />
+        </NativeEnergyCard>
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Key Targets" />
+          <div className="mt-3 divide-y divide-white/10">
+            {buildTargetRows({
+              nextStopDistance,
+              distanceRemaining,
+              projectedArrivalSoc: authoritativeProjectedArrivalSoc,
+              projectedFinishSoc: authoritativeProjectedFinishSoc,
+              timeToSunset,
+            }).map((target) => (
+              <div key={target.label} className="flex items-center justify-between gap-4 py-3">
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                  {target.label}
+                </p>
+                <p className={`text-xl font-black ${target.color}`}>{target.value}</p>
+              </div>
+            ))}
+          </div>
+        </NativeEnergyCard>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Swap Projection Details" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <StatusMetric label="Action" value={formatSwapPlannerAction(batterySwapRecommendation.action)} />
+            <StatusMetric label="Confidence" value={batterySwapRecommendation.confidence} />
+            <StatusMetric label="Next Stop SOC" value={formatPredictionSoc(batterySwapRecommendation.projectedNextStopSocPercent)} />
+            <StatusMetric label="End-Day SOC" value={formatPredictionSoc(batterySwapRecommendation.projectedEndDaySocPercent)} />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{batterySwapRecommendation.reason}</p>
+        </NativeEnergyCard>
+        <NativeEnergyCard>
+          <NativeEnergyTitle title="Trailering Energy Analysis" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <StatusMetric label="Action" value={traileringOption?.action ?? 'DRIVE'} />
+            <StatusMetric label="Energy Saved" value={formatEnergyWh(traileringOption?.estimatedEnergySavedWh)} />
+            <StatusMetric
+              label="Mileage Penalty"
+              value={traileringOption ? `${traileringOption.mileagePenalty.toFixed(1)} mi` : '--'}
+            />
+            <StatusMetric label="Active" value={activeTraileringSession ? 'yes' : 'no'} />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {traileringOption?.reason ?? 'Drive the current route section.'}
+          </p>
+        </NativeEnergyCard>
+      </section>
     </section>
   )
 }
@@ -2115,6 +2400,588 @@ function NativeEnergyCard({ children }: { children: React.ReactNode }) {
       {children}
     </article>
   )
+}
+
+function MissionControlRaceHealthCard({ raceHealth }: { raceHealth: RaceHealth }) {
+  return (
+    <NativeEnergyCard>
+      <NativeEnergyTitle title="Race Health" />
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div>
+          <p className={`text-5xl font-black ${scoreValueColor(raceHealth.score)}`}>
+            {raceHealth.score}
+          </p>
+          <p className="mt-1 text-sm font-black uppercase tracking-[0.12em] text-slate-300">
+            {raceHealth.label}
+          </p>
+        </div>
+        <div className="text-right text-sm text-slate-300">
+          <p>Margin {raceHealth.breakdown.socMarginPercent.toFixed(1)}%</p>
+          <p>Reserve {raceHealth.breakdown.activeReserveSocPercent}%</p>
+        </div>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/15">
+        <div
+          className={`h-full ${raceHealth.score >= 75 ? 'bg-emerald-400' : raceHealth.score >= 60 ? 'bg-yellow-300' : 'bg-red-400'}`}
+          style={{ width: `${Math.min(100, Math.max(0, raceHealth.score))}%` }}
+        />
+      </div>
+    </NativeEnergyCard>
+  )
+}
+
+function PredictionSummaryPanel({ prediction }: { prediction: RacePrediction }) {
+  return (
+    <NativeEnergyCard>
+      <div className="flex items-start justify-between gap-3">
+        <NativeEnergyTitle title="Prediction Summary" />
+        <span
+          className={`w-fit rounded border px-2 py-1 text-xs font-black uppercase tracking-[0.14em] ${predictionConfidenceClass(
+            prediction.confidence
+          )}`}
+        >
+          {prediction.confidence}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <StatusMetric
+          label="Next Stop SOC"
+          value={formatPredictionSoc(prediction.projectedNextStopSocPercent)}
+        />
+        <StatusMetric
+          label="End-Day SOC"
+          value={formatPredictionSoc(prediction.projectedEndDaySocPercent)}
+        />
+        <StatusMetric
+          label="Solar Recovery"
+          value={formatEnergyWh(prediction.projectedSolarRecoveredWh)}
+        />
+        <StatusMetric
+          label="Confidence"
+          value={prediction.confidence}
+        />
+      </div>
+    </NativeEnergyCard>
+  )
+}
+
+function BatteryStrategySummaryPanel({
+  batteryState,
+  recommendation,
+}: {
+  batteryState: RaceBatteryState
+  recommendation: BatterySwapRecommendation
+}) {
+  const activePack = batteryState.packs[batteryState.activePackId]
+  const sparePack =
+    batteryState.packs[batteryState.activePackId === 'A' ? 'B' : 'A']
+
+  return (
+    <NativeEnergyCard>
+      <NativeEnergyTitle title="Battery Strategy" />
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <StatusMetric
+          label="Active Pack"
+          value={`${activePack.id} / ${activePack.socPercent.toFixed(0)}%`}
+        />
+        <StatusMetric
+          label="Spare Pack"
+          value={`${sparePack.id} / ${sparePack.socPercent.toFixed(0)}%`}
+        />
+      </div>
+      <p className={`mt-4 text-3xl font-black uppercase ${swapPlannerActionClass(recommendation.action)}`}>
+        {formatSwapPlannerAction(recommendation.action)}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-slate-300">
+        {recommendation.reason}
+      </p>
+    </NativeEnergyCard>
+  )
+}
+
+function TraileringStrategyPanel({
+  traileringOption,
+  activeTraileringSession,
+}: {
+  traileringOption?: AuthoritativeStrategyState['traileringRecommendation']
+  activeTraileringSession: boolean
+}) {
+  const action = traileringOption?.action ?? 'DRIVE'
+
+  return (
+    <NativeEnergyCard>
+      <NativeEnergyTitle title="Trailering Strategy" />
+      <p className={`mt-4 text-3xl font-black uppercase ${traileringActionClass(action)}`}>
+        {action.replaceAll('_', ' ')}
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <StatusMetric
+          label="Energy Benefit"
+          value={formatEnergyWh(traileringOption?.estimatedEnergySavedWh)}
+        />
+        <StatusMetric
+          label="Mileage Penalty"
+          value={traileringOption ? `${traileringOption.mileagePenalty.toFixed(1)} mi` : '--'}
+        />
+        <StatusMetric
+          label="Active"
+          value={activeTraileringSession ? 'yes' : 'no'}
+        />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-300">
+        {traileringOption?.reason ?? 'Drive the current route section.'}
+      </p>
+    </NativeEnergyCard>
+  )
+}
+
+function NextEventPanel({
+  prediction,
+  speedMph,
+}: {
+  prediction: RacePrediction
+  speedMph?: number
+}) {
+  const distanceMiles = prediction.nextStopMiles
+  const eta = formatEta({
+    distanceMiles,
+    speedMph,
+  })
+
+  return (
+    <NativeEnergyCard>
+      <NativeEnergyTitle title="Next Event" />
+      <p className="mt-4 text-3xl font-black text-white">
+        {prediction.nextScheduleEventLabel ?? 'Next checkpoint'}
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <StatusMetric
+          label="Distance"
+          value={distanceMiles !== undefined ? `${distanceMiles.toFixed(1)} mi` : '--'}
+        />
+        <StatusMetric label="ETA" value={eta} />
+        <StatusMetric
+          label="Projected SOC"
+          value={formatPredictionSoc(prediction.projectedNextStopSocPercent)}
+        />
+      </div>
+    </NativeEnergyCard>
+  )
+}
+
+function RecommendedSpeedPanel({
+  recommendation,
+  currentSpeedMph,
+}: {
+  recommendation: DeterministicStrategyRecommendation
+  currentSpeedMph?: number
+}) {
+  const recommendedSpeed = recommendation.recommendedSpeedMph
+  const speedDelta =
+    recommendedSpeed !== undefined && currentSpeedMph !== undefined
+      ? recommendedSpeed - currentSpeedMph
+      : undefined
+
+  return (
+    <NativeEnergyCard>
+      <NativeEnergyTitle title="Recommended Speed" />
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <StatusMetric
+          label="Recommended"
+          value={formatSpeed(recommendedSpeed)}
+        />
+        <StatusMetric
+          label="Current"
+          value={formatSpeed(currentSpeedMph)}
+        />
+        <StatusMetric
+          label="Delta"
+          value={formatSignedSpeedDelta(speedDelta)}
+        />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-300">
+        {recommendation.reason}
+      </p>
+    </NativeEnergyCard>
+  )
+}
+
+function DeterministicStrategyRecommendationPanel({
+  recommendation,
+}: {
+  recommendation: DeterministicStrategyRecommendation
+}) {
+  return (
+    <NativeEnergyCard>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <NativeEnergyTitle title="Strategy Recommendation" />
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={`w-fit rounded border px-2 py-1 text-xs font-black uppercase tracking-[0.14em] ${strategySeverityClass(
+              recommendation.severity
+            )}`}
+          >
+            {recommendation.severity}
+          </span>
+          <span
+            className={`w-fit rounded border px-2 py-1 text-xs font-black uppercase tracking-[0.14em] ${predictionConfidenceClass(
+              recommendation.confidence
+            )}`}
+          >
+            {recommendation.confidence} confidence
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+        <div>
+          <p className={`text-4xl font-black uppercase ${strategyCommandClass(recommendation.command)}`}>
+            {recommendation.title}
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {recommendation.reason}
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+          <StatusMetric
+            label="Recommended Speed"
+            value={formatSpeed(recommendation.recommendedSpeedMph)}
+          />
+          <StatusMetric
+            label="Confidence"
+            value={recommendation.confidence}
+          />
+          <StatusMetric
+            label="Warnings"
+            value={String(recommendation.warnings.length)}
+          />
+        </div>
+      </div>
+    </NativeEnergyCard>
+  )
+}
+
+function RacePredictionPanel({ prediction }: { prediction: RacePrediction }) {
+  return (
+    <NativeEnergyCard>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <NativeEnergyTitle title="Prediction Engine v1" info />
+        <span
+          className={`w-fit rounded border px-2 py-1 text-xs font-black uppercase tracking-[0.14em] ${predictionConfidenceClass(
+            prediction.confidence
+          )}`}
+        >
+          {prediction.confidence} confidence
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-8">
+        <PredictionMetric
+          label="Next Schedule Event"
+          value={formatScheduleEvent(prediction)}
+        />
+        <PredictionMetric
+          label="End Segment SOC"
+          value={formatPredictionSoc(prediction.projectedEndSegmentSocPercent)}
+        />
+        <PredictionMetric
+          label="Next Stop SOC"
+          value={formatPredictionSoc(prediction.projectedNextStopSocPercent)}
+        />
+        <PredictionMetric
+          label="End Day SOC"
+          value={formatPredictionSoc(prediction.projectedEndDaySocPercent)}
+          highlight
+        />
+        <PredictionMetric
+          label="Predicted Wh/mi"
+          value={`${prediction.predictedWhPerMile.toFixed(0)} Wh/mi`}
+        />
+        <PredictionMetric
+          label="Predicted MPPT"
+          value={formatWatts(prediction.predictedMpptWatts)}
+        />
+        <PredictionMetric
+          label="Stopped Recovery"
+          value={formatEnergyWh(prediction.projectedSolarRecoveredStoppedWh)}
+        />
+        <PredictionMetric
+          label="Trailering Recovery"
+          value={formatEnergyWh(prediction.projectedSolarRecoveredTraileringWh)}
+        />
+        <PredictionMetric
+          label="Net Day Energy"
+          value={formatEnergyWh(prediction.projectedNetEnergyWh)}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <StatusMetric
+          label="Projected Drive"
+          value={formatEnergyWh(prediction.projectedDriveEnergyWh)}
+        />
+        <StatusMetric
+          label="Projected Solar"
+          value={formatEnergyWh(prediction.projectedSolarRecoveredWh)}
+        />
+        <StatusMetric
+          label="Remaining Day"
+          value={
+            prediction.remainingDayMiles !== undefined
+              ? `${prediction.remainingDayMiles.toFixed(1)} mi`
+              : '--'
+          }
+        />
+      </div>
+      {prediction.warnings.length > 0 ? (
+        <div className="mt-4 grid gap-2">
+          {prediction.warnings.map((warning) => (
+            <p
+              key={warning}
+              className="rounded-md border border-yellow-300/30 bg-yellow-300/10 p-2 text-xs font-semibold text-yellow-100"
+            >
+              {warning}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </NativeEnergyCard>
+  )
+}
+
+function BatteryStrategyPanel({
+  batteryState,
+  recommendation,
+  onSetActivePack,
+  onSetPackSoc,
+  onExecuteSwap,
+}: {
+  batteryState: RaceBatteryState
+  recommendation: BatterySwapRecommendation
+  onSetActivePack: (packId: BatteryPackId) => void
+  onSetPackSoc: (packId: BatteryPackId, socPercent: number) => void
+  onExecuteSwap: () => void
+}) {
+  const activePack = batteryState.packs[batteryState.activePackId]
+  const sparePack = batteryState.packs[batteryState.activePackId === 'A' ? 'B' : 'A']
+
+  return (
+    <NativeEnergyCard>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <NativeEnergyTitle title="Battery Strategy" info />
+        <span
+          className={`w-fit rounded border px-2 py-1 text-xs font-black uppercase tracking-[0.14em] ${predictionConfidenceClass(
+            recommendation.confidence
+          )}`}
+        >
+          {recommendation.confidence} confidence
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_1.4fr]">
+        <BatteryPackCard
+          pack={activePack}
+          title="Active Pack"
+          onSetActivePack={onSetActivePack}
+          onSetPackSoc={onSetPackSoc}
+        />
+        <BatteryPackCard
+          pack={sparePack}
+          title="Spare Pack"
+          onSetActivePack={onSetActivePack}
+          onSetPackSoc={onSetPackSoc}
+        />
+        <div className="rounded-md border border-white/10 bg-black/20 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Swap Recommendation
+          </p>
+          <p className={`mt-2 text-3xl font-black uppercase ${swapPlannerActionClass(recommendation.action)}`}>
+            {formatSwapPlannerAction(recommendation.action)}
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {recommendation.reason}
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <StatusMetric label="Active" value={`${recommendation.activePackId} / ${recommendation.activeSocPercent.toFixed(1)}%`} />
+            <StatusMetric label="Spare" value={`${recommendation.sparePackId} / ${recommendation.spareSocPercent.toFixed(1)}%`} />
+            <StatusMetric label="End Segment" value={formatPredictionSoc(recommendation.projectedEndSegmentSocPercent)} />
+            <StatusMetric label="Next Stop" value={formatPredictionSoc(recommendation.projectedNextStopSocPercent)} />
+          </div>
+          <button
+            type="button"
+            onClick={onExecuteSwap}
+            className="mt-4 h-10 rounded-md border border-[#ff3ea5]/50 bg-[#ff3ea5]/15 px-3 text-sm font-black uppercase tracking-wide text-[#ff8fcb] transition hover:bg-[#ff3ea5]/25"
+          >
+            Execute Swap
+          </button>
+        </div>
+      </div>
+    </NativeEnergyCard>
+  )
+}
+
+function BatteryPackCard({
+  pack,
+  title,
+  onSetActivePack,
+  onSetPackSoc,
+}: {
+  pack: RaceBatteryState['packs'][BatteryPackId]
+  title: string
+  onSetActivePack: (packId: BatteryPackId) => void
+  onSetPackSoc: (packId: BatteryPackId, socPercent: number) => void
+}) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+            {title}
+          </p>
+          <p className="mt-1 text-4xl font-black text-white">Pack {pack.id}</p>
+        </div>
+        <span className={`rounded border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${
+          pack.role === 'active'
+            ? 'border-[#ff3ea5]/40 bg-[#ff3ea5]/10 text-[#ff8fcb]'
+            : 'border-sky-300/40 bg-sky-300/10 text-sky-200'
+        }`}>
+          {pack.role}
+        </span>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/20">
+        <div
+          className="h-full bg-[#ff3ea5]"
+          style={{ width: `${Math.min(100, Math.max(0, pack.socPercent))}%` }}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <StatusMetric label="SOC" value={`${pack.socPercent.toFixed(1)}%`} />
+        <StatusMetric label="Energy" value={formatEnergyWh(pack.energyWh)} />
+      </div>
+      <div className="mt-3 grid gap-2">
+        <label className="grid gap-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Set Pack {pack.id} SOC
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={pack.socPercent.toFixed(0)}
+            onChange={(event) => onSetPackSoc(pack.id, Number(event.target.value))}
+            className="h-9 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-bold text-white outline-none focus:border-[#ff3ea5]/60"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => onSetActivePack(pack.id)}
+          disabled={pack.role === 'active'}
+          className="h-9 rounded-md border border-white/10 bg-white/5 px-3 text-xs font-black uppercase tracking-wide text-slate-100 transition hover:border-[#ff3ea5]/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Set Active
+        </button>
+        {pack.isCharging ? (
+          <p className="text-xs font-semibold text-emerald-200">Charging from MPPT</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function PredictionMetric({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string
+  value: string
+  highlight?: boolean
+}) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
+      <p className={`mt-1 text-2xl font-black ${highlight ? 'text-emerald-200' : 'text-white'}`}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function predictionConfidenceClass(confidence: PredictionConfidence) {
+  if (confidence === 'high') return 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
+  if (confidence === 'medium') return 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100'
+
+  return 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]'
+}
+
+function strategySeverityClass(
+  severity: DeterministicStrategyRecommendation['severity']
+) {
+  if (severity === 'normal') return 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
+  if (severity === 'caution') return 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100'
+
+  return 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]'
+}
+
+function strategyCommandClass(
+  command: DeterministicStrategyRecommendation['command']
+) {
+  if (command === 'swap_now' || command === 'reduce_speed') return 'text-[#ff8fcb]'
+  if (command === 'plan_swap' || command === 'prioritize_charging') return 'text-yellow-100'
+  if (command === 'increase_speed_allowed') return 'text-sky-200'
+
+  return 'text-emerald-200'
+}
+
+function formatScheduleEvent(prediction: RacePrediction) {
+  if (!prediction.nextScheduleEventLabel) return '--'
+
+  return prediction.nextScheduleEventType
+    ? `${prediction.nextScheduleEventLabel} (${prediction.nextScheduleEventType})`
+    : prediction.nextScheduleEventLabel
+}
+
+function formatPredictionSoc(value?: number) {
+  return value === undefined || !Number.isFinite(value)
+    ? '--'
+    : `${value.toFixed(1)}%`
+}
+
+function formatEnergyWh(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '--'
+
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(2)} kWh`
+
+  return `${value.toFixed(0)} Wh`
+}
+
+function formatWhPerMile(value?: number) {
+  return value === undefined || !Number.isFinite(value)
+    ? '--'
+    : `${value.toFixed(0)} Wh/mi`
+}
+
+function formatTelemetryAge(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '--'
+
+  if (value < 60) return `${Math.round(value)}s`
+
+  const minutes = Math.floor(value / 60)
+  const seconds = Math.round(value % 60)
+
+  return `${minutes}m ${seconds}s`
+}
+
+function formatSwapPlannerAction(action: BatterySwapRecommendation['action']) {
+  if (action === 'swap_now') return 'Swap Now'
+  if (action === 'plan_swap') return 'Plan Swap'
+
+  return 'No Swap'
+}
+
+function swapPlannerActionClass(action: BatterySwapRecommendation['action']) {
+  if (action === 'swap_now') return 'text-[#ff8fcb]'
+  if (action === 'plan_swap') return 'text-yellow-100'
+
+  return 'text-emerald-200'
 }
 
 function NativeEnergyTitle({ title, info = false }: { title: string; info?: boolean }) {
@@ -2267,8 +3134,8 @@ function EfficiencyRail({
   rollingWhPerMile: number
   currentWhPerMile: number
 }) {
-  const min = 80
-  const max = 180
+  const min = 20
+  const max = 70
   const position = (value: number) =>
     Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
 
@@ -2282,7 +3149,7 @@ function EfficiencyRail({
         <div className="absolute top-0 h-5 w-5 rounded-full border-2 border-white bg-slate-200" style={{ left: `calc(${position(currentWhPerMile)}% - 0.625rem)` }} />
       </div>
       <div className="grid grid-cols-6 text-xs text-slate-300">
-        {[80, 100, 120, 140, 160, 180].map((tick) => (
+        {[20, 30, 40, 50, 60, 70].map((tick) => (
           <span key={tick}>{tick}</span>
         ))}
       </div>
@@ -2423,12 +3290,13 @@ function TimelineStop({
 
 function RaceCommandCard({
   raceDay,
-  predictiveStrategy,
+  authoritativeStrategy,
 }: {
   raceDay: RaceDay
-  predictiveStrategy: ReturnType<typeof generatePredictiveStrategy>
+  authoritativeStrategy: AuthoritativeStrategyState
 }) {
-  const trailering = predictiveStrategy.routeIntelligence.traileringOption
+  const trailering = authoritativeStrategy.traileringRecommendation
+  const recommendation = authoritativeStrategy.strategyRecommendation
 
   return (
     <section className="rounded-lg border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 p-4 shadow-xl shadow-black/20">
@@ -2438,37 +3306,37 @@ function RaceCommandCard({
             Race Command
           </p>
           <h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">
-            {predictiveStrategy.recommendedSpeedMph} mph
+            {formatSpeed(authoritativeStrategy.recommendedSpeedMph)}
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200">
-            {predictiveStrategy.driverAction}
+            {recommendation.reason}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge label={`Day ${raceDay.day}`} className="border-white/20 bg-white/10 text-slate-100" />
-          <Badge label={predictiveStrategy.raceMode} className="border-[#ff3ea5]/40 bg-black/25 text-[#ff8fcb]" />
+          <Badge label={recommendation.title} className="border-[#ff3ea5]/40 bg-black/25 text-[#ff8fcb]" />
         </div>
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <CommandMetric
           label="Recommended Speed"
-          value={`${predictiveStrategy.recommendedSpeedMph} mph`}
+          value={formatSpeed(authoritativeStrategy.recommendedSpeedMph)}
         />
-        <CommandMetric label="Strategy Command" value={predictiveStrategy.driverAction} />
+        <CommandMetric label="Strategy Command" value={recommendation.title} detail={recommendation.reason} />
         <CommandMetric
-          label="Finish SOC"
-          value={`${predictiveStrategy.projectedFinishSoc.toFixed(1)}%`}
+          label="End-Day SOC"
+          value={formatPredictionSoc(authoritativeStrategy.projectedEndDaySocPercent)}
         />
         <CommandMetric
           label="Battery Swap Advice"
-          value={predictiveStrategy.swapAdvice.action}
-          detail={predictiveStrategy.swapAdvice.reason}
+          value={formatSwapPlannerAction(authoritativeStrategy.swapRecommendation.action)}
+          detail={authoritativeStrategy.swapRecommendation.reason}
         />
         <CommandMetric
           label="Trailering Advice"
-          value={trailering.action}
-          detail={trailering.reason}
+          value={trailering?.action ?? 'DRIVE'}
+          detail={trailering?.reason}
         />
       </div>
     </section>
@@ -3175,10 +4043,11 @@ function StrategyDebugPanel({
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
           <p className="text-sm font-semibold text-[#ff8fcb]">
-            Developer validation only
+            Legacy strategy debug only
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Mirrors existing strategy outputs without changing race behavior.
+            Historical predictive strategy internals for diagnostics. Visible
+            decisions, logs, and snapshots use the authoritative strategy state.
           </p>
         </div>
         <button
@@ -4038,8 +4907,68 @@ function formatPercent(value?: number) {
   return value === undefined ? '--' : `${value.toFixed(1)}%`
 }
 
+function telemetryEnergyTimestamp(
+  telemetry: TelemetryData,
+  effectiveLastPacketAt?: number
+) {
+  if (effectiveLastPacketAt !== undefined) return effectiveLastPacketAt
+  if (telemetry.timestamp > 1_000_000_000_000) return telemetry.timestamp
+
+  return Date.now()
+}
+
 function formatSpeed(value?: number) {
   return value === undefined ? '--' : `${value.toFixed(1)} mph`
+}
+
+function formatSignedSpeedDelta(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '--'
+
+  const sign = value > 0 ? '+' : ''
+
+  return `${sign}${value.toFixed(1)} mph`
+}
+
+function formatEta({
+  distanceMiles,
+  speedMph,
+}: {
+  distanceMiles?: number
+  speedMph?: number
+}) {
+  if (
+    distanceMiles === undefined ||
+    !Number.isFinite(distanceMiles) ||
+    distanceMiles <= 0
+  ) {
+    return '--'
+  }
+
+  const safeSpeed =
+    speedMph !== undefined && Number.isFinite(speedMph) && speedMph > 1
+      ? speedMph
+      : rx2Config.defaultTargetSpeedMph
+  const totalMinutes = Math.round((distanceMiles / safeSpeed) * 60)
+
+  if (totalMinutes < 60) return `${totalMinutes} min`
+
+  return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
+}
+
+function scoreValueColor(score: number) {
+  if (score >= 75) return 'text-emerald-200'
+  if (score >= 60) return 'text-yellow-100'
+
+  return 'text-[#ff8fcb]'
+}
+
+function traileringActionClass(action: ReturnType<typeof generatePredictiveStrategy>['routeIntelligence']['traileringOption']['action']) {
+  if (action === 'DRIVE') return 'text-emerald-200'
+  if (action === 'CONSERVE_AND_DRIVE' || action === 'TRAILER_OPTIONAL') {
+    return 'text-yellow-100'
+  }
+
+  return 'text-[#ff8fcb]'
 }
 
 function downloadCsv({
@@ -4111,99 +5040,13 @@ function formatLastPacketAge(timestamp?: number) {
   return `${ageLabel} (${new Date(timestamp).toLocaleTimeString()})`
 }
 
-function classifyMissionStatus(
-  strategy: ReturnType<typeof generatePredictiveStrategy>
-): MissionStatus {
-  const traileringAction = strategy.routeIntelligence.traileringOption.action
-  const highestRouteSeverity = highestRouteRiskSeverity(
-    strategy.routeIntelligence.risks
-  )
-  const nextOpportunitySoc = strategy.swapAdvice.debug.projectedSocAtNextOpportunity
-  const activeReserveSoc = strategy.activeReserveSocPercent
-
-  if (nextOpportunitySoc < strategy.absoluteMinimumSocPercent) {
-    return 'CRITICAL_ENERGY'
-  }
-
-  if (strategy.isFinalDay) {
-    if (nextOpportunitySoc < activeReserveSoc) return 'AT_RISK'
-
-    if (
-      strategy.swapAdvice.action === 'SWAP_NOW' ||
-      strategy.swapAdvice.action === 'SWAP_AT_NEXT_STOP' ||
-      traileringAction === 'TRAILER_REQUIRED' ||
-      traileringAction === 'TRAILER_RECOMMENDED'
-    ) {
-      return 'AT_RISK'
-    }
-
-    if (highestRouteSeverity === 'SEVERE') return 'AT_RISK'
-
-    return 'FINISH_PUSH'
-  }
-
-  if (
-    traileringAction === 'TRAILER_REQUIRED' ||
-    traileringAction === 'TRAILER_RECOMMENDED'
-  ) {
-    return 'TRAILERING_RECOMMENDED'
-  }
-
-  if (
-    strategy.swapAdvice.action === 'SWAP_NOW' ||
-    strategy.swapAdvice.action === 'SWAP_AT_NEXT_STOP'
-  ) {
-    return 'SWAP_RECOMMENDED'
-  }
-
-  if (
-    nextOpportunitySoc < activeReserveSoc ||
-    highestRouteSeverity === 'SEVERE'
-  ) {
-    return 'AT_RISK'
-  }
-
-  if (
-    nextOpportunitySoc < activeReserveSoc + 10 ||
-    traileringAction === 'CONSERVE_AND_DRIVE' ||
-    highestRouteSeverity === 'HIGH'
-  ) {
-    return 'CONSERVE'
-  }
-
-  return 'ON_TARGET'
-}
-
-function highestRouteRiskSeverity(
-  risks: ReturnType<typeof generatePredictiveStrategy>['routeIntelligence']['risks']
-) {
-  const severityRank = {
-    LOW: 1,
-    MEDIUM: 2,
-    HIGH: 3,
-    SEVERE: 4,
-  } as const
-
-  return risks.reduce<'LOW' | 'MEDIUM' | 'HIGH' | 'SEVERE'>(
-    (highest, risk) =>
-      severityRank[risk.severity] > severityRank[highest]
-        ? risk.severity
-        : highest,
-    'LOW'
-  )
-}
-
 function missionStatusStyle(status: MissionStatus) {
   if (status === 'ON_TARGET' || status === 'FINISH_PUSH') {
     return 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
   }
 
-  if (status === 'CONSERVE') {
+  if (status === 'CONSERVE' || status === 'DATA_UNCERTAIN') {
     return 'border-yellow-300/40 bg-yellow-300/10 text-yellow-100'
-  }
-
-  if (status === 'AT_RISK') {
-    return 'border-orange-400/40 bg-orange-400/10 text-orange-100'
   }
 
   return 'border-red-400/40 bg-red-400/10 text-[#ff8fcb]'
@@ -4214,12 +5057,8 @@ function missionStatusBannerStyle(status: MissionStatus) {
     return 'border-emerald-400/40 bg-emerald-400/10'
   }
 
-  if (status === 'CONSERVE') {
+  if (status === 'CONSERVE' || status === 'DATA_UNCERTAIN') {
     return 'border-yellow-300/40 bg-yellow-300/10'
-  }
-
-  if (status === 'AT_RISK') {
-    return 'border-orange-400/40 bg-orange-400/10'
   }
 
   return 'border-red-400/40 bg-red-400/10'
@@ -4227,234 +5066,6 @@ function missionStatusBannerStyle(status: MissionStatus) {
 
 function formatMissionStatus(status: MissionStatus) {
   return status.replaceAll('_', ' ')
-}
-
-function calculateRaceHealth({
-  strategy,
-  telemetrySource,
-  telemetryStatus,
-  connectionStatus,
-}: {
-  strategy: ReturnType<typeof generatePredictiveStrategy>
-  telemetrySource: TelemetrySource
-  telemetryStatus: TelemetryConnectionStatus
-  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-}): RaceHealth {
-  const breakdown = calculateRaceHealthBreakdown({
-    strategy,
-    telemetrySource,
-    telemetryStatus,
-    connectionStatus,
-  })
-  const score = breakdown.finalScore
-
-  return {
-    score,
-    breakdown,
-    label:
-      score >= 90
-        ? 'Excellent'
-        : score >= 75
-          ? 'Good'
-          : score >= 60
-            ? 'Caution'
-            : 'Recovery',
-  }
-}
-
-function calculateRaceHealthBreakdown({
-  strategy,
-  telemetrySource,
-  telemetryStatus,
-  connectionStatus,
-}: {
-  strategy: ReturnType<typeof generatePredictiveStrategy>
-  telemetrySource: TelemetrySource
-  telemetryStatus: TelemetryConnectionStatus
-  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-}): RaceHealthBreakdown {
-  const baseScore = 65
-  const primaryHealthSocPercent =
-    strategy.swapAdvice.debug.projectedSocAtNextOpportunity
-  const secondaryForecastSocPercent =
-    strategy.swapAdvice.debug.projectedSocAtFinishDayInformational
-  const socMarginPercent =
-    primaryHealthSocPercent - strategy.activeReserveSocPercent
-  const socMarginBonus = socMarginBonusForOperationalMargin(socMarginPercent)
-  const highestRouteSeverity = highestRouteRiskSeverity(
-    strategy.routeIntelligence.risks
-  )
-  const swapPenalty = swapAdvicePenalty({
-    swapAdvice: strategy.swapAdvice,
-    activeReserveSocPercent: strategy.activeReserveSocPercent,
-  })
-  const traileringPenaltyValue = traileringPenalty(
-    strategy.routeIntelligence.traileringOption.action,
-    strategy.isFinalDay
-  )
-  const nextOpportunityPenaltyValue = nextOpportunityPenalty({
-    swapAdvice: strategy.swapAdvice,
-    activeReserveSocPercent: strategy.activeReserveSocPercent,
-    absoluteMinimumSocPercent: strategy.absoluteMinimumSocPercent,
-    isFinalDay: strategy.isFinalDay,
-  })
-  const fullDayEnergyCautionPenaltyValue = fullDayEnergyCautionPenalty(
-    strategy.swapAdvice,
-    strategy.activeReserveSocPercent,
-    strategy.absoluteMinimumSocPercent,
-    strategy.isFinalDay
-  )
-  const routeRiskPenalty = routeSeverityPenalty(highestRouteSeverity)
-  const telemetryPenalty = telemetryHealthPenalty(
-    telemetrySource,
-    telemetryStatus,
-    connectionStatus
-  )
-  const finalScore = Math.round(
-    clampScore(
-      baseScore +
-        socMarginBonus -
-        swapPenalty -
-        traileringPenaltyValue -
-        nextOpportunityPenaltyValue -
-        fullDayEnergyCautionPenaltyValue -
-        routeRiskPenalty -
-        telemetryPenalty
-    )
-  )
-
-  return {
-    baseScore,
-    healthBasis: 'Next Operational Opportunity',
-    primaryHealthSocPercent,
-    secondaryForecastSocPercent,
-    socMarginPercent,
-    socMarginBonus,
-    swapPenalty,
-    traileringPenalty: traileringPenaltyValue,
-    nextOpportunityPenalty: nextOpportunityPenaltyValue,
-    fullDayEnergyCautionPenalty: fullDayEnergyCautionPenaltyValue,
-    routeRiskPenalty,
-    telemetryPenalty,
-    highestRouteSeverity,
-    isFinalDay: strategy.isFinalDay,
-    activeReserveSocPercent: strategy.activeReserveSocPercent,
-    finalDayTargetReserveSocPercent: strategy.finalDayTargetReserveSocPercent,
-    absoluteMinimumSocPercent: strategy.absoluteMinimumSocPercent,
-    endgameModeActive: strategy.endgameModeActive,
-    finalScore,
-  }
-}
-
-function clampScore(score: number) {
-  return Math.max(0, Math.min(100, score))
-}
-
-function socMarginBonusForOperationalMargin(marginPercent: number) {
-  if (marginPercent > 30) return 35
-  if (marginPercent > 20) return 25
-  if (marginPercent > 10) return 15
-  if (marginPercent > 5) return 8
-  if (marginPercent > 0) return 3
-  return 0
-}
-
-function swapAdvicePenalty({
-  swapAdvice,
-  activeReserveSocPercent,
-}: {
-  swapAdvice: ReturnType<typeof generatePredictiveStrategy>['swapAdvice']
-  activeReserveSocPercent: number
-}) {
-  const action = swapAdvice.action
-
-  if (action === 'SWAP_NOW') return 28
-  if (action === 'SWAP_AT_NEXT_STOP') return 18
-  if (
-    action === 'DELAY_SWAP' &&
-    swapAdvice.projectedSocIfContinue <= activeReserveSocPercent + 5
-  ) {
-    return 4
-  }
-  return 0
-}
-
-function traileringPenalty(
-  action: ReturnType<typeof generatePredictiveStrategy>['routeIntelligence']['traileringOption']['action'],
-  isFinalDay: boolean
-) {
-  if (action === 'TRAILER_REQUIRED') return 30
-  if (action === 'TRAILER_RECOMMENDED') return 22
-  if (isFinalDay && (action === 'TRAILER_OPTIONAL' || action === 'CONSERVE_AND_DRIVE')) {
-    return 0
-  }
-  if (action === 'TRAILER_OPTIONAL') return 10
-  if (action === 'CONSERVE_AND_DRIVE') return 6
-  return 0
-}
-
-function nextOpportunityPenalty({
-  swapAdvice,
-  activeReserveSocPercent,
-  absoluteMinimumSocPercent,
-  isFinalDay,
-}: {
-  swapAdvice: ReturnType<typeof generatePredictiveStrategy>['swapAdvice']
-  activeReserveSocPercent: number
-  absoluteMinimumSocPercent: number
-  isFinalDay: boolean
-}) {
-  const marginPercent =
-    swapAdvice.debug.projectedSocAtNextOpportunity - activeReserveSocPercent
-
-  if (isFinalDay) {
-    if (swapAdvice.debug.projectedSocAtNextOpportunity < absoluteMinimumSocPercent) {
-      return 18
-    }
-    if (marginPercent < -5) return 8
-    if (marginPercent < 0) return 4
-    return 0
-  }
-
-  if (marginPercent < -10) return 18
-  if (marginPercent < -5) return 12
-  if (marginPercent < 0) return 6
-  return 0
-}
-
-function fullDayEnergyCautionPenalty(
-  swapAdvice: ReturnType<typeof generatePredictiveStrategy>['swapAdvice'],
-  activeReserveSocPercent: number,
-  absoluteMinimumSocPercent: number,
-  isFinalDay: boolean
-) {
-  const finishSoc = swapAdvice.debug.projectedSocAtFinishDayInformational
-
-  if (isFinalDay && finishSoc < absoluteMinimumSocPercent) return 6
-
-  return finishSoc < activeReserveSocPercent ? 4 : 0
-}
-
-function routeSeverityPenalty(severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'SEVERE') {
-  if (severity === 'SEVERE') return 18
-  if (severity === 'HIGH') return 10
-  if (severity === 'MEDIUM') return 4
-  return 0
-}
-
-function telemetryHealthPenalty(
-  telemetrySource: TelemetrySource,
-  telemetryStatus: TelemetryConnectionStatus,
-  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-) {
-  if (telemetryStatus === 'error' || connectionStatus === 'error') return 12
-  if (telemetrySource === 'simulator' || telemetrySource === 'mock-esp32') return 0
-  if (telemetrySource === 'manual') return 0
-  if (telemetryStatus === 'disconnected' || connectionStatus === 'disconnected') {
-    return 6
-  }
-  if (connectionStatus === 'connecting') return 3
-  return 0
 }
 
 function debugToneStyle(tone: 'healthy' | 'caution' | 'danger' | 'neutral') {
@@ -4487,7 +5098,7 @@ function scoreDebugTone(score: number) {
 
 function missionStatusDebugTone(status: MissionStatus) {
   if (status === 'ON_TARGET' || status === 'FINISH_PUSH') return 'healthy'
-  if (status === 'CONSERVE') return 'caution'
+  if (status === 'CONSERVE' || status === 'DATA_UNCERTAIN') return 'caution'
   return 'danger'
 }
 
@@ -4564,7 +5175,8 @@ function buildStrategyDebugSnapshot({
   const trailering = strategy.routeIntelligence.traileringOption
 
   return [
-    'STRATEGY DEBUG SNAPSHOT',
+    'LEGACY STRATEGY DEBUG SNAPSHOT',
+    'Visible Race Captain decisions, logs, and snapshots use AuthoritativeStrategyState.',
     `Generated: ${new Date().toISOString()}`,
     '',
     'MISSION STATUS',
@@ -4889,7 +5501,7 @@ function countTelemetryWarnings(telemetry: TelemetryData) {
   if (motorTempC > 95) warningsCount += 1
   if (telemetry.batterySocPercent < 15) warningsCount += 1
   if (telemetry.batteryCurrent > 100) warningsCount += 1
-  if (efficiencyWhPerMile > 140) warningsCount += 1
+  if (efficiencyWhPerMile > 55) warningsCount += 1
 
   return warningsCount
 }

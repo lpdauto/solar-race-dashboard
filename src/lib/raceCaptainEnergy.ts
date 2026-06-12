@@ -1,6 +1,7 @@
 import SunCalc from 'suncalc'
 import type { RaceDay, RiskLevel, RouteSegment } from '@/data/raceRoute'
 import type { TelemetryHistorySample } from '@/hooks/useTelemetry'
+import type { AuthoritativeStrategyState } from '@/lib/authoritativeStrategyState'
 import type { CarSetup, EnergySimulationResult } from '@/lib/energy'
 import type { PredictiveStrategyResult } from '@/lib/strategyEngine'
 import type { TelemetryData } from '@/types/telemetry'
@@ -46,6 +47,10 @@ export type RaceCaptainEnergyModel = {
   energyUsedKwh: number
   solarOffsetPercent: number
   netEnergyLossKwh: number
+  netPowerWatts: number
+  batteryEnergyWh: number
+  energyConsumedWh: number
+  energyRecoveredWh: number
   nextStopDistance: number
   projectedArrivalSoc: number
   projectedFinishSoc: number
@@ -62,6 +67,7 @@ export function buildRaceCaptainEnergyModel({
   telemetry,
   telemetryHistory,
   energySimulation,
+  authoritativeStrategy,
   predictiveStrategy,
   carSetup,
   now,
@@ -72,11 +78,16 @@ export function buildRaceCaptainEnergyModel({
   telemetry: TelemetryData | null
   telemetryHistory: TelemetryHistorySample[]
   energySimulation: EnergySimulationResult
-  predictiveStrategy: PredictiveStrategyResult
+  authoritativeStrategy?: AuthoritativeStrategyState
+  predictiveStrategy?: PredictiveStrategyResult
   carSetup: CarSetup
   now: Date
 }): RaceCaptainEnergyModel {
-  const currentSocPercent = predictiveStrategy.safeStrategySocPercent
+  const currentSocPercent =
+    authoritativeStrategy?.prediction.currentSocPercent ??
+    predictiveStrategy?.safeStrategySocPercent ??
+    telemetry?.batterySocPercent ??
+    0
   const activeBatteryKwh = (carSetup.batteryKwh * currentSocPercent) / 100
   const reserveBatterySocPercent = carSetup.spareBatterySocPercent
   const reserveBatteryKwh = (carSetup.batteryKwh * reserveBatterySocPercent) / 100
@@ -91,7 +102,28 @@ export function buildRaceCaptainEnergyModel({
   })
   const energyUsedKwh = (energySimulation.flatRoadWh + energySimulation.climbWh) / 1000
   const solarOffsetPercent = energyUsedKwh > 0 ? (solarCaptured.value / energyUsedKwh) * 100 : 0
-  const projectedFinishSoc = predictiveStrategy.projectedFinishSoc
+  const currentWhPerMile =
+    authoritativeStrategy?.prediction.predictedWhPerMile ??
+    predictiveStrategy?.currentWhPerMile ??
+    energySimulation.estimatedWhPerMile
+  const requiredWhPerMile =
+    authoritativeStrategy?.strategyRecommendation.targetWhPerMile.max ??
+    predictiveStrategy?.modelWhPerMile ??
+    energySimulation.estimatedWhPerMile
+  const projectedFinishSoc =
+    authoritativeStrategy?.prediction.projectedEndDaySocPercent ??
+    predictiveStrategy?.projectedFinishSoc ??
+    energySimulation.predictedFinishSocPercent
+  const nextStopDistance =
+    authoritativeStrategy?.prediction.nextStopMiles ??
+    (predictiveStrategy
+      ? (predictiveStrategy.swapAdvice.recommendedSwapMile ??
+        predictiveStrategy.swapAdvice.debug.nextOperationalOpportunityMile) - currentMile
+      : Math.max(0, distanceRemaining))
+  const projectedArrivalSoc =
+    authoritativeStrategy?.prediction.projectedNextStopSocPercent ??
+    predictiveStrategy?.swapAdvice.projectedSocIfContinue ??
+    projectedFinishSoc
   const routeSocPoints = buildRouteSocProjection({
     currentSocPercent,
     projectedFinishSoc,
@@ -101,15 +133,25 @@ export function buildRaceCaptainEnergyModel({
 
   return {
     currentSocPercent,
-    currentSocIsSimulated: predictiveStrategy.usingFallbackStrategySoc,
+    currentSocIsSimulated:
+      authoritativeStrategy === undefined
+        ? predictiveStrategy?.usingFallbackStrategySoc ?? true
+        : authoritativeStrategy.prediction.warnings.some((warning) =>
+          warning.toLowerCase().includes('estimated from soc')
+        ),
     activeBatteryKwh,
     reserveBatterySocPercent,
     reserveBatteryKwh,
     combinedEnergyKwh,
     combinedInventoryPercent,
-    currentWhPerMile: predictiveStrategy.currentWhPerMile,
-    requiredWhPerMile: predictiveStrategy.modelWhPerMile,
-    currentWhIsSimulated: predictiveStrategy.usingFallbackStrategyWhPerMile,
+    currentWhPerMile,
+    requiredWhPerMile,
+    currentWhIsSimulated:
+      authoritativeStrategy === undefined
+        ? predictiveStrategy?.usingFallbackStrategyWhPerMile ?? true
+        : authoritativeStrategy.prediction.warnings.some((warning) =>
+          warning.toLowerCase().includes('configured wh/mi fallback')
+        ),
     rollingWhPerMile: calculateRollingWhPerMile(telemetryHistory),
     solarInputWatts: solarInput.value,
     solarInputIsSimulated: solarInput.source === 'setup',
@@ -120,12 +162,12 @@ export function buildRaceCaptainEnergyModel({
     energyUsedKwh,
     solarOffsetPercent,
     netEnergyLossKwh: energySimulation.netKwh,
-    nextStopDistance: Math.max(
-      0,
-      (predictiveStrategy.swapAdvice.recommendedSwapMile ??
-        predictiveStrategy.swapAdvice.debug.nextOperationalOpportunityMile) - currentMile
-    ),
-    projectedArrivalSoc: predictiveStrategy.swapAdvice.projectedSocIfContinue,
+    netPowerWatts: telemetry?.netPowerWatts ?? 0,
+    batteryEnergyWh: telemetry?.batteryEnergyWh ?? 0,
+    energyConsumedWh: telemetry?.energyConsumedWh ?? 0,
+    energyRecoveredWh: telemetry?.energyRecoveredWh ?? 0,
+    nextStopDistance: Math.max(0, nextStopDistance),
+    projectedArrivalSoc,
     projectedFinishSoc,
     projectedFinishLabel: finishSocStatusLabel(projectedFinishSoc),
     routeSocPoints,
@@ -171,6 +213,9 @@ export function getSolarInputWatts({
 }) {
   if (typeof telemetry?.mpptChargePowerWatts === 'number') {
     return { value: telemetry.mpptChargePowerWatts, source: 'mppt-charge' as const }
+  }
+  if (typeof telemetry?.mpptPowerWatts === 'number') {
+    return { value: telemetry.mpptPowerWatts, source: 'mppt-power' as const }
   }
   if (typeof telemetry?.mpptPvPowerWatts === 'number') {
     return { value: telemetry.mpptPvPowerWatts, source: 'mppt-pv' as const }

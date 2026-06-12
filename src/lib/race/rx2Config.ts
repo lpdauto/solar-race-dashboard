@@ -21,6 +21,10 @@ export type Rx2VehicleConfig = {
   estimatedRollingResistance: number
   defaultRaceWhPerMile: number
   defaultTargetSpeedMph: number
+  restStopDefaultMinutes: number
+  lunchStopDefaultMinutes: number
+  checkpointDefaultMinutes: number
+  defaultTrailerSpeedMph: number
   minimumRaceSpeedMph: number
   maxRecommendedSpeedMph: number
 }
@@ -47,8 +51,12 @@ export const rx2Config: Rx2VehicleConfig = {
   estimatedCd: 0.35,
   estimatedFrontalAreaM2: 1.2,
   estimatedRollingResistance: 0.012,
-  defaultRaceWhPerMile: 140,
-  defaultTargetSpeedMph: 24,
-  minimumRaceSpeedMph: 20,
-  maxRecommendedSpeedMph: 35,
+  defaultRaceWhPerMile: 40,
+  defaultTargetSpeedMph: 35,
+  restStopDefaultMinutes: 15,
+  lunchStopDefaultMinutes: 30,
+  checkpointDefaultMinutes: 10,
+  defaultTrailerSpeedMph: 45,
+  minimumRaceSpeedMph: 25,
+  maxRecommendedSpeedMph: 40,
 }

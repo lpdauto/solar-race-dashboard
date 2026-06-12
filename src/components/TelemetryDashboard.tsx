@@ -95,7 +95,7 @@ export default function TelemetryDashboard({
         <div>
           <h3 className="text-base font-bold text-white">Live Telemetry</h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Use simulator data, local ESP32 polling, or Cloud Telemetry for hosted race updates.
+            Use simulator data, local ESP32 polling, or Cloud Telemetry for hosted race updates. Target Efficiency: 30-45 Wh/mi.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -220,9 +220,36 @@ export default function TelemetryDashboard({
         <TelemetryGauge label="Solar Power" value={telemetry?.solarPowerWatts ?? telemetry?.mpptPowerWatts} unit="W" min={0} max={2200} precision={0} />
         <TelemetryGauge label="Controller Temp" value={celsiusToFahrenheit(telemetry?.controllerTempC)} unit="F" min={68} max={212} warningThreshold={167} dangerThreshold={185} precision={1} />
         <TelemetryGauge label="Motor Temp" value={celsiusToFahrenheit(telemetry?.motorTempC)} unit="F" min={68} max={230} warningThreshold={185} dangerThreshold={203} precision={1} />
-        <TelemetryGauge label="Efficiency" value={telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile} unit="Wh/mi" min={20} max={190} warningThreshold={120} dangerThreshold={140} precision={0} />
+        <TelemetryGauge label="Efficiency" value={telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile} unit="Wh/mi" min={20} max={70} warningThreshold={45} dangerThreshold={55} precision={0} />
         <TelemetryGauge label="Regen Power" value={telemetry?.regenWatts} unit="W" min={0} max={2000} precision={0} />
       </div>
+
+      <section className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <EnergyDebugMetric
+          label="Net Power"
+          value={formatSignedWatts(telemetry?.netPowerWatts)}
+          tone={
+            telemetry?.netPowerWatts === undefined
+              ? 'neutral'
+              : telemetry.netPowerWatts >= 0
+                ? 'positive'
+                : 'negative'
+          }
+        />
+        <EnergyDebugMetric
+          label="Energy Consumed"
+          value={formatWh(telemetry?.energyConsumedWh)}
+        />
+        <EnergyDebugMetric
+          label="Energy Recovered"
+          value={formatWh(telemetry?.energyRecoveredWh)}
+          tone="positive"
+        />
+        <EnergyDebugMetric
+          label="Battery Energy"
+          value={formatWh(telemetry?.batteryEnergyWh)}
+        />
+      </section>
 
       <SystemHealthPanel telemetry={telemetry} />
 
@@ -366,6 +393,32 @@ function ConnectionMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function EnergyDebugMetric({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  tone?: 'neutral' | 'positive' | 'negative'
+}) {
+  const valueColor =
+    tone === 'positive'
+      ? 'text-emerald-200'
+      : tone === 'negative'
+        ? 'text-[#ff8fcb]'
+        : 'text-white'
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </p>
+      <p className={`mt-1 text-xl font-black ${valueColor}`}>{value}</p>
+    </div>
+  )
+}
+
 function telemetrySourceLabel(source: TelemetrySource) {
   if (source === 'mock-esp32') return 'Mock ESP32'
   if (source === 'esp32') return 'ESP32 Live'
@@ -379,6 +432,24 @@ function telemetryNodeLabel(node: TelemetryNodeId) {
   if (node === 'spare-battery') return 'Spare Battery'
 
   return node.charAt(0).toUpperCase() + node.slice(1)
+}
+
+function formatSignedWatts(value?: number | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return '--'
+
+  const sign = value > 0 ? '+' : ''
+
+  return `${sign}${value.toFixed(0)} W`
+}
+
+function formatWh(value?: number | null) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return '--'
+
+  if (Math.abs(value) >= 1000) {
+    return `${(value / 1000).toFixed(2)} kWh`
+  }
+
+  return `${value.toFixed(0)} Wh`
 }
 
 function formatLastPacketAge(timestamp?: number) {
@@ -415,8 +486,8 @@ function buildWarnings(telemetry: TelemetryData) {
     warnings.push('High current draw detected.')
   }
 
-  if (efficiencyWhPerMile > 140) {
-    warnings.push('Vehicle efficiency degraded.')
+  if (efficiencyWhPerMile > 55) {
+    warnings.push('High consumption detected. Target efficiency is 30-45 Wh/mi.')
   }
 
   return warnings

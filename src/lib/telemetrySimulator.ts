@@ -65,9 +65,9 @@ export function generateTelemetryFrame({
         ? Math.abs(batteryPowerWatts)
         : 0
   const efficiencyWhPerMile = clamp(
-    efficiencyForSegment(segmentType, risk) + Math.max(0, wave) * 14,
-    35,
-    190
+    efficiencyForSegment(segmentType, risk) + wave * 3.5,
+    20,
+    70
   )
   const wheelRpm =
     (speedMph * MPH_TO_WHEEL_RPM_FACTOR) / rx2Config.tireDiameterIn
@@ -101,14 +101,14 @@ export function generateTelemetryFrame({
 function speedForSegment(segmentType: string, risk: string) {
   if (segmentType === 'climb') {
     return risk === 'severe'
-      ? rx2Config.minimumRaceSpeedMph + 2
-      : rx2Config.defaultTargetSpeedMph + 1
+      ? rx2Config.defaultTargetSpeedMph - 7
+      : rx2Config.defaultTargetSpeedMph - 3
   }
-  if (segmentType === 'descent') return rx2Config.defaultTargetSpeedMph + 7
+  if (segmentType === 'descent') return rx2Config.defaultTargetSpeedMph + 3
   if (segmentType === 'town' || segmentType === 'caution') {
-    return rx2Config.defaultTargetSpeedMph
+    return rx2Config.defaultTargetSpeedMph - 4
   }
-  return rx2Config.defaultTargetSpeedMph + 6
+  return rx2Config.defaultTargetSpeedMph
 }
 
 function currentForSegment(segmentType: string, risk: string, wave: number) {
@@ -143,10 +143,10 @@ function tempTargetForSegment(
 }
 
 function efficiencyForSegment(segmentType: string, risk: string) {
-  if (segmentType === 'climb') return risk === 'severe' ? 158 : risk === 'high' ? 138 : 118
-  if (segmentType === 'descent') return 48
-  if (segmentType === 'town' || segmentType === 'caution') return 112
-  return 78
+  if (segmentType === 'climb') return risk === 'severe' ? 66 : risk === 'high' ? 58 : 50
+  if (segmentType === 'descent') return 24
+  if (segmentType === 'town' || segmentType === 'caution') return 46
+  return risk === 'high' ? 45 : risk === 'medium' ? 41 : 38
 }
 
 function socDrainForSegment(segmentType: string, risk: string) {
