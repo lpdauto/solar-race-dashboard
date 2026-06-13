@@ -22,7 +22,6 @@ import {
 } from '@/lib/publicRaceJournal'
 
 type FetchState = 'loading' | 'live' | 'offline'
-type DonationTierId = 'coffee' | 'lunch' | 'dinner'
 
 const PublicRaceLeafletMap = dynamic(() => import('./PublicRaceLeafletMap'), {
   ssr: false,
@@ -67,33 +66,7 @@ const mockFallback: PublicRaceStatus = {
   sponsors: publicRaceSponsors,
 }
 
-const donationUrl = 'https://gofund.me/7a74fcab3'
-const donationClickStorageKey = 'rx2-fuel-the-crew-clicks'
-const donationTiers: Array<{
-  id: DonationTierId
-  title: string
-  amount: string
-  description: string
-}> = [
-  {
-    id: 'coffee',
-    title: 'Buy the Crew a Coffee',
-    amount: '$5',
-    description: 'Keep our track strategists caffeinated for the afternoon stint!',
-  },
-  {
-    id: 'lunch',
-    title: 'Buy a Driver Lunch',
-    amount: '$15',
-    description: 'Fuel the driver stepping out of the cockpit at the next control stop!',
-  },
-  {
-    id: 'dinner',
-    title: 'Buy us Dinner',
-    amount: '$20',
-    description: 'Long days driving require proper Texas BBQ!',
-  },
-]
+const supportUrl = 'https://buymeacoffee.com/racerx2'
 
 export default function RaceTrackerClient() {
   const [raceStatus, setRaceStatus] = useState<PublicRaceStatus>(mockFallback)
@@ -102,13 +75,6 @@ export default function RaceTrackerClient() {
   const [currentCrew, setCurrentCrew] =
     useState<PublicRaceCrewSelection>(emptyPublicRaceCrew)
   const [journalPosts, setJournalPosts] = useState<PublicJournalPost[]>([])
-  const [donationClicks, setDonationClicks] = useState<
-    Record<DonationTierId, number>
-  >({
-    coffee: 0,
-    lunch: 0,
-    dinner: 0,
-  })
 
   useEffect(() => {
     let cancelled = false
@@ -185,34 +151,12 @@ export default function RaceTrackerClient() {
     )
   }, [raceStatus, currentCrew])
 
-  useEffect(() => {
-    setDonationClicks(readDonationClicks())
-  }, [])
-
   const progressPercent = raceStatus.routeProgressPct
   const leftSponsors = raceStatus.sponsors.filter((_, index) => index % 2 === 0)
   const rightSponsors = raceStatus.sponsors.filter((_, index) => index % 2 === 1)
   const driver = findTeamMemberById(currentCrew.driverId)
   const passenger = findTeamMemberById(currentCrew.passengerId)
   const visibleJournal = visiblePublicJournalPosts(journalPosts).slice(0, 4)
-  const featuredDonationTier = featuredFuelTier()
-
-  function handleDonationClick(tierId: DonationTierId) {
-    setDonationClicks((currentClicks) => {
-      const nextClicks = {
-        ...currentClicks,
-        [tierId]: (currentClicks[tierId] ?? 0) + 1,
-      }
-
-      window.localStorage.setItem(
-        donationClickStorageKey,
-        JSON.stringify(nextClicks)
-      )
-
-      return nextClicks
-    })
-  }
-
   return (
     <main className="min-h-screen bg-[#080808] px-2 py-2 text-white sm:px-5 sm:py-4 lg:px-8">
       <div className="mx-auto grid max-w-[1540px] grid-cols-1 gap-3 xl:grid-cols-[150px_minmax(0,1fr)_150px] xl:gap-4 2xl:grid-cols-[180px_minmax(0,1fr)_180px]">
@@ -327,11 +271,7 @@ export default function RaceTrackerClient() {
           </div>
         </section>
 
-        <FuelTheCrewWidget
-          featuredTier={featuredDonationTier}
-          clickCounts={donationClicks}
-          onTierClick={handleDonationClick}
-        />
+        <FuelTheCrewWidget />
 
         <LatestTeamJournal posts={visibleJournal} />
 
@@ -372,71 +312,31 @@ function routeConfidenceLabel(
   return `${confidence}${distanceLabel}`
 }
 
-function FuelTheCrewWidget({
-  featuredTier,
-  clickCounts,
-  onTierClick,
-}: {
-  featuredTier: DonationTierId
-  clickCounts: Record<DonationTierId, number>
-  onTierClick: (tierId: DonationTierId) => void
-}) {
+function FuelTheCrewWidget() {
   return (
     <section className="rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-3 shadow-xl shadow-black/20 sm:p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
             Support the Road Crew
           </p>
           <h2 className="mt-1 text-xl font-black text-white sm:text-2xl">Fuel the Crew</h2>
           <p className="mt-1 text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:leading-6">
-            Pick a small boost for the students keeping the race day moving.
+            Help keep the students fed, hydrated, and smiling between stops.
           </p>
         </div>
-        <span className="rounded-md border border-[#ff8fcb]/35 bg-[#ff3ea5]/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#ffd6e9]">
-          {featuredTier === 'coffee'
-            ? 'Morning boost'
-            : featuredTier === 'lunch'
-              ? 'Lunch stop energy'
-              : 'Dinner run'}
-        </span>
-      </div>
-
-      <div className="mt-3 grid gap-2 sm:mt-4 sm:gap-3 lg:grid-cols-3">
-        {donationTiers.map((tier) => {
-          const isFeatured = tier.id === featuredTier
-
-          return (
-            <a
-              key={tier.id}
-              href={donationUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => onTierClick(tier.id)}
-              className={`rounded-md border p-3 transition hover:-translate-y-0.5 sm:p-4 ${
-                isFeatured
-                  ? 'border-[#ff8fcb]/60 bg-[#ff3ea5]/15 shadow-[0_0_24px_rgba(255,62,165,0.16)]'
-                  : 'border-white/10 bg-black/25 hover:border-[#ff3ea5]/35'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-base font-black text-white">{tier.title}</h3>
-                <span className="rounded border border-[#ff3ea5]/35 bg-[#ff3ea5]/10 px-2 py-1 text-sm font-black text-[#ff8fcb]">
-                  {tier.amount}
-                </span>
-              </div>
-              <p className="mt-2 text-sm font-bold leading-5 text-slate-300 sm:mt-3 sm:leading-6">
-                {tier.description}
-              </p>
-              {clickCounts[tier.id] > 0 ? (
-                <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-[#ff8fcb]">
-                  Opened {clickCounts[tier.id]} time
-                  {clickCounts[tier.id] === 1 ? '' : 's'} here
-                </p>
-              ) : null}
-            </a>
-          )
-        })}
+        <a
+          href={supportUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex w-full items-center justify-center rounded-md border border-[#ff8fcb]/50 bg-[#ff3ea5]/10 p-2 transition hover:-translate-y-0.5 hover:bg-[#ff3ea5]/20 sm:w-auto"
+        >
+          <img
+            src="/race-images/support/buy-me-a-coffee-button.png"
+            alt="Buy me a coffee"
+            className="h-12 w-auto"
+          />
+        </a>
       </div>
     </section>
   )
@@ -485,36 +385,6 @@ function LatestTeamJournal({ posts }: { posts: PublicJournalPost[] }) {
       )}
     </section>
   )
-}
-
-function featuredFuelTier(): DonationTierId {
-  const hour = new Date().getHours()
-
-  if (hour < 11) return 'coffee'
-  if (hour < 17) return 'lunch'
-  return 'dinner'
-}
-
-function readDonationClicks(): Record<DonationTierId, number> {
-  if (typeof window === 'undefined') {
-    return { coffee: 0, lunch: 0, dinner: 0 }
-  }
-
-  try {
-    const stored = window.localStorage.getItem(donationClickStorageKey)
-
-    if (!stored) return { coffee: 0, lunch: 0, dinner: 0 }
-
-    const parsed = JSON.parse(stored) as Partial<Record<DonationTierId, number>>
-
-    return {
-      coffee: Number.isFinite(parsed.coffee) ? Number(parsed.coffee) : 0,
-      lunch: Number.isFinite(parsed.lunch) ? Number(parsed.lunch) : 0,
-      dinner: Number.isFinite(parsed.dinner) ? Number(parsed.dinner) : 0,
-    }
-  } catch {
-    return { coffee: 0, lunch: 0, dinner: 0 }
-  }
 }
 
 function formatJournalTime(timestamp: string) {
