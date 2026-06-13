@@ -1,4 +1,4 @@
-const CACHE_NAME = 'solar-race-dashboard-v2'
+const CACHE_NAME = 'solar-race-dashboard-v3'
 const PRECACHE_URLS = [
   '/',
   '/manifest.webmanifest',
