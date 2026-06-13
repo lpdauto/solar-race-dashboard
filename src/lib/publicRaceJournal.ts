@@ -4,7 +4,6 @@ import {
 } from '@/data/publicRaceCheckpoints'
 import { findTeamMemberById } from '@/data/teamMembers'
 import type { PublicRaceCrewSelection } from '@/lib/publicRaceCrew'
-import { calculatePublicRouteProgress } from '@/lib/publicRaceRoute'
 import type { PublicRaceStatus } from '@/lib/publicRaceStatus'
 
 export type PublicJournalPost = {
@@ -26,8 +25,7 @@ type JournalVariantSet = {
   closings: string[]
 }
 
-const journalStorageKey = 'rx2-public-team-journal'
-const checkpointProgressBufferPct = 0.15
+const journalStorageKey = 'rx2-public-team-journal-v2'
 const checkpointReachRadiusMeters = 1200
 const publishDelayMinMs = 3 * 60 * 60 * 1000
 const publishDelayRangeMs = 60 * 60 * 1000
@@ -138,13 +136,6 @@ function checkpointsReachedByStatus(raceStatus: PublicRaceStatus) {
   }
 
   return publicRaceCheckpoints.filter((checkpoint) => {
-    const checkpointProgress = calculatePublicRouteProgress({
-      lat: checkpoint.lat,
-      lng: checkpoint.lng,
-    })
-
-    if (!checkpointProgress) return false
-
     const distanceMeters = distanceBetweenMeters(
       raceStatus.lat,
       raceStatus.lng,
@@ -152,11 +143,7 @@ function checkpointsReachedByStatus(raceStatus: PublicRaceStatus) {
       checkpoint.lng
     )
 
-    return (
-      distanceMeters <= checkpointReachRadiusMeters ||
-      raceStatus.routeProgressPct >=
-        checkpointProgress.routeProgressPct - checkpointProgressBufferPct
-    )
+    return distanceMeters <= checkpointReachRadiusMeters
   })
 }
 
