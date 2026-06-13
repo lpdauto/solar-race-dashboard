@@ -12,7 +12,6 @@ import ElevationProfile from '@/components/ElevationProfile'
 import EnergySimulationPanel from '@/components/EnergySimulationPanel'
 import ExpandablePanel from '@/components/ExpandablePanel'
 import GpsStatusPanel from '@/components/GpsStatusPanel'
-import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
 import RaceNavigator from '@/components/RaceNavigator'
 import TelemetryDashboard from '@/components/TelemetryDashboard'
 import WeatherWindPanel from '@/components/WeatherWindPanel'
@@ -1927,17 +1926,17 @@ function buildTiles({
     },
     {
       id: 'offline',
-      title: 'Offline/GPS Status',
+      title: 'GPS Status',
       mainValue: manualMode ? 'MAN' : 'GPS',
       supportingItems: [
-        { label: 'Offline', value: 'PWA' },
+        { label: 'Mode', value: manualMode ? 'manual mile' : 'GPS assist' },
         { label: 'GPS', value: manualMode ? 'manual' : 'auto' },
         { label: 'Counting', value: `${countingMilesToday.toFixed(1)} mi` },
         { label: 'Trailered', value: `${traileredMilesToday.toFixed(1)} mi` },
       ],
       statusLabel: manualMode ? 'manual' : 'gps',
       riskLevel: 'neutral',
-      actionText: 'Open for GPS assist and offline readiness checks.',
+      actionText: 'Open for GPS assist and manual mile controls.',
     },
   ] as Array<{
     id: TileId

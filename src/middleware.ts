@@ -38,8 +38,6 @@ function isPublicPath(pathname: string) {
     pathname === '/api/public-race-status' ||
     isBearerAuthenticatedApiPath(pathname) ||
     pathname.startsWith('/race-images/') ||
-    pathname === '/manifest.webmanifest' ||
-    pathname === '/sw.js' ||
     pathname.startsWith('/icons/') ||
     pathname.startsWith('/_next/') ||
     pathname.match(/\.(?:png|jpg|jpeg|gif|svg|ico|webp|css|js|map|txt)$/)

@@ -2,7 +2,6 @@
 import ConnectionStatusStrip from '@/components/ConnectionStatusStrip'
 import CourseMap from '@/components/CourseMap'
 import DataManagementPanel from '@/components/DataManagementPanel'
-import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
 import RaceDayChecklist from '@/components/RaceDayChecklist'
 import WeatherCachePanel from '@/components/WeatherCachePanel'
 import { raceRoute, type RiskLevel } from '@/data/raceRoute'
@@ -141,13 +140,6 @@ export default function HomePage() {
               <SetupItem text="GPS works offline after page load." />
               <SetupItem text="Elevation API/weather updates require internet, but fallback data remains available." />
             </ul>
-          </CollapsibleTile>
-
-          <CollapsibleTile
-            title="Offline Readiness"
-            summary="PWA cache and install checks"
-          >
-            <OfflineReadinessPanel />
           </CollapsibleTile>
 
           <CollapsibleTile
