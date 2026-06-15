@@ -67,6 +67,9 @@ const mockFallback: PublicRaceStatus = {
 }
 
 const supportUrl = 'https://buymeacoffee.com/racerx2'
+// Conservative public polling protects Upstash free-tier command limits as fans leave tracker tabs open.
+const publicRaceStatusPollIntervalMs = 30_000
+const publicRaceCrewPollIntervalMs = 60_000
 
 export default function RaceTrackerClient() {
   const [raceStatus, setRaceStatus] = useState<PublicRaceStatus>(mockFallback)
@@ -80,6 +83,8 @@ export default function RaceTrackerClient() {
     let cancelled = false
 
     async function loadRaceStatus() {
+      if (document.visibilityState !== 'visible') return
+
       try {
         const response = await fetch('/api/public-race-status', {
           cache: 'no-store',
@@ -103,12 +108,23 @@ export default function RaceTrackerClient() {
       }
     }
 
-    loadRaceStatus()
-    const intervalId = window.setInterval(loadRaceStatus, 10_000)
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void loadRaceStatus()
+      }
+    }
+
+    void loadRaceStatus()
+    const intervalId = window.setInterval(
+      loadRaceStatus,
+      publicRaceStatusPollIntervalMs
+    )
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 
@@ -116,6 +132,8 @@ export default function RaceTrackerClient() {
     let cancelled = false
 
     async function syncCurrentCrew() {
+      if (document.visibilityState !== 'visible') return
+
       const nextCrew = await loadPublicRaceCrew()
 
       if (!cancelled) {
@@ -129,16 +147,27 @@ export default function RaceTrackerClient() {
       }
     }
 
-    syncCurrentCrew()
-    const intervalId = window.setInterval(syncCurrentCrew, 15_000)
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void syncCurrentCrew()
+      }
+    }
+
+    void syncCurrentCrew()
+    const intervalId = window.setInterval(
+      syncCurrentCrew,
+      publicRaceCrewPollIntervalMs
+    )
     window.addEventListener(publicRaceCrewChangedEventName, syncCurrentCrew)
     window.addEventListener('storage', syncStoredCurrentCrew)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
       window.removeEventListener(publicRaceCrewChangedEventName, syncCurrentCrew)
       window.removeEventListener('storage', syncStoredCurrentCrew)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 

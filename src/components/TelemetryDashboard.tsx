@@ -9,6 +9,7 @@ import {
 } from '@/lib/raceSnapshots'
 import type {
   TelemetryConnectionStatus,
+  CloudTelemetryHealth,
   TelemetryData,
   TelemetryNodeId,
   TelemetrySource,
@@ -26,6 +27,7 @@ type TelemetryDashboardProps = {
   effectiveConnectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   effectiveLastPacketAt?: number
   cloudNode: TelemetryNodeId
+  cloudHealth?: CloudTelemetryHealth | null
   snapshots?: RaceSnapshot[]
   onClearSnapshots?: () => void
   connect: () => void
@@ -73,6 +75,7 @@ export default function TelemetryDashboard({
   effectiveConnectionStatus,
   effectiveLastPacketAt,
   cloudNode,
+  cloudHealth,
   snapshots = [],
   onClearSnapshots,
   connect,
@@ -172,6 +175,7 @@ export default function TelemetryDashboard({
         node={cloudNode}
         connectionStatus={effectiveConnectionStatus}
         lastPacketAt={effectiveLastPacketAt}
+        health={cloudHealth}
       />
 
       <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-3">

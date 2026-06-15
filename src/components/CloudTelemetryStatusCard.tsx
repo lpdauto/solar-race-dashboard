@@ -25,6 +25,9 @@ const vehicleStatusStyles: Record<VehicleNodeStatus, string> = {
   offline: 'border-red-400/30 bg-red-400/10 text-[#ff8fcb]',
 }
 
+// Conservative fallback polling protects Upstash free-tier command limits when shared health is unavailable.
+const fallbackHealthPollIntervalMs = 30_000
+
 export default function CloudTelemetryStatusCard({
   enabled,
   node,
@@ -64,6 +67,8 @@ export default function CloudTelemetryStatusCard({
     let cancelled = false
 
     async function fetchHealth() {
+      if (document.visibilityState !== 'visible') return
+
       try {
         const response = await fetch('/api/telemetry/health', {
           cache: 'no-store',
@@ -89,14 +94,22 @@ export default function CloudTelemetryStatusCard({
       }
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void fetchHealth()
+      }
+    }
+
     void fetchHealth()
     const intervalId = window.setInterval(() => {
       void fetchHealth()
-    }, 5000)
+    }, fallbackHealthPollIntervalMs)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [enabled, providedHealth])
 

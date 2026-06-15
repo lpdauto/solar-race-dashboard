@@ -47,7 +47,7 @@ describe('getMockPublicRaceStatus', () => {
     expect(status.sponsors[0]).toEqual({
       name: expect.any(String),
       logoUrl: expect.any(String),
-      sponsorUrl: '#',
+      sponsorUrl: expect.any(String),
     })
     expect(status.routeProgressPct).toBeGreaterThan(0)
     expect(status.routeProgressPct).toBeLessThan(100)

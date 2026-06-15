@@ -7,6 +7,9 @@ import {
 } from '@/types/telemetry'
 
 const maxTelemetryHistoryPackets = 1000
+const telemetryHistoryWriteIntervalMs = 60_000
+const telemetryHistoryThrottleTtlSeconds = 60
+const lastHistoryWriteByNode = new Map<TelemetryNodeId, number>()
 
 export type TelemetryLatestRow = {
   id: TelemetryNodeId
@@ -62,8 +65,24 @@ export async function storeTelemetryPacket({
   }
 
   await redis.set(latestKey(node), latestRow)
-  await redis.lpush(historyKey(node), latestRow)
-  await redis.ltrim(historyKey(node), 0, maxTelemetryHistoryPackets - 1)
+
+  if (shouldAttemptHistoryWrite(node, latestRow.updated_at)) {
+    const throttleStored = await redis.set(
+      historyThrottleKey(node),
+      latestRow.updated_at,
+      {
+        ex: telemetryHistoryThrottleTtlSeconds,
+        nx: true,
+      }
+    )
+
+    lastHistoryWriteByNode.set(node, Date.parse(latestRow.updated_at))
+
+    if (throttleStored) {
+      await redis.lpush(historyKey(node), latestRow)
+      await redis.ltrim(historyKey(node), 0, maxTelemetryHistoryPackets - 1)
+    }
+  }
 
   return latestRow
 }
@@ -141,4 +160,18 @@ export function latestKey(node: TelemetryNodeId) {
 
 export function historyKey(node: TelemetryNodeId) {
   return `history:${node}`
+}
+
+export function historyThrottleKey(node: TelemetryNodeId) {
+  return `history:last-write:${node}`
+}
+
+function shouldAttemptHistoryWrite(node: TelemetryNodeId, updatedAt: string) {
+  const updatedAtMs = Date.parse(updatedAt)
+  const lastHistoryWriteAt = lastHistoryWriteByNode.get(node)
+
+  if (!Number.isFinite(updatedAtMs)) return true
+  if (lastHistoryWriteAt === undefined) return true
+
+  return updatedAtMs - lastHistoryWriteAt >= telemetryHistoryWriteIntervalMs
 }

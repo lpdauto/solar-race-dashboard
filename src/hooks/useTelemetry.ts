@@ -72,6 +72,9 @@ export type TelemetryHistorySample = {
 }
 
 const maxTelemetryHistorySamples = 900
+// Conservative cloud polling protects Upstash free-tier command limits during long race-day dashboard sessions.
+const cloudTelemetryLatestPollIntervalMs = 10_000
+const cloudTelemetryHealthPollIntervalMs = 30_000
 
 export function useTelemetry({
   currentMile,
@@ -101,6 +104,7 @@ export function useTelemetry({
   const cloudPollInFlightRef = useRef(false)
   const cloudAbortControllerRef = useRef<AbortController | null>(null)
   const cloudSessionRef = useRef(0)
+  const cloudVisibilityCleanupRef = useRef<(() => void) | null>(null)
   const autoConnectRef = useRef(false)
   const telemetryRef = useRef<TelemetryData | null>(null)
   const packetTimestampsRef = useRef<number[]>([])
@@ -126,6 +130,8 @@ export function useTelemetry({
     let cancelled = false
 
     async function fetchCloudHealth() {
+      if (document.visibilityState !== 'visible') return
+
       try {
         const response = await fetch('/api/telemetry/health', {
           cache: 'no-store',
@@ -145,14 +151,22 @@ export function useTelemetry({
       }
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void fetchCloudHealth()
+      }
+    }
+
     void fetchCloudHealth()
     const intervalId = window.setInterval(() => {
       void fetchCloudHealth()
-    }, 5000)
+    }, cloudTelemetryHealthPollIntervalMs)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [source])
 
@@ -430,10 +444,27 @@ export function useTelemetry({
       }
     }
 
-    void pollCloudTelemetry()
-    intervalRef.current = window.setInterval(() => {
+    function pollCloudTelemetryIfVisible() {
+      if (document.visibilityState !== 'visible') return
+
       void pollCloudTelemetry()
-    }, 1000)
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void pollCloudTelemetry()
+      }
+    }
+
+    void pollCloudTelemetry()
+    intervalRef.current = window.setInterval(
+      pollCloudTelemetryIfVisible,
+      cloudTelemetryLatestPollIntervalMs
+    )
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    cloudVisibilityCleanupRef.current = () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }
 
   function stopCloudTelemetry() {
@@ -441,6 +472,8 @@ export function useTelemetry({
     cloudAbortControllerRef.current?.abort()
     cloudAbortControllerRef.current = null
     cloudPollInFlightRef.current = false
+    cloudVisibilityCleanupRef.current?.()
+    cloudVisibilityCleanupRef.current = null
     setCloudPacketStatus(null)
   }
 

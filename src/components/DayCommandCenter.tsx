@@ -1014,6 +1014,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                     node={telemetryController.cloudNode}
                     connectionStatus={telemetryController.effectiveConnectionStatus}
                     lastPacketAt={telemetryController.effectiveLastPacketAt}
+                    health={telemetryController.cloudHealth}
                   />
                 </MiniPanel>
               </>
