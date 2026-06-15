@@ -10,9 +10,33 @@ export type Esp32TelemetryPacket = {
   timestamp?: number
   source?: string
   speedMph?: number
+  lat?: number
+  latitude?: number
   gpsLat?: number
+  lng?: number
+  lon?: number
+  longitude?: number
   gpsLng?: number
   gpsElevationFt?: number
+  gpsAltitudeFt?: number
+  altitudeFt?: number
+  elevationFt?: number
+  gpsAltitudeM?: number
+  gpsSpeedMph?: number
+  gpsHeading?: number
+  heading?: number
+  courseDeg?: number
+  gpsCourseDeg?: number
+  gpsSatellites?: number
+  satellites?: number
+  gpsFix?: boolean
+  gpsValid?: boolean
+  gpsLocationValid?: boolean
+  locationValid?: boolean
+  hasGpsFix?: boolean
+  gpsAgeMs?: number
+  lastGpsAgeMs?: number
+  gpsLastUpdateAgeMs?: number
   packVoltage?: number
   batteryVoltage?: number
   packCurrent?: number
@@ -97,10 +121,24 @@ export function parseEsp32TelemetryPacket(
   return normalizeTelemetry({
     timestamp: finiteNumber(packet.timestamp),
     source: normalizePacketSource(packet.source),
-    speedMph: finiteNumber(packet.speedMph),
-    gpsLat: finiteNumber(packet.gpsLat),
-    gpsLng: finiteNumber(packet.gpsLng),
-    gpsElevationFt: finiteNumber(packet.gpsElevationFt),
+    speedMph: finiteNumber(packet.gpsSpeedMph ?? packet.speedMph),
+    gpsLat: finiteLatitude(packet.gpsLat ?? packet.lat ?? packet.latitude),
+    gpsLng: finiteLongitude(
+      packet.gpsLng ?? packet.lng ?? packet.lon ?? packet.longitude
+    ),
+    gpsElevationFt: gpsElevationFeet(packet),
+    gpsFix: gpsFixValue(packet),
+    gpsAgeMs: finiteNumber(
+      packet.gpsAgeMs ?? packet.lastGpsAgeMs ?? packet.gpsLastUpdateAgeMs
+    ),
+    gpsSatellites: finiteNumber(packet.gpsSatellites ?? packet.satellites),
+    gpsSpeed: finiteNumber(packet.gpsSpeedMph ?? packet.speedMph),
+    gpsHeading: finiteNumber(
+      packet.gpsHeading ??
+        packet.heading ??
+        packet.courseDeg ??
+        packet.gpsCourseDeg
+    ),
     batteryVoltage: finiteNumber(packet.packVoltage ?? packet.batteryVoltage),
     batteryCurrent: finiteNumber(packet.packCurrent ?? packet.batteryCurrent),
     batterySocPercent: clampSoc(
@@ -181,6 +219,56 @@ export function simulatorTelemetryToEsp32Packet(
 
 function finiteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function finiteLatitude(value: unknown) {
+  const number = finiteNumber(value)
+
+  return number !== undefined && number >= -90 && number <= 90
+    ? number
+    : undefined
+}
+
+function finiteLongitude(value: unknown) {
+  const number = finiteNumber(value)
+
+  return number !== undefined && number >= -180 && number <= 180
+    ? number
+    : undefined
+}
+
+function gpsElevationFeet(packet: Esp32TelemetryPacket) {
+  const feet = finiteNumber(
+    packet.gpsElevationFt ??
+      packet.gpsAltitudeFt ??
+      packet.altitudeFt ??
+      packet.elevationFt
+  )
+
+  if (feet !== undefined) return feet
+
+  const meters = finiteNumber(packet.gpsAltitudeM)
+
+  return meters !== undefined ? meters * 3.28084 : undefined
+}
+
+function gpsFixValue(packet: Esp32TelemetryPacket) {
+  const explicitFix = booleanValue(
+    packet.gpsFix ??
+      packet.gpsValid ??
+      packet.locationValid ??
+      packet.gpsLocationValid ??
+      packet.hasGpsFix
+  )
+
+  if (explicitFix !== undefined) return explicitFix
+
+  return finiteLatitude(packet.gpsLat ?? packet.lat ?? packet.latitude) !==
+    undefined &&
+    finiteLongitude(packet.gpsLng ?? packet.lng ?? packet.lon ?? packet.longitude) !==
+      undefined
+    ? true
+    : undefined
 }
 
 function clampSoc(value: unknown) {

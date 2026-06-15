@@ -16,6 +16,9 @@ export type TelemetryData = {
   gpsLat?: number
   gpsLng?: number
   gpsElevationFt?: number
+  gpsFix?: boolean
+  gpsAgeMs?: number
+  gpsSatellites?: number
   batteryPowerWatts?: number
   batteryTempC?: number
   motorTempC?: number
@@ -106,6 +109,9 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     gpsLat: input.gpsLat,
     gpsLng: input.gpsLng,
     gpsElevationFt: input.gpsElevationFt,
+    gpsFix: input.gpsFix,
+    gpsAgeMs: input.gpsAgeMs,
+    gpsSatellites: input.gpsSatellites,
     batteryVoltage: finiteNumber(input.batteryVoltage, 0),
     batteryCurrent: finiteNumber(input.batteryCurrent, 0),
     batterySocPercent: clampPercent(input.batterySocPercent ?? 0),

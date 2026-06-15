@@ -46,4 +46,53 @@ describe('parseEsp32TelemetryPacket', () => {
     expect(telemetry.telemetryFresh).toBe(true)
     expect(telemetry.cloudConnectionStatus).toBe('connected')
   })
+
+  it('maps ESP32 GPS aliases into normalized telemetry', () => {
+    const telemetry = parseEsp32TelemetryPacket({
+      timestamp: 28481,
+      source: 'esp32-fardriver-ble-tft',
+      gpsValid: true,
+      gpsLocationValid: true,
+      gpsLat: 34.096984,
+      gpsLng: -118.053008,
+      gpsSpeedMph: 12.4,
+      gpsAltitudeM: 62.9,
+      gpsCourseDeg: 187.2,
+      gpsSatellites: 16,
+      gpsLastUpdateAgeMs: 276,
+      packVoltage: 84.5,
+      packCurrent: 0,
+      packSoc: 90,
+    })
+
+    expect(telemetry.gpsFix).toBe(true)
+    expect(telemetry.gpsLat).toBe(34.096984)
+    expect(telemetry.gpsLng).toBe(-118.053008)
+    expect(telemetry.speedMph).toBe(12.4)
+    expect(telemetry.gpsSpeed).toBe(12.4)
+    expect(telemetry.gpsElevationFt).toBeCloseTo(206.36, 2)
+    expect(telemetry.gpsHeading).toBe(187.2)
+    expect(telemetry.gpsSatellites).toBe(16)
+    expect(telemetry.gpsAgeMs).toBe(276)
+  })
+
+  it('accepts alternate latitude longitude and fix field names', () => {
+    const telemetry = parseEsp32TelemetryPacket({
+      latitude: 31.7621,
+      lon: -95.6308,
+      hasGpsFix: true,
+      altitudeFt: 482,
+      satellites: 9,
+      heading: 92,
+      lastGpsAgeMs: 1500,
+    })
+
+    expect(telemetry.gpsFix).toBe(true)
+    expect(telemetry.gpsLat).toBe(31.7621)
+    expect(telemetry.gpsLng).toBe(-95.6308)
+    expect(telemetry.gpsElevationFt).toBe(482)
+    expect(telemetry.gpsSatellites).toBe(9)
+    expect(telemetry.gpsHeading).toBe(92)
+    expect(telemetry.gpsAgeMs).toBe(1500)
+  })
 })

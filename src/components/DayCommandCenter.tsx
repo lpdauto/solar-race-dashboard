@@ -3786,9 +3786,12 @@ function ConnectionStatusPanel({
   const mpptAge = latestMpptAgeSeconds(telemetryHistory, telemetry)
   const mpptFreshness = classifyDataFreshness(mpptAge ?? undefined)
   const missingMpptFields = mpptFields.filter((field) => telemetry?.[field] === undefined).length
-  const gpsAgeSeconds = geolocation.timestamp
-    ? Math.max(0, Math.round((Date.now() - geolocation.timestamp) / 1000))
-    : undefined
+  const displayedGps = getDisplayedGpsStatus({
+    source,
+    telemetry,
+    geolocation,
+  })
+  const gpsAgeSeconds = displayedGps.ageSeconds
   const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
   const displayedPacketRateHz =
     vehicleFreshness.vehicleStatus === 'offline'
@@ -3894,14 +3897,133 @@ function ConnectionStatusPanel({
       </MiniPanel>
       <MiniPanel title="GPS">
         <div className="grid gap-3 sm:grid-cols-3">
-          <ConnectionField label="Permission" value={geolocation.status} tone={geolocation.status === 'watching' ? 'healthy' : geolocation.status === 'error' || geolocation.status === 'permission-denied' ? 'danger' : 'neutral'} />
-          <ConnectionField label="GPS Fix" value={geolocation.latitude !== null && geolocation.longitude !== null ? 'available' : 'unavailable'} tone={geolocation.latitude !== null && geolocation.longitude !== null ? gpsFreshness.tone : 'neutral'} />
-          <StatusMetric label="Lat/Lon" value={geolocation.latitude !== null && geolocation.longitude !== null ? `${geolocation.latitude.toFixed(5)}, ${geolocation.longitude.toFixed(5)}` : '--'} />
-          <StatusMetric label="GPS Age" value={gpsAgeSeconds !== undefined ? `${gpsAgeSeconds}s` : '--'} />
+          <ConnectionField
+            label="Permission"
+            value={displayedGps.permission}
+            tone={displayedGps.permissionTone}
+          />
+          <ConnectionField
+            label="GPS Fix"
+            value={displayedGps.hasFix ? 'available' : 'unavailable'}
+            tone={displayedGps.hasFix ? gpsFreshness.tone : 'neutral'}
+          />
+          <StatusMetric label="Lat/Lon" value={displayedGps.latLon} />
+          <StatusMetric label="GPS Age" value={displayedGps.age} />
+          <StatusMetric label="Satellites" value={displayedGps.satellites} />
+          <StatusMetric label="Heading" value={displayedGps.heading} />
+          <StatusMetric label="Altitude" value={displayedGps.altitude} />
         </div>
       </MiniPanel>
     </section>
   )
+}
+
+function getDisplayedGpsStatus({
+  source,
+  telemetry,
+  geolocation,
+}: {
+  source: TelemetrySource
+  telemetry: TelemetryData | null
+  geolocation: ReturnType<typeof useGeolocation>
+}) {
+  const telemetryHasCoordinates = hasValidGpsCoordinates(
+    telemetry?.gpsLat,
+    telemetry?.gpsLng
+  )
+  const useTelemetryGps =
+    source === 'cloud' ||
+    source === 'esp32' ||
+    source === 'mock-esp32' ||
+    source === 'simulator'
+  const latitude = useTelemetryGps ? telemetry?.gpsLat : geolocation.latitude
+  const longitude = useTelemetryGps ? telemetry?.gpsLng : geolocation.longitude
+  const hasCoordinates = hasValidGpsCoordinates(latitude, longitude)
+  const hasFix =
+    telemetryHasCoordinates ||
+    (useTelemetryGps && telemetry?.gpsFix === true) ||
+    (!useTelemetryGps &&
+      geolocation.latitude !== null &&
+      geolocation.longitude !== null)
+  const telemetryGpsAgeSeconds =
+    typeof telemetry?.gpsAgeMs === 'number' && Number.isFinite(telemetry.gpsAgeMs)
+      ? Math.max(0, Math.round(telemetry.gpsAgeMs / 1000))
+      : undefined
+  const browserGpsAgeSeconds = geolocation.timestamp
+    ? Math.max(0, Math.round((Date.now() - geolocation.timestamp) / 1000))
+    : undefined
+  const ageSeconds = useTelemetryGps
+    ? telemetryGpsAgeSeconds
+    : browserGpsAgeSeconds
+  const permission = useTelemetryGps
+    ? source === 'cloud'
+      ? 'cloud'
+      : 'not required'
+    : geolocation.status
+
+  const latLon =
+    hasCoordinates &&
+    typeof latitude === 'number' &&
+    typeof longitude === 'number'
+      ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+      : '--'
+
+  return {
+    permission,
+    permissionTone: gpsPermissionTone(permission, geolocation.status),
+    hasFix,
+    ageSeconds,
+    latLon,
+    age: ageSeconds !== undefined ? `${ageSeconds}s` : '--',
+    satellites: formatOptionalNumber(telemetry?.gpsSatellites, 0),
+    heading: formatDegrees(telemetry?.gpsHeading),
+    altitude:
+      typeof telemetry?.gpsElevationFt === 'number' &&
+      Number.isFinite(telemetry.gpsElevationFt)
+        ? `${telemetry.gpsElevationFt.toFixed(0)} ft`
+        : '--',
+  }
+}
+
+function hasValidGpsCoordinates(
+  latitude: number | null | undefined,
+  longitude: number | null | undefined
+) {
+  return (
+    typeof latitude === 'number' &&
+    Number.isFinite(latitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    typeof longitude === 'number' &&
+    Number.isFinite(longitude) &&
+    longitude >= -180 &&
+    longitude <= 180
+  )
+}
+
+function gpsPermissionTone(
+  permission: string,
+  browserStatus: ReturnType<typeof useGeolocation>['status']
+): 'healthy' | 'warning' | 'danger' | 'neutral' {
+  if (permission === 'cloud' || permission === 'not required') return 'healthy'
+  if (browserStatus === 'watching') return 'healthy'
+  if (browserStatus === 'error' || browserStatus === 'permission-denied') {
+    return 'danger'
+  }
+
+  return 'neutral'
+}
+
+function formatOptionalNumber(value: number | undefined, digits = 1) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toFixed(digits)
+    : '--'
+}
+
+function formatDegrees(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(0)} deg`
+    : '--'
 }
 
 function ConnectionField({
