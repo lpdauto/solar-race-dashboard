@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { LiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
 
 type StatusTone = 'loading' | 'green' | 'yellow' | 'red' | 'gray'
 
@@ -54,7 +55,13 @@ const initialItems: ConnectionItem[] = [
   },
 ]
 
-export default function ConnectionStatusStrip() {
+export default function ConnectionStatusStrip({
+  liveGps,
+  telemetryConnected = false,
+}: {
+  liveGps?: LiveTelemetryGpsPosition | null
+  telemetryConnected?: boolean
+}) {
   const [mounted, setMounted] = useState(false)
   const [items, setItems] = useState<ConnectionItem[]>(initialItems)
 
@@ -75,17 +82,25 @@ export default function ConnectionStatusStrip() {
         },
         {
           name: 'GPS',
-          status: hasGeolocation ? 'Permission needed' : 'Unsupported',
-          helper: hasGeolocation
+          status: liveGps
+            ? 'Cloud GPS'
+            : hasGeolocation
+              ? 'Permission needed'
+              : 'Unsupported',
+          helper: liveGps
+            ? `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`
+            : hasGeolocation
             ? 'Ready when enabled on a day page'
             : 'Secure browser GPS unavailable',
-          tone: hasGeolocation ? 'yellow' : 'red',
+          tone: liveGps ? 'green' : hasGeolocation ? 'yellow' : 'red',
         },
         {
           name: 'ESP32 Telemetry',
-          status: 'Simulator ready',
-          helper: 'Hardware bridge not connected yet',
-          tone: 'yellow',
+          status: telemetryConnected ? 'Cloud live' : 'Simulator ready',
+          helper: telemetryConnected
+            ? 'Latest vehicle packet available'
+            : 'Hardware bridge not connected yet',
+          tone: telemetryConnected ? 'green' : 'yellow',
         },
         {
           name: 'Wi-Fi / Local Network',
@@ -127,7 +142,7 @@ export default function ConnectionStatusStrip() {
       window.removeEventListener('offline', updateStatus)
       window.removeEventListener('storage', updateStatus)
     }
-  }, [])
+  }, [liveGps, telemetryConnected])
 
   return (
     <section

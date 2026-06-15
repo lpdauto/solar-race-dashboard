@@ -1,10 +1,15 @@
-﻿import Link from 'next/link'
+﻿'use client'
+
+import Link from 'next/link'
 import ConnectionStatusStrip from '@/components/ConnectionStatusStrip'
 import CourseMap from '@/components/CourseMap'
 import DataManagementPanel from '@/components/DataManagementPanel'
 import RaceDayChecklist from '@/components/RaceDayChecklist'
 import WeatherCachePanel from '@/components/WeatherCachePanel'
 import { raceRoute, type RiskLevel } from '@/data/raceRoute'
+import { useTelemetry } from '@/hooks/useTelemetry'
+import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
+import { calculatePublicRouteProgress } from '@/lib/publicRaceRoute'
 
 const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
@@ -14,6 +19,21 @@ const riskStyles: Record<RiskLevel, string> = {
 }
 
 export default function HomePage() {
+  const telemetryController = useTelemetry()
+  const liveGps = getLiveTelemetryGpsPosition(telemetryController.telemetry)
+  const routeProgress = liveGps
+    ? calculatePublicRouteProgress({ lat: liveGps.lat, lng: liveGps.lng })
+    : null
+  const currentVehicleMapLocation = liveGps
+    ? {
+        ...liveGps,
+        label:
+          routeProgress?.confidence === 'off-route'
+            ? 'Live cloud GPS - off route / test location'
+            : 'Live cloud GPS',
+      }
+    : undefined
+
   return (
     <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -44,7 +64,12 @@ export default function HomePage() {
                 Interactive route navigation, terrain risk, and energy planning for Temple City&apos;s all-female solar car team.
               </p>
             </div>
-            <ConnectionStatusStrip />
+            <ConnectionStatusStrip
+              liveGps={liveGps}
+              telemetryConnected={
+                telemetryController.effectiveConnectionStatus === 'connected'
+              }
+            />
           </div>
         </header>
 
@@ -64,7 +89,11 @@ export default function HomePage() {
               Overall Course Map
             </h2>
           </div>
-          <CourseMap days={raceRoute} heightClass="h-[360px] md:h-[500px]" />
+          <CourseMap
+            days={raceRoute}
+            currentLocation={currentVehicleMapLocation}
+            heightClass="h-[360px] md:h-[500px]"
+          />
         </section>
 
         <WeatherCachePanel raceRoute={raceRoute} />
@@ -214,5 +243,7 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
     </span>
   )
 }
+
+
 
 
