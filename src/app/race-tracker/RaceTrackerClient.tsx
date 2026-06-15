@@ -328,6 +328,7 @@ function routeConfidenceLabel(
   distanceMeters: number | null
 ) {
   if (confidence === 'unavailable') return 'Waiting for GPS'
+  if (confidence === 'live') return 'Live GPS'
 
   const distanceLabel =
     distanceMeters === null
@@ -338,7 +339,9 @@ function routeConfidenceLabel(
             : `${(distanceMeters / 1000).toFixed(1)} km`
         } off route`
 
-  return `${confidence}${distanceLabel}`
+  return confidence === 'off-route'
+    ? `Off route / test location${distanceLabel}`
+    : `${confidence}${distanceLabel}`
 }
 
 function FuelTheCrewWidget() {

@@ -82,6 +82,7 @@ import {
   savePublicRaceCrew,
   type PublicRaceCrewSelection,
 } from '@/lib/publicRaceCrew'
+import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
 import { rx2Config } from '@/lib/race/rx2Config'
 import {
   createInitialRaceBatteryState,
@@ -268,6 +269,18 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
     currentMile,
     currentSegment,
   })
+  const liveGpsPosition = getLiveTelemetryGpsPosition(
+    telemetryController.telemetry
+  )
+  const currentVehicleMapLocation = liveGpsPosition
+    ? {
+        ...liveGpsPosition,
+        label:
+          telemetryController.source === 'cloud'
+            ? 'Live cloud GPS'
+            : 'Live telemetry GPS',
+      }
+    : undefined
   const geolocation = useGeolocation()
   const queryView = searchParams.get('view')
   const queryNode = searchParams.get('node')
@@ -931,6 +944,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 days={raceRoute}
                 currentDayNumber={raceDay.day}
                 currentMile={currentMile}
+                currentLocation={currentVehicleMapLocation}
                 heightClass="h-[420px] md:h-[620px]"
                 showRiskAnnotations={false}
               />
@@ -949,6 +963,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                     days={raceRoute}
                     currentDayNumber={raceDay.day}
                     currentMile={currentMile}
+                    currentLocation={currentVehicleMapLocation}
                     heightClass="h-[360px]"
                     showRiskAnnotations={false}
                   />
@@ -1157,6 +1172,7 @@ export default function DayCommandCenter({ raceDay }: DayCommandCenterProps) {
                 days={raceRoute}
                 currentDayNumber={raceDay.day}
                 currentMile={currentMile}
+                currentLocation={currentVehicleMapLocation}
                 heightClass="h-[420px] md:h-[620px]"
               />
             </section>

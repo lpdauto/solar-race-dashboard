@@ -81,9 +81,9 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.dataSource).toBe('telemetry')
     expect(status.speedMph).toBe(24.8)
     expect(status.telemetryAgeSeconds).toBe(5)
-    expect(status.routeConfidence).toBe('high')
+    expect(status.routeConfidence).toBe('live')
     expect(status.routeProgressPct).toBeGreaterThan(0)
-    expect(status.status).toBe('Live on course')
+    expect(status.status).toBe('Live GPS')
     expect(status).not.toHaveProperty('batteryVoltage')
     expect(status).not.toHaveProperty('batteryCurrent')
     expect(status).not.toHaveProperty('motorTempC')
@@ -105,5 +105,32 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.dataSource).toBe('telemetry')
     expect(status.routeConfidence).toBe('unavailable')
     expect(status.status).toBe('Waiting for GPS')
+  })
+
+  it('shows California test GPS as off-route but keeps the live marker visible', () => {
+    const status = getPublicRaceStatusFromTelemetry(
+      {
+        id: 'vehicle',
+        node: 'vehicle',
+        updated_at: '2026-06-09T18:29:55.000Z',
+        payload: {
+          speedMph: 0,
+          gpsFix: true,
+          gpsLat: 34.096976,
+          gpsLng: -118.052991,
+          gpsAgeMs: 1000,
+          gpsSatellites: 14,
+          gpsElevationFt: 210,
+        },
+      },
+      new Date('2026-06-09T18:30:00Z')
+    )
+
+    expect(status.dataSource).toBe('telemetry')
+    expect(status.routeConfidence).toBe('off-route')
+    expect(status.distanceFromRouteMeters).toBeGreaterThan(1_000)
+    expect(status.lat).toBe(34.096976)
+    expect(status.lng).toBe(-118.052991)
+    expect(status.status).toBe('GPS off route / test location')
   })
 })

@@ -7,6 +7,7 @@ import {
   type PublicRouteProgress,
 } from '@/lib/publicRaceRoute'
 import type { TelemetryLatestRow } from '@/lib/redisTelemetry'
+import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
 
 export type PublicSponsor = {
   name: string
@@ -18,7 +19,7 @@ export type PublicRaceStatus = {
   dataSource: 'telemetry' | 'mock'
   telemetryAgeSeconds: number | null
   telemetryUpdatedAt: string | null
-  routeConfidence: PublicRouteProgress['confidence'] | 'unavailable'
+  routeConfidence: PublicRouteProgress['confidence'] | 'live' | 'unavailable'
   distanceFromRouteMeters: number | null
   speedMph: number
   avgSpeedMph: number
@@ -166,11 +167,12 @@ export function getPublicRaceStatusFromTelemetry(
   const telemetry = parseEsp32TelemetryPacket(
     (latestRow.payload ?? {}) as Parameters<typeof parseEsp32TelemetryPacket>[0]
   )
+  const liveGps = getLiveTelemetryGpsPosition(telemetry)
   const progress =
-    telemetry.gpsLat !== undefined && telemetry.gpsLng !== undefined
+    liveGps
       ? calculatePublicRouteProgress({
-          lat: telemetry.gpsLat,
-          lng: telemetry.gpsLng,
+          lat: liveGps.lat,
+          lng: liveGps.lng,
         })
       : null
 
@@ -195,7 +197,12 @@ export function getPublicRaceStatusFromTelemetry(
     dataSource: 'telemetry',
     telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
     telemetryUpdatedAt: latestRow.updated_at,
-    routeConfidence: progress.confidence,
+    routeConfidence:
+      progress.confidence === 'off-route'
+        ? 'off-route'
+        : liveGps?.fix
+          ? 'live'
+          : progress.confidence,
     distanceFromRouteMeters: Math.round(progress.distanceFromRouteMeters),
     speedMph: telemetry.speedMph,
     avgSpeedMph: telemetry.speedMph,
@@ -217,9 +224,17 @@ export function getPublicRaceStatusFromTelemetry(
     currentSegment,
     nextStop: nextStop?.label ?? 'Finish',
     eta: etaFromSpeed(progress.milesLeft, telemetry.speedMph, now),
-    status: statusFromTelemetryAge(latestRow.updated_at, now, progress.confidence),
-    lat: progress.lat,
-    lng: progress.lng,
+    status: statusFromTelemetryAge(
+      latestRow.updated_at,
+      now,
+      progress.confidence === 'off-route'
+        ? 'off-route'
+        : liveGps?.fix
+          ? 'live'
+          : progress.confidence
+    ),
+    lat: liveGps?.lat ?? progress.lat,
+    lng: liveGps?.lng ?? progress.lng,
     routeProgressPct: progress.routeProgressPct,
     instagramUrl: 'https://www.instagram.com/',
     sponsors: publicRaceSponsors,
@@ -256,13 +271,14 @@ function ageSeconds(updatedAt: string | null | undefined, now: Date) {
 function statusFromTelemetryAge(
   updatedAt: string | null | undefined,
   now: Date,
-  confidence: PublicRouteProgress['confidence'] | 'unavailable' = 'unavailable'
+  confidence: PublicRaceStatus['routeConfidence'] = 'unavailable'
 ) {
   const age = ageSeconds(updatedAt, now)
 
   if (age !== null && age > 60) return 'Telemetry delayed'
   if (confidence === 'unavailable') return 'Waiting for GPS'
-  if (confidence === 'off-route') return 'GPS off course'
+  if (confidence === 'off-route') return 'GPS off route / test location'
+  if (confidence === 'live') return 'Live GPS'
   if (confidence === 'low') return 'GPS approximate'
   return 'Live on course'
 }

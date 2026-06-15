@@ -94,7 +94,22 @@ export default function PublicRaceLeafletMap({
           />
         ))}
         <Marker icon={rx2Icon} position={currentPosition}>
-          <Popup>Current RX2 Position</Popup>
+          <Popup>
+            <div className="grid gap-1 text-sm">
+              <strong>Current RX2 Position</strong>
+              <span>
+                {raceStatus.lat.toFixed(6)}, {raceStatus.lng.toFixed(6)}
+              </span>
+              <span>
+                GPS:{' '}
+                {raceStatus.routeConfidence === 'off-route'
+                  ? 'off route / test location'
+                  : raceStatus.routeConfidence === 'live'
+                    ? 'live'
+                    : raceStatus.routeConfidence}
+              </span>
+            </div>
+          </Popup>
         </Marker>
         <Marker icon={nextStopIcon} position={[nextStop.lat, nextStop.lng]}>
           <Popup>Next Stop: {nextStop.label}</Popup>

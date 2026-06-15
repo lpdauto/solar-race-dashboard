@@ -29,6 +29,12 @@ type CourseMapProps = {
   currentLocation?: {
     lat: number
     lng: number
+    label?: string
+    fix?: boolean
+    ageMs?: number
+    satellites?: number
+    heading?: number
+    elevationFt?: number
   }
   heightClass?: string
   showAllDays?: boolean
@@ -92,7 +98,13 @@ export default function CourseMapClient({
   )
   const currentDay =
     days.find((day) => day.day === currentDayNumber) ?? visibleDays[0]
-  const bounds = useMemo(() => getDayBounds(visibleDays), [visibleDays])
+  const bounds = useMemo(
+    () => [
+      ...getDayBounds(visibleDays),
+      ...(currentLocation ? [[currentLocation.lat, currentLocation.lng] as [number, number]] : []),
+    ],
+    [currentLocation, visibleDays]
+  )
   const currentDayBounds = useMemo(
     () => (currentDay ? getCurrentDayBounds(currentDay) : bounds),
     [bounds, currentDay]
@@ -255,9 +267,25 @@ export default function CourseMapClient({
               <Popup>
                 <div className="grid gap-1 text-sm">
                   <strong>Current Vehicle</strong>
+                  {currentLocation.label ? <span>{currentLocation.label}</span> : null}
                   <span>
                     {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}
                   </span>
+                  {currentLocation.fix !== undefined ? (
+                    <span>GPS fix: {currentLocation.fix ? 'available' : 'unavailable'}</span>
+                  ) : null}
+                  {currentLocation.ageMs !== undefined ? (
+                    <span>GPS age: {Math.round(currentLocation.ageMs / 1000)}s</span>
+                  ) : null}
+                  {currentLocation.satellites !== undefined ? (
+                    <span>Satellites: {currentLocation.satellites.toFixed(0)}</span>
+                  ) : null}
+                  {currentLocation.heading !== undefined ? (
+                    <span>Heading: {currentLocation.heading.toFixed(0)} deg</span>
+                  ) : null}
+                  {currentLocation.elevationFt !== undefined ? (
+                    <span>Altitude: {currentLocation.elevationFt.toFixed(0)} ft</span>
+                  ) : null}
                 </div>
               </Popup>
             </Marker>
