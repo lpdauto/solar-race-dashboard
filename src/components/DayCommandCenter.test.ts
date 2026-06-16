@@ -21,7 +21,7 @@ describe('strategy forecast net energy formatting', () => {
 })
 
 describe('vehicle systems GPS status', () => {
-  it('keeps cloud GPS available when vehicle telemetry freshness is offline', () => {
+  it('keeps cloud GPS unavailable when vehicle telemetry freshness is offline', () => {
     const gps = getDisplayedGpsStatus({
       source: 'cloud',
       telemetry: {
@@ -37,11 +37,29 @@ describe('vehicle systems GPS status', () => {
       vehicleIsOnline: false,
     })
 
-    expect(gps.hasFix).toBe(true)
+    expect(gps.hasFix).toBe(false)
     expect(gps.latLon).toBe('34.096981, -118.052990')
+    expect(gps.statusLabel).toBe('Vehicle offline')
     expect(gps.statusMessage).toBe(
-      'GPS coordinates are available; vehicle telemetry is stale or offline.'
+      'GPS unavailable because vehicle telemetry is offline.'
     )
+  })
+
+  it('allows cloud GPS only when vehicle telemetry is online', () => {
+    const gps = getDisplayedGpsStatus({
+      source: 'cloud',
+      telemetry: {
+        gpsLat: 34.096981,
+        gpsLng: -118.05299,
+        gpsFix: true,
+        gpsAgeMs: 1000,
+      } as TelemetryData,
+      geolocation: emptyGeolocation,
+      vehicleIsOnline: true,
+    })
+
+    expect(gps.hasFix).toBe(true)
+    expect(gps.statusMessage).toBe('Vehicle GPS fix available.')
   })
 
   it('keeps GPS unavailable when vehicle telemetry is offline and coordinates are missing', () => {

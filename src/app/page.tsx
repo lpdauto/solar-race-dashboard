@@ -19,7 +19,12 @@ const riskStyles: Record<RiskLevel, string> = {
 export default function HomePage() {
   const [courseMapExpanded, setCourseMapExpanded] = useState(false)
   const telemetryController = useTelemetry()
-  const liveGps = getLiveTelemetryGpsPosition(telemetryController.telemetry)
+  const vehicleTelemetryLive =
+    telemetryController.effectiveStatus === 'connected' ||
+    telemetryController.effectiveStatus === 'simulated'
+  const liveGps = vehicleTelemetryLive
+    ? getLiveTelemetryGpsPosition(telemetryController.telemetry)
+    : null
   const routeProgress = liveGps
     ? calculatePublicRouteProgress({ lat: liveGps.lat, lng: liveGps.lng })
     : null
@@ -69,9 +74,7 @@ export default function HomePage() {
               telemetryConnectionError={telemetryController.connectionError}
               cloudHealth={telemetryController.cloudHealth}
               vehiclePacketAgeSeconds={telemetryController.effectivePacketAgeSeconds}
-              telemetryConnected={
-                telemetryController.effectiveConnectionStatus === 'connected'
-              }
+              telemetryConnected={vehicleTelemetryLive}
             />
           </div>
         </header>

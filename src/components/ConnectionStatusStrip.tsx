@@ -53,7 +53,7 @@ export default function ConnectionStatusStrip({
       vehiclePacketAgeSeconds,
       telemetryConnectionError,
     }),
-    vehicleGpsCard({ liveGps, telemetryStatus }),
+    vehicleGpsCard({ liveGps, telemetryStatus, telemetryConnected }),
     batteryTelemetryCard('Battery A Telemetry', 'battery-a', cloudHealth),
     batteryTelemetryCard('Battery B Telemetry', 'battery-b', cloudHealth),
   ]
@@ -198,16 +198,29 @@ function vehicleTelemetryCard({
 function vehicleGpsCard({
   liveGps,
   telemetryStatus,
+  telemetryConnected,
 }: {
   liveGps?: LiveTelemetryGpsPosition | null
   telemetryStatus: TelemetryConnectionStatus
+  telemetryConnected: boolean
 }): ConnectionItem {
-  if (liveGps) {
+  if (telemetryStatus === 'error') {
     return {
       name: 'Vehicle GPS',
-      status: 'Connected',
-      helper: `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`,
-      tone: 'green',
+      status: 'Error',
+      helper: 'GPS depends on vehicle ESP32 telemetry',
+      tone: 'red',
+    }
+  }
+
+  if (telemetryStatus === 'simulated') {
+    return {
+      name: 'Vehicle GPS',
+      status: 'Simulated',
+      helper: liveGps
+        ? `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`
+        : 'Using simulator GPS state',
+      tone: 'yellow',
     }
   }
 
@@ -215,17 +228,26 @@ function vehicleGpsCard({
     return {
       name: 'Vehicle GPS',
       status: 'Stale',
-      helper: 'Vehicle packet present, GPS fix missing',
+      helper: 'Vehicle telemetry stale; GPS is not live',
       tone: 'yellow',
     }
   }
 
-  if (telemetryStatus === 'error') {
+  if (!telemetryConnected && telemetryStatus !== 'connected') {
     return {
       name: 'Vehicle GPS',
-      status: 'Error',
-      helper: 'GPS depends on vehicle telemetry',
-      tone: 'red',
+      status: 'Disconnected',
+      helper: 'GPS unavailable until vehicle ESP32 is connected',
+      tone: 'gray',
+    }
+  }
+
+  if (liveGps) {
+    return {
+      name: 'Vehicle GPS',
+      status: 'Connected',
+      helper: `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`,
+      tone: 'green',
     }
   }
 
