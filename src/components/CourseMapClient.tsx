@@ -349,11 +349,11 @@ export default function CourseMapClient({
         </MapContainer>
 
         <div className="pointer-events-none absolute left-2 right-2 top-2 z-[500] grid gap-2 sm:left-3 sm:right-auto sm:top-3 sm:max-w-[18rem]">
-          <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
+          <div className="pointer-events-auto rounded-md border border-white/10 bg-black/75 p-2 shadow-xl backdrop-blur sm:rounded-lg sm:bg-black/80 sm:p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ff8fcb] sm:text-xs">
               Course Map
             </p>
-            <dl className="mt-2 grid gap-1 text-xs text-[#cfcfcf]">
+            <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-[#cfcfcf] sm:mt-2 sm:grid-cols-1 sm:gap-1 sm:text-xs">
               <MapMetric label="Current day" value={currentDayNumber ? `Day ${currentDayNumber}` : 'Full route'} />
               <MapMetric label="Current mile" value={currentMile !== undefined ? currentMile.toFixed(1) : '--'} />
               <MapMetric label="Remaining" value={distanceRemaining !== null ? `${distanceRemaining.toFixed(1)} mi` : '--'} />
@@ -361,25 +361,25 @@ export default function CourseMapClient({
                 <MapMetric label="Segment severity" value={currentSegment?.risk ?? currentDay?.riskLevel ?? '--'} />
               ) : null}
             </dl>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3">
               <button
                 type="button"
                 onClick={fitFullRoute}
-                className="rounded-md border border-[#ff3ea5]/30 bg-[#ff3ea5]/15 px-2 py-2 text-xs font-bold text-[#ff8fcb] transition hover:bg-[#ff3ea5]/25"
+                className="rounded-md border border-[#ff3ea5]/30 bg-[#ff3ea5]/15 px-2 py-1.5 text-[11px] font-bold text-[#ff8fcb] transition hover:bg-[#ff3ea5]/25 sm:py-2 sm:text-xs"
               >
                 Fit full
               </button>
               <button
                 type="button"
                 onClick={fitCurrentDay}
-                className="rounded-md border border-white/10 bg-white/10 px-2 py-2 text-xs font-bold text-white transition hover:border-[#ff3ea5]/30"
+                className="rounded-md border border-white/10 bg-white/10 px-2 py-1.5 text-[11px] font-bold text-white transition hover:border-[#ff3ea5]/30 sm:py-2 sm:text-xs"
               >
                 Fit day
               </button>
             </div>
           </div>
 
-          <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur">
+          <div className="pointer-events-auto hidden rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur sm:block">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-white">
               Legend
             </p>
@@ -403,6 +403,32 @@ export default function CourseMapClient({
             </div>
           </div>
         </div>
+
+        <details className="pointer-events-auto absolute bottom-2 left-2 z-[500] max-w-[calc(100%-4.5rem)] rounded-md border border-white/10 bg-black/75 p-2 shadow-xl backdrop-blur sm:hidden">
+          <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.16em] text-white">
+            Legend
+          </summary>
+          <div className="mt-2 max-h-32 overflow-y-auto pr-1">
+            <div className="grid gap-1.5 text-[11px] font-semibold text-[#cfcfcf]">
+              {showRiskAnnotations ? (
+                <>
+                  <LegendItem color="#22c55e" label="Low elevation severity" />
+                  <LegendItem color="#facc15" label="Moderate" />
+                  <LegendItem color="#fb923c" label="High" />
+                  <LegendItem color="#ef4444" label="Severe" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              ) : (
+                <>
+                  <LegendItem color="#22c55e" label="Route segment" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              )}
+            </div>
+          </div>
+        </details>
       </div>
 
       <p className="border-t border-white/10 bg-black/30 px-4 py-3 text-xs leading-5 text-[#a8a8a8]">
