@@ -3600,6 +3600,7 @@ function VehicleSystemsPanel({
     source,
     telemetry,
     geolocation,
+    vehicleIsOnline: vehicleFreshness.vehicleStatus === 'online',
   })
   const gpsAgeSeconds = displayedGps.ageSeconds
   const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
@@ -3745,13 +3746,13 @@ function VehicleSystemsPanel({
 
       <SystemAccordion
         title="GPS"
-        status={displayedGps.hasFix ? 'Live fix' : 'No fix'}
-        tone={displayedGps.hasFix ? gpsFreshness.tone : 'neutral'}
+        status={displayedGps.hasFix ? 'Live fix' : displayedGps.statusLabel}
+        tone={displayedGps.hasFix ? gpsFreshness.tone : displayedGps.statusTone}
       >
         <SystemSubsection title="Info">
           <SystemMetricGrid>
             <StatusMetric label="GPS provider" value={displayedGps.permission} />
-            <ConnectionField label="GPS fix status" value={displayedGps.hasFix ? 'available' : 'unavailable'} tone={displayedGps.hasFix ? gpsFreshness.tone : 'neutral'} />
+            <ConnectionField label="GPS fix status" value={displayedGps.hasFix ? 'available' : 'unavailable'} tone={displayedGps.hasFix ? gpsFreshness.tone : displayedGps.statusTone} />
             <StatusMetric label="Latitude/longitude" value={displayedGps.latLon} />
             <StatusMetric label="Satellites" value={displayedGps.satellites} />
             <StatusMetric label="Heading" value={displayedGps.heading} />
@@ -3765,7 +3766,7 @@ function VehicleSystemsPanel({
             <ConnectionField label="Vehicle GPS dependency/status" value={displayedVehicleNodeStatus} tone={vehicleFreshness.tone} />
             <StatusMetric label="Last GPS packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
             <StatusMetric label="GPS packet age" value={displayedGps.age} />
-            <StatusMetric label="Status message" value={displayedGps.hasFix ? 'Vehicle GPS fix available' : 'Waiting for vehicle GPS fix'} />
+            <StatusMetric label="Status message" value={displayedGps.statusMessage} />
           </SystemMetricGrid>
         </SystemSubsection>
       </SystemAccordion>
@@ -3777,10 +3778,12 @@ function getDisplayedGpsStatus({
   source,
   telemetry,
   geolocation,
+  vehicleIsOnline,
 }: {
   source: TelemetrySource
   telemetry: TelemetryData | null
   geolocation: ReturnType<typeof useGeolocation>
+  vehicleIsOnline: boolean
 }) {
   const telemetryHasCoordinates = hasValidGpsCoordinates(
     telemetry?.gpsLat,
@@ -3794,12 +3797,15 @@ function getDisplayedGpsStatus({
   const latitude = useTelemetryGps ? telemetry?.gpsLat : geolocation.latitude
   const longitude = useTelemetryGps ? telemetry?.gpsLng : geolocation.longitude
   const hasCoordinates = hasValidGpsCoordinates(latitude, longitude)
-  const hasFix =
+  const rawHasFix =
     telemetryHasCoordinates ||
     (useTelemetryGps && telemetry?.gpsFix === true) ||
     (!useTelemetryGps &&
       geolocation.latitude !== null &&
       geolocation.longitude !== null)
+  const hasFix = useTelemetryGps
+    ? vehicleIsOnline && rawHasFix
+    : rawHasFix
   const telemetryGpsAgeSeconds =
     typeof telemetry?.gpsAgeMs === 'number' && Number.isFinite(telemetry.gpsAgeMs)
       ? Math.max(0, Math.round(telemetry.gpsAgeMs / 1000))
@@ -3827,6 +3833,16 @@ function getDisplayedGpsStatus({
     permission,
     permissionTone: gpsPermissionTone(permission, geolocation.status),
     hasFix,
+    statusLabel: useTelemetryGps && !vehicleIsOnline ? 'Vehicle offline' : 'No fix',
+    statusTone: (useTelemetryGps && !vehicleIsOnline ? 'danger' : 'neutral') as
+      | 'danger'
+      | 'neutral',
+    statusMessage:
+      useTelemetryGps && !vehicleIsOnline
+        ? 'GPS unavailable because vehicle telemetry is offline.'
+        : hasFix
+          ? 'Vehicle GPS fix available.'
+          : 'Waiting for vehicle GPS fix.',
     ageSeconds,
     latLon,
     age: ageSeconds !== undefined ? `${ageSeconds}s` : '--',
