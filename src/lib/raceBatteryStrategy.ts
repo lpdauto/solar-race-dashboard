@@ -263,10 +263,12 @@ export function planBatterySwap({
 
   if (bothPacksLow) {
     return recommendation({
-      action: 'swap_now',
+      action: spareMeaningfullyBetter ? 'swap_now' : 'no_swap',
       confidence: 'low',
       reason:
-        'Both packs are low. Swap only if needed to protect the active pack, reduce speed, and prioritize charging before the next segment.',
+        spareMeaningfullyBetter
+          ? 'Both packs are low, but the spare pack is meaningfully higher. Swap only if needed to protect the active pack, reduce speed, and prioritize charging before the next segment.'
+          : 'Both packs are low and the spare pack is not meaningfully higher. Hold current pack, reduce speed, and prioritize charging before the next segment.',
       activePackId,
       sparePackId,
       activeSocPercent,
@@ -278,13 +280,27 @@ export function planBatterySwap({
   }
 
   if (activeSocPercent < forceSwapSocPercent) {
+    if (!spareMeaningfullyBetter) {
+      return recommendation({
+        action: 'no_swap',
+        confidence: 'low',
+        reason:
+          'Active pack is below force-swap reserve, but the spare pack is not meaningfully higher. Hold current pack, reduce speed, and reassess at the next stop.',
+        activePackId,
+        sparePackId,
+        activeSocPercent,
+        spareSocPercent,
+        projectedEndSegmentSocPercent,
+        projectedNextStopSocPercent,
+        projectedEndDaySocPercent,
+      })
+    }
+
     return recommendation({
       action: 'swap_now',
       confidence: combineConfidence(baseConfidence, spareWeak ? 'low' : 'high'),
       reason:
-        spareSocPercent > activeSocPercent
-          ? 'Swap now. Active pack is below force-swap reserve.'
-          : 'Active pack is below force-swap reserve, but the spare is not stronger. Swap is low confidence; reduce speed and charge if possible.',
+        'Swap now. Active pack is below force-swap reserve and the spare pack is meaningfully higher.',
       activePackId,
       sparePackId,
       activeSocPercent,

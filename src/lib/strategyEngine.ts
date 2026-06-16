@@ -18,6 +18,7 @@ import {
   getSafeWhPerMile,
 } from '@/lib/safeWhPerMile'
 import { getSafeStrategySoc } from '@/lib/safeSoc'
+import { calculateDrivenOverlapMiles } from '@/lib/routeMileage'
 import type { TelemetryData, TelemetrySource } from '@/types/telemetry'
 
 export type RaceMode = 'Conserve' | 'Normal' | 'Attack'
@@ -97,12 +98,15 @@ const riskEnergyMultiplier: Record<RiskLevel, number> = {
 }
 
 const segmentTypeEnergyMultiplier: Record<SegmentType, number> = {
+  drive: 1,
   flat: 1,
   climb: 1.18,
   descent: 0.82,
   town: 1.12,
   caution: 1.08,
   stop: 1.15,
+  controlled_stop: 1.15,
+  mandatory_trailer: 0,
 }
 
 const elevationAdjustmentCapPercent = 0.35
@@ -129,6 +133,18 @@ export function estimateSegmentEnergy({
   segmentStartMile?: number
   segmentEndMile?: number
 }): SegmentEnergyEstimate {
+  if (segment.type === 'mandatory_trailer') {
+    return {
+      expectedWh: 0,
+      expectedWhPerMile: 0,
+      energyMultiplier: 0,
+      elevationAdjusted: false,
+      elevationEnergyWh: 0,
+      elevationSocCostPercent: 0,
+      elevationWarnings: [],
+    }
+  }
+
   const rawEnergyMultiplier = getSegmentEnergyMultiplier(segment)
   const configBaselineWhPerMile = estimateVehicleBaselineWhPerMile(vehicleConfig)
   const routeBaselineWhPerMile = getSafeWhPerMile(
@@ -714,7 +730,12 @@ function estimateRemainingRouteEnergyDetails({
   return remainingSegments.reduce<RouteEnergyEstimate>((total, segment) => {
     const segmentStart = Math.max(segment.mileStart, currentMile)
     const segmentEnd = Math.min(segment.mileEnd, stopMile)
-    const remainingSegmentMiles = Math.max(0, segmentEnd - segmentStart)
+    const remainingSegmentMiles = calculateDrivenOverlapMiles({
+      segment,
+      raceDay,
+      startMile: segmentStart,
+      endMile: segmentEnd,
+    })
     const estimate = estimateSegmentEnergy({
       segment,
       raceDay,

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import AppNavigation from '@/components/AppNavigation'
-import OfflineStatusBanner from '@/components/OfflineStatusBanner'
 import ServiceWorkerCleanup from '@/components/ServiceWorkerCleanup'
 import { Suspense } from 'react'
 import './globals.css'
@@ -26,7 +25,6 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ServiceWorkerCleanup />
-        <OfflineStatusBanner />
         <Suspense fallback={null}>
           <AppNavigation />
         </Suspense>

@@ -64,10 +64,14 @@ export function simulateDayEnergy({
   distanceMiles,
   elevationStats,
   carSetup,
+  scoringMiles = distanceMiles,
+  traileringSolarHours = 0,
 }: {
   distanceMiles: number
   elevationStats: ElevationStats
   carSetup: CarSetup
+  scoringMiles?: number
+  traileringSolarHours?: number
 }): EnergySimulationResult {
   const massKg =
     (carSetup.vehicleWeightLbs + carSetup.driverCrewWeightLbs) * LBS_TO_KG
@@ -85,7 +89,8 @@ export function simulateDayEnergy({
     ((rollingForceNewtons + dragForceNewtons) * velocityMetersPerSecond) /
     carSetup.drivetrainEfficiency
   const flatRoadWhPerMile = flatRoadPowerWatts / carSetup.cruiseSpeedMph
-  const flatRoadWh = flatRoadWhPerMile * distanceMiles
+  const drivenMiles = Math.max(0, scoringMiles)
+  const flatRoadWh = flatRoadWhPerMile * drivenMiles
   const climbWh =
     (massKg *
       9.81 *
@@ -102,7 +107,7 @@ export function simulateDayEnergy({
     3600
   const solarWh =
     carSetup.solarWatts *
-    carSetup.solarDrivingHours *
+    (carSetup.solarDrivingHours + Math.max(0, traileringSolarHours)) *
     SOLAR_PRACTICAL_FACTOR
   const grossWh = flatRoadWh + climbWh
   const netWh = Math.max(0, grossWh - regenWh - solarWh)
@@ -119,7 +124,7 @@ export function simulateDayEnergy({
     netWh,
     netKwh,
     batteryPercentUsed,
-    estimatedWhPerMile: distanceMiles > 0 ? netWh / distanceMiles : 0,
+    estimatedWhPerMile: drivenMiles > 0 ? netWh / drivenMiles : 0,
     predictedFinishSocPercent,
     riskLevel: classifyEnergyRisk(predictedFinishSocPercent),
   }

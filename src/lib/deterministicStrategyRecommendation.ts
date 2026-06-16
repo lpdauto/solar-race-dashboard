@@ -102,6 +102,8 @@ export function buildDeterministicStrategyRecommendation({
   const activePackSocPercent = activePack.socPercent
   const sparePackSocPercent = sparePack.socPercent
   const spareAdvantage = sparePackSocPercent - activePackSocPercent
+  const spareMeaningfullyHigher =
+    spareAdvantage >= meaningfulSpareAdvantagePercent
   const thermalHigh =
     (telemetry?.controllerTempC ?? 0) > 85 ||
     (telemetry?.motorTempC ?? 0) > 95
@@ -152,19 +154,42 @@ export function buildDeterministicStrategyRecommendation({
     warnings: dedupeWarnings(warnings),
   }
 
-  if (
+  const criticalEnergyProjection =
     swapRecommendation.action === 'swap_now' ||
     activePackSocPercent < forceSwapSocPercent ||
     below(projectedNextStopSocPercent, forceSwapSocPercent) ||
     below(projectedEndSegmentSocPercent, forceSwapSocPercent)
-  ) {
+
+  if (criticalEnergyProjection && !spareMeaningfullyHigher) {
+    return {
+      ...shared,
+      command: 'reduce_speed',
+      severity: 'urgent',
+      title: 'Protect Reserve',
+      reason:
+        criticalProjectionReason({
+          projectedNextStopSocPercent,
+          projectedEndSegmentSocPercent,
+          activePackSocPercent,
+        }) +
+        ' Spare pack is not meaningfully higher than active pack; reduce speed and reassess at the next stop instead of swapping.',
+      recommendedSpeedMph: reduceSpeed(currentSpeedMph),
+    }
+  }
+
+  if (criticalEnergyProjection) {
     return {
       ...shared,
       command: 'swap_now',
       severity: 'urgent',
       title: 'Swap Now',
       reason:
-        'Active pack is below reserve or projected to fall below reserve before the next safe stop.',
+        criticalProjectionReason({
+          projectedNextStopSocPercent,
+          projectedEndSegmentSocPercent,
+          activePackSocPercent,
+        }) +
+        ' Spare pack is meaningfully higher than active pack; swap now.',
       recommendedSpeedMph: reduceSpeed(currentSpeedMph),
     }
   }
@@ -276,6 +301,30 @@ function increaseSpeed(currentSpeedMph: number) {
     rx2Config.maxRecommendedSpeedMph,
     Math.round(currentSpeedMph + 2)
   )
+}
+
+function criticalProjectionReason({
+  projectedNextStopSocPercent,
+  projectedEndSegmentSocPercent,
+  activePackSocPercent,
+}: {
+  projectedNextStopSocPercent?: number
+  projectedEndSegmentSocPercent?: number
+  activePackSocPercent: number
+}) {
+  if (activePackSocPercent < forceSwapSocPercent) {
+    return 'Active pack SOC is below force-swap reserve threshold.'
+  }
+
+  if (below(projectedNextStopSocPercent, forceSwapSocPercent)) {
+    return 'Projected next-stop SOC is below reserve threshold.'
+  }
+
+  if (below(projectedEndSegmentSocPercent, forceSwapSocPercent)) {
+    return 'Projected end-segment SOC is below reserve threshold.'
+  }
+
+  return 'Critical energy projection threshold was crossed.'
 }
 
 function below(value: number | undefined, threshold: number) {

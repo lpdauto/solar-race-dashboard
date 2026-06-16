@@ -162,6 +162,55 @@ describe('deterministic strategy recommendation', () => {
     expect(recommendation.severity).toBe('urgent')
   })
 
+  it('uses energy management instead of swap_now when projected next-stop SOC is low but packs are equal', () => {
+    const recommendation = buildRecommendation({
+      swapRecommendation: {
+        ...noSwapRecommendation,
+        action: 'plan_swap',
+        confidence: 'low',
+        reason:
+          'Active pack projection is critical, but the spare is not meaningfully stronger.',
+        activeSocPercent: 100,
+        spareSocPercent: 100,
+      },
+      activeSocPercent: 100,
+      spareSocPercent: 100,
+      prediction: {
+        ...basePrediction,
+        projectedNextStopSocPercent: 11,
+        projectedEndSegmentSocPercent: 18,
+      },
+    })
+
+    expect(recommendation.command).toBe('reduce_speed')
+    expect(recommendation.title).toBe('Protect Reserve')
+    expect(recommendation.reason).toContain('Projected next-stop SOC')
+    expect(recommendation.reason).toContain('Spare pack is not meaningfully higher')
+  })
+
+  it('allows swap_now when projected next-stop SOC is low and spare is meaningfully higher', () => {
+    const recommendation = buildRecommendation({
+      swapRecommendation: {
+        ...noSwapRecommendation,
+        action: 'swap_now',
+        confidence: 'medium',
+        reason: 'Swap now.',
+        activeSocPercent: 50,
+        spareSocPercent: 80,
+      },
+      activeSocPercent: 50,
+      spareSocPercent: 80,
+      prediction: {
+        ...basePrediction,
+        projectedNextStopSocPercent: 11,
+        projectedEndSegmentSocPercent: 18,
+      },
+    })
+
+    expect(recommendation.command).toBe('swap_now')
+    expect(recommendation.reason).toContain('Spare pack is meaningfully higher')
+  })
+
   it('does not recommend aggressive speed increases when confidence is low', () => {
     const recommendation = buildRecommendation({
       prediction: {

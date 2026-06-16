@@ -256,7 +256,7 @@ export default function RaceTrackerClient() {
             accent="blush"
           />
           <MetricTile
-            label="Total Miles Completed / Miles Left"
+            label="Physical Route Progress / Remaining"
             value={`${raceStatus.milesCompleted.toFixed(1)} / ${raceStatus.milesLeft.toFixed(1)}`}
             detail={`${progressPercent.toFixed(0)}% complete`}
             accent="magenta"

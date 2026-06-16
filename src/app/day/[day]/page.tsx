@@ -1,16 +1,11 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { Suspense } from 'react'
-import DayCommandCenter from '@/components/DayCommandCenter'
-import {
-  getRaceDay,
-  raceRoute,
-} from '@/data/raceRoute'
+import { notFound, redirect } from 'next/navigation'
+import { getRaceDay, raceRoute } from '@/data/raceRoute'
 
 type DayPageProps = {
   params: Promise<{
     day: string
   }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 export function generateStaticParams() {
@@ -34,7 +29,10 @@ export async function generateMetadata({ params }: DayPageProps) {
   }
 }
 
-export default async function DayDetailPage({ params }: DayPageProps) {
+export default async function LegacyDayRedirectPage({
+  params,
+  searchParams,
+}: DayPageProps) {
   const { day } = await params
   const raceDay = getRaceDay(day)
 
@@ -42,9 +40,43 @@ export default async function DayDetailPage({ params }: DayPageProps) {
     notFound()
   }
 
-  return (
-    <Suspense fallback={null}>
-      <DayCommandCenter raceDay={raceDay} />
-    </Suspense>
-  )
+  const resolvedSearchParams = await searchParams
+  const role = legacyRoleFromSearchParams(resolvedSearchParams)
+  const nextSearchParams = new URLSearchParams()
+  const node = firstSearchParam(resolvedSearchParams.node)
+
+  if (role === 'vehicle-systems' && node) {
+    nextSearchParams.set('node', node)
+  }
+
+  const query = nextSearchParams.toString()
+
+  redirect(`/day/${raceDay.day}/${role}${query ? `?${query}` : ''}`)
+}
+
+function legacyRoleFromSearchParams(
+  searchParams: Record<string, string | string[] | undefined>
+) {
+  const view = firstSearchParam(searchParams.view)
+  const role = firstSearchParam(searchParams.role)
+
+  if (view === 'race-day') return 'navigation'
+  if (view === 'telemetry') return 'vehicle-systems'
+  if (view === 'setup' || view === 'reports') return 'operations'
+  if (
+    view === 'mission-control' &&
+    (role === 'race-captain' ||
+      role === 'strategy' ||
+      role === 'navigation' ||
+      role === 'vehicle-systems' ||
+      role === 'operations')
+  ) {
+    return role
+  }
+
+  return 'race-captain'
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }

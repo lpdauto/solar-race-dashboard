@@ -8,6 +8,7 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  ZoomControl,
   useMap,
 } from 'react-leaflet'
 import type { RaceDay, RiskLevel, RoutePoint } from '@/data/raceRoute'
@@ -21,6 +22,10 @@ import {
   getSeverityColor,
   type MapSeverity,
 } from '@/lib/mapSeverity'
+import {
+  mandatoryTraileringLegendLabel,
+  mandatoryTraileringMapColor,
+} from '@/lib/routeMileage'
 
 type CourseMapProps = {
   days: RaceDay[]
@@ -123,6 +128,12 @@ export default function CourseMapClient({
       visibleDays.flatMap((day) =>
         day.routePoints.slice(0, -1).map((point, index) => {
           const pointB = day.routePoints[index + 1]
+          const midpointMile = (point.mile + pointB.mile) / 2
+
+          if (isMandatoryTraileringMile(day, midpointMile)) {
+            return null
+          }
+
           const severity = classifyRouteSegmentSeverity(
             point,
             pointB,
@@ -145,7 +156,7 @@ export default function CourseMapClient({
             isCurrentDay,
             isCurrentSegment,
           }
-        })
+        }).filter((line): line is RouteLine => line !== null)
       ),
     [currentDayNumber, currentMile, visibleDays]
   )
@@ -158,6 +169,20 @@ export default function CourseMapClient({
     currentDay && currentMile !== undefined
       ? Math.max(0, currentDay.distanceMiles - currentMile)
       : null
+  const mandatoryTrailerSegments = useMemo(
+    () =>
+      visibleDays.flatMap((day) =>
+        day.segments
+          .filter(
+            (segment) =>
+              segment.type === 'mandatory_trailer' &&
+              segment.routeCoordinates &&
+              segment.routeCoordinates.length >= 2
+          )
+          .map((segment) => ({ day, segment }))
+      ),
+    [visibleDays]
+  )
 
   function fitFullRoute() {
     if (!mapRef.current || bounds.length === 0) return
@@ -177,8 +202,10 @@ export default function CourseMapClient({
           zoom={6}
           className="h-full w-full"
           scrollWheelZoom
+          zoomControl={false}
           ref={mapRef}
         >
+          <ZoomControl position="bottomright" />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -220,6 +247,35 @@ export default function CourseMapClient({
                   line={line}
                   showRiskAnnotations={showRiskAnnotations}
                 />
+              </Popup>
+            </Polyline>
+          ))}
+
+          {mandatoryTrailerSegments.map(({ day, segment }) => (
+            <Polyline
+              key={`mandatory-trailer-${day.day}-${segment.title}`}
+              positions={segment.routeCoordinates!.map((point) => [
+                point.lat,
+                point.lng,
+              ])}
+              pathOptions={{
+                color: mandatoryTraileringMapColor,
+                dashArray: '10 8',
+                opacity: 0.95,
+                weight: 7,
+              }}
+            >
+              <Popup>
+                <div className="grid gap-1 text-sm">
+                  <strong>{mandatoryTraileringLegendLabel}</strong>
+                  <span>{segment.title}</span>
+                  <span>
+                    Distance:{' '}
+                    {(segment.transportMiles ?? segment.mileEnd - segment.mileStart).toFixed(1)} mi
+                  </span>
+                  <span>Scoring miles: 0</span>
+                  <span>Strategy: battery preserved / solar charging opportunity</span>
+                </div>
               </Popup>
             </Polyline>
           ))}
@@ -292,7 +348,7 @@ export default function CourseMapClient({
           ) : null}
         </MapContainer>
 
-        <div className="pointer-events-none absolute left-3 top-3 z-[500] grid max-w-[18rem] gap-2">
+        <div className="pointer-events-none absolute left-2 right-2 top-2 z-[500] grid gap-2 sm:left-3 sm:right-auto sm:top-3 sm:max-w-[18rem]">
           <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
               Course Map
@@ -335,11 +391,13 @@ export default function CourseMapClient({
                   <LegendItem color="#fb923c" label="High" />
                   <LegendItem color="#ef4444" label="Severe" />
                   <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
                 </>
               ) : (
                 <>
                   <LegendItem color="#22c55e" label="Route segment" />
                   <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
                 </>
               )}
             </div>
@@ -404,6 +462,13 @@ function buildElevationRouteLines({
           : day.riskLevel
       const startMile = pointA.cumulativeMiles - dayStartMile
       const endMile = pointB.cumulativeMiles - dayStartMile
+      const midpointMile = (startMile + endMile) / 2
+
+      if (isMandatoryTraileringMile(day, midpointMile)) {
+        activeLine = null
+        continue
+      }
+
       const isCurrentDay = day.day === currentDayNumber
       const isCurrentSegment =
         isCurrentDay &&
@@ -452,6 +517,15 @@ function buildElevationRouteLines({
   }
 
   return lines
+}
+
+function isMandatoryTraileringMile(day: RaceDay, mile: number) {
+  return day.segments.some(
+    (segment) =>
+      segment.type === 'mandatory_trailer' &&
+      mile >= segment.mileStart &&
+      mile <= segment.mileEnd
+  )
 }
 
 function FitBounds({ bounds }: { bounds: Array<[number, number]> }) {
@@ -550,12 +624,23 @@ function MapMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LegendItem({ color, label }: { color: string; label: string }) {
+function LegendItem({
+  color,
+  label,
+  dashed = false,
+}: {
+  color: string
+  label: string
+  dashed?: boolean
+}) {
   return (
     <div className="flex items-center gap-2">
       <span
         className="h-2.5 w-6 rounded-full"
-        style={{ backgroundColor: color }}
+        style={{
+          backgroundColor: dashed ? 'transparent' : color,
+          borderTop: dashed ? `3px dashed ${color}` : undefined,
+        }}
       />
       <span>{label}</span>
     </div>

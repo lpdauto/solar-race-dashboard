@@ -30,12 +30,15 @@ const statusStyles: Record<PaceStatus, string> = {
 }
 
 const eventLabels: Record<RouteSegment['type'], string> = {
+  drive: 'Drive',
   climb: 'Climb',
   descent: 'Descent',
   flat: 'Flat',
   stop: 'Stop',
+  controlled_stop: 'Controlled Stop',
   town: 'Town',
   caution: 'Caution',
+  mandatory_trailer: 'Mandatory Trailering',
 }
 
 function formatTemperatureF(valueC?: number | null) {

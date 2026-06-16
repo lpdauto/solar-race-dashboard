@@ -75,14 +75,28 @@ describe('race battery A/B strategy', () => {
     expect(recommendation.spareSocPercent).toBe(80)
   })
 
-  it('returns swap_now when active pack is below 20% and spare is sufficient', () => {
+  it('returns swap_now when active pack is below 20% and spare is meaningfully higher', () => {
     const recommendation = planBatterySwap({
       batteryState: batteryStateWithSoc({ activeSoc: 18, spareSoc: 80 }),
       prediction: basePrediction,
     })
 
     expect(recommendation.action).toBe('swap_now')
-    expect(recommendation.reason).toContain('below force-swap reserve')
+    expect(recommendation.reason).toContain('meaningfully higher')
+  })
+
+  it('does not recommend swap_now when both packs are 100%', () => {
+    const recommendation = planBatterySwap({
+      batteryState: batteryStateWithSoc({ activeSoc: 100, spareSoc: 100 }),
+      prediction: {
+        ...basePrediction,
+        projectedNextStopSocPercent: 15,
+        projectedEndSegmentSocPercent: 15,
+      },
+    })
+
+    expect(recommendation.action).not.toBe('swap_now')
+    expect(recommendation.reason).toContain('not meaningfully stronger')
   })
 
   it('does not blindly swap now to a weak spare when active pack is in the planning band', () => {
@@ -100,15 +114,15 @@ describe('race battery A/B strategy', () => {
     expect(recommendation.reason).toContain('do not blind swap')
   })
 
-  it('warns clearly when both packs are low', () => {
+  it('avoids swap_now when both packs are low and the spare does not improve the situation', () => {
     const recommendation = planBatterySwap({
       batteryState: batteryStateWithSoc({ activeSoc: 18, spareSoc: 22 }),
       prediction: basePrediction,
     })
 
-    expect(recommendation.action).toBe('swap_now')
+    expect(recommendation.action).not.toBe('swap_now')
     expect(recommendation.confidence).toBe('low')
-    expect(recommendation.reason).toContain('Both packs are low')
+    expect(recommendation.reason).toContain('not meaningfully higher')
   })
 
   it('charges the spare pack over time from MPPT and clamps at 100%', () => {

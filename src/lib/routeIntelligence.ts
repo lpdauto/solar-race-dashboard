@@ -1,5 +1,6 @@
 import type { RaceDay, RiskLevel, RouteSegment, SegmentType } from '@/data/raceRoute'
 import { rx2Config } from '@/lib/race/rx2Config'
+import { calculateDrivenOverlapMiles } from '@/lib/routeMileage'
 import { getSafeWhPerMile } from '@/lib/safeWhPerMile'
 
 export type RouteRisk = {
@@ -64,12 +65,15 @@ const riskEnergyMultiplier: Record<RiskLevel, number> = {
 }
 
 const segmentTypeEnergyMultiplier: Record<SegmentType, number> = {
+  drive: 1,
   flat: 1,
   climb: 1.18,
   descent: 0.82,
   town: 1.12,
   caution: 1.08,
   stop: 1.15,
+  controlled_stop: 1.15,
+  mandatory_trailer: 0,
 }
 
 export function analyzeRouteIntelligence({
@@ -111,6 +115,7 @@ export function analyzeRouteIntelligence({
   const risks = summarizeRisks(segments, currentMile, lookaheadEndMile)
   const opportunities = summarizeOpportunities(segments, currentMile, lookaheadEndMile)
   const traileringOption = estimateTraileringOption({
+    raceDay,
     segments,
     currentMile,
     lookaheadEndMile,
@@ -233,6 +238,7 @@ function summarizeOpportunities(
 }
 
 function estimateTraileringOption({
+  raceDay,
   segments,
   currentMile,
   lookaheadEndMile,
@@ -244,6 +250,7 @@ function estimateTraileringOption({
   isFinalDay,
   isTraileringActive,
 }: {
+  raceDay: RaceDay
   segments: RouteSegment[]
   currentMile: number
   lookaheadEndMile: number
@@ -272,6 +279,7 @@ function estimateTraileringOption({
       totalWh +
       estimateSegmentWh({
         segment,
+        raceDay,
         currentMile,
         lookaheadEndMile,
         baselineWhPerMile,
@@ -283,6 +291,7 @@ function estimateTraileringOption({
       totalWh +
       estimateSegmentWh({
         segment,
+        raceDay,
         currentMile,
         lookaheadEndMile,
         baselineWhPerMile,
@@ -439,17 +448,24 @@ function routeRiskSeverity(segment: RouteSegment): RouteRisk['severity'] {
 
 function estimateSegmentWh({
   segment,
+  raceDay,
   currentMile,
   lookaheadEndMile,
   baselineWhPerMile,
 }: {
   segment: RouteSegment
+  raceDay: RaceDay
   currentMile: number
   lookaheadEndMile: number
   baselineWhPerMile: number
 }) {
   return (
-    segmentOverlapMiles(segment, currentMile, lookaheadEndMile) *
+    calculateDrivenOverlapMiles({
+      segment,
+      raceDay,
+      startMile: currentMile,
+      endMile: lookaheadEndMile,
+    }) *
     baselineWhPerMile *
     riskEnergyMultiplier[segment.risk] *
     segmentTypeEnergyMultiplier[segment.type]

@@ -1,153 +1,67 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import type { LiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
+import type {
+  CloudTelemetryHealth,
+  TelemetryConnectionStatus,
+} from '@/types/telemetry'
 
-type StatusTone = 'loading' | 'green' | 'yellow' | 'red' | 'gray'
+type StatusTone = 'green' | 'yellow' | 'red' | 'gray'
+
+type ConnectionState =
+  | 'Connected'
+  | 'Simulated'
+  | 'Stale'
+  | 'Disconnected'
+  | 'Error'
+  | 'Not configured'
 
 type ConnectionItem = {
   name: string
-  status: string
+  status: ConnectionState
   helper: string
   tone: StatusTone
 }
 
-const weatherCachePrefix = 'solar-race-weather-day-'
-
 const toneStyles: Record<StatusTone, string> = {
-  loading: 'bg-slate-400 shadow-slate-400/30',
   green: 'bg-emerald-400 shadow-emerald-400/40',
   yellow: 'bg-yellow-300 shadow-yellow-300/40',
   red: 'bg-red-500 shadow-red-500/40',
   gray: 'bg-slate-500 shadow-slate-500/30',
 }
 
-const initialItems: ConnectionItem[] = [
-  {
-    name: 'Internet',
-    status: 'Checking',
-    helper: 'Status will load after mount',
-    tone: 'loading',
-  },
-  {
-    name: 'GPS',
-    status: 'Checking',
-    helper: 'Passive homepage check only',
-    tone: 'loading',
-  },
-  {
-    name: 'ESP32 Telemetry',
-    status: 'Checking',
-    helper: 'Simulator and hardware readiness',
-    tone: 'loading',
-  },
-  {
-    name: 'Wi-Fi / Local Network',
-    status: 'Checking',
-    helper: 'Travel-router readiness',
-    tone: 'loading',
-  },
-  {
-    name: 'Weather Cache',
-    status: 'Checking',
-    helper: 'Looking for saved forecasts',
-    tone: 'loading',
-  },
-]
-
 export default function ConnectionStatusStrip({
   liveGps,
   telemetryConnected = false,
+  telemetryStatus = 'disconnected',
+  telemetryConnectionError,
+  cloudHealth,
+  vehiclePacketAgeSeconds,
 }: {
   liveGps?: LiveTelemetryGpsPosition | null
   telemetryConnected?: boolean
+  telemetryStatus?: TelemetryConnectionStatus
+  telemetryConnectionError?: string
+  cloudHealth?: CloudTelemetryHealth | null
+  vehiclePacketAgeSeconds?: number | null
 }) {
-  const [mounted, setMounted] = useState(false)
-  const [items, setItems] = useState<ConnectionItem[]>(initialItems)
-
-  useEffect(() => {
-    setMounted(true)
-
-    function updateStatus() {
-      const online = navigator.onLine
-      const hasGeolocation = 'geolocation' in navigator
-      const cachedDayCount = countCachedWeatherDays()
-
-      setItems([
-        {
-          name: 'Internet',
-          status: online ? 'Online' : 'Offline',
-          helper: online ? 'Live APIs available' : 'Offline mode active',
-          tone: online ? 'green' : 'red',
-        },
-        {
-          name: 'GPS',
-          status: liveGps
-            ? 'Cloud GPS'
-            : hasGeolocation
-              ? 'Permission needed'
-              : 'Unsupported',
-          helper: liveGps
-            ? `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`
-            : hasGeolocation
-            ? 'Ready when enabled on a day page'
-            : 'Secure browser GPS unavailable',
-          tone: liveGps ? 'green' : hasGeolocation ? 'yellow' : 'red',
-        },
-        {
-          name: 'ESP32 Telemetry',
-          status: telemetryConnected ? 'Cloud live' : 'Simulator ready',
-          helper: telemetryConnected
-            ? 'Latest vehicle packet available'
-            : 'Hardware bridge not connected yet',
-          tone: telemetryConnected ? 'green' : 'yellow',
-        },
-        {
-          name: 'Wi-Fi / Local Network',
-          status: online ? 'Network reachable' : 'Local mode possible',
-          helper: getNetworkHelperText(online),
-          tone: online ? 'green' : 'yellow',
-        },
-        {
-          name: 'Weather Cache',
-          status:
-            cachedDayCount === 5
-              ? 'Cached'
-              : cachedDayCount > 0
-                ? 'Partial cache'
-                : 'Missing',
-          helper:
-            cachedDayCount === 5
-              ? 'All race days stored locally'
-              : cachedDayCount > 0
-                ? `${cachedDayCount}/5 race days cached`
-                : 'Use Weather Cache preload',
-          tone:
-            cachedDayCount === 5
-              ? 'green'
-              : cachedDayCount > 0
-                ? 'yellow'
-                : 'gray',
-        },
-      ])
-    }
-
-    updateStatus()
-    window.addEventListener('online', updateStatus)
-    window.addEventListener('offline', updateStatus)
-    window.addEventListener('storage', updateStatus)
-
-    return () => {
-      window.removeEventListener('online', updateStatus)
-      window.removeEventListener('offline', updateStatus)
-      window.removeEventListener('storage', updateStatus)
-    }
-  }, [liveGps, telemetryConnected])
+  const items: ConnectionItem[] = [
+    cloudTelemetryCard({ cloudHealth, telemetryConnectionError }),
+    vehicleTelemetryCard({
+      telemetryStatus,
+      telemetryConnected,
+      vehiclePacketAgeSeconds,
+      telemetryConnectionError,
+    }),
+    vehicleGpsCard({ liveGps, telemetryStatus }),
+    batteryTelemetryCard('Battery A Telemetry', 'battery-a', cloudHealth),
+    batteryTelemetryCard('Battery B Telemetry', 'battery-b', cloudHealth),
+  ]
 
   return (
     <section
       className="grid max-w-full gap-2 rounded-lg border border-[#ff3ea5]/25 bg-black/35 p-2 shadow-xl shadow-black/20 backdrop-blur sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"
-      aria-label="Connection status"
+      aria-label="Telemetry connection status"
     >
       {items.map((item) => (
         <article
@@ -156,9 +70,7 @@ export default function ConnectionStatusStrip({
         >
           <div className="flex items-center gap-2">
             <span
-              className={`h-2 w-2 shrink-0 rounded-full shadow-[0_0_12px_currentColor] ${
-                mounted ? toneStyles[item.tone] : toneStyles.loading
-              }`}
+              className={`h-2 w-2 shrink-0 rounded-full shadow-[0_0_12px_currentColor] ${toneStyles[item.tone]}`}
               aria-hidden="true"
             />
             <h2 className="truncate text-xs font-black text-white">
@@ -166,10 +78,10 @@ export default function ConnectionStatusStrip({
             </h2>
           </div>
           <p className="mt-1 text-xs font-black text-[#ff8fcb]">
-            {mounted ? item.status : 'Checking'}
+            {item.status}
           </p>
           <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-300">
-            {mounted ? item.helper : 'Status will load after mount'}
+            {item.helper}
           </p>
         </article>
       ))}
@@ -177,31 +89,222 @@ export default function ConnectionStatusStrip({
   )
 }
 
-function countCachedWeatherDays() {
-  let cachedDayCount = 0
-
-  for (let dayNumber = 1; dayNumber <= 5; dayNumber += 1) {
-    const cached = window.localStorage.getItem(`${weatherCachePrefix}${dayNumber}`)
-
-    if (cached) cachedDayCount += 1
-  }
-
-  return cachedDayCount
-}
-
-function getNetworkHelperText(online: boolean) {
-  const navigatorWithConnection = navigator as Navigator & {
-    connection?: {
-      effectiveType?: string
+function cloudTelemetryCard({
+  cloudHealth,
+  telemetryConnectionError,
+}: {
+  cloudHealth?: CloudTelemetryHealth | null
+  telemetryConnectionError?: string
+}): ConnectionItem {
+  if (cloudHealth?.redis === 'not_configured') {
+    return {
+      name: 'Cloud Telemetry',
+      status: 'Not configured',
+      helper: 'Telemetry backend env vars missing',
+      tone: 'gray',
     }
   }
-  const effectiveType = navigatorWithConnection.connection?.effectiveType
 
-  if (effectiveType) {
-    return `Connection type: ${effectiveType}`
+  if (cloudHealth?.redis === 'error' || cloudHealth?.healthEndpointStatus === 'error') {
+    return {
+      name: 'Cloud Telemetry',
+      status: 'Error',
+      helper: cloudHealth.error ?? telemetryConnectionError ?? 'Backend health check failed',
+      tone: 'red',
+    }
   }
 
-  return online
-    ? 'Network available'
-    : 'Offline; local Wi-Fi may still work'
+  if (cloudHealth?.redis === 'connected' || cloudHealth?.cloudBackendStatus === 'connected') {
+    return {
+      name: 'Cloud Telemetry',
+      status: 'Connected',
+      helper: 'Backend/API reachable',
+      tone: 'green',
+    }
+  }
+
+  if (telemetryConnectionError) {
+    return {
+      name: 'Cloud Telemetry',
+      status: 'Error',
+      helper: telemetryConnectionError,
+      tone: 'red',
+    }
+  }
+
+  return {
+    name: 'Cloud Telemetry',
+    status: 'Disconnected',
+    helper: 'Waiting for backend health',
+    tone: 'yellow',
+  }
+}
+
+function vehicleTelemetryCard({
+  telemetryStatus,
+  telemetryConnected,
+  vehiclePacketAgeSeconds,
+  telemetryConnectionError,
+}: {
+  telemetryStatus: TelemetryConnectionStatus
+  telemetryConnected: boolean
+  vehiclePacketAgeSeconds?: number | null
+  telemetryConnectionError?: string
+}): ConnectionItem {
+  if (telemetryStatus === 'error') {
+    return {
+      name: 'Vehicle Telemetry',
+      status: 'Error',
+      helper: telemetryConnectionError ?? 'Vehicle telemetry request failed',
+      tone: 'red',
+    }
+  }
+
+  if (telemetryStatus === 'simulated') {
+    return {
+      name: 'Vehicle Telemetry',
+      status: 'Simulated',
+      helper: 'Using simulator data',
+      tone: 'yellow',
+    }
+  }
+
+  if (telemetryStatus === 'warning') {
+    return {
+      name: 'Vehicle Telemetry',
+      status: 'Stale',
+      helper: formatAgeHelper(vehiclePacketAgeSeconds, 'Last vehicle packet'),
+      tone: 'yellow',
+    }
+  }
+
+  if (telemetryStatus === 'connected' || telemetryConnected) {
+    return {
+      name: 'Vehicle Telemetry',
+      status: 'Connected',
+      helper: formatAgeHelper(vehiclePacketAgeSeconds, 'Latest vehicle packet'),
+      tone: 'green',
+    }
+  }
+
+  return {
+    name: 'Vehicle Telemetry',
+    status: 'Disconnected',
+    helper: 'Waiting for vehicle ESP32 packets',
+    tone: 'gray',
+  }
+}
+
+function vehicleGpsCard({
+  liveGps,
+  telemetryStatus,
+}: {
+  liveGps?: LiveTelemetryGpsPosition | null
+  telemetryStatus: TelemetryConnectionStatus
+}): ConnectionItem {
+  if (liveGps) {
+    return {
+      name: 'Vehicle GPS',
+      status: 'Connected',
+      helper: `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`,
+      tone: 'green',
+    }
+  }
+
+  if (telemetryStatus === 'warning') {
+    return {
+      name: 'Vehicle GPS',
+      status: 'Stale',
+      helper: 'Vehicle packet present, GPS fix missing',
+      tone: 'yellow',
+    }
+  }
+
+  if (telemetryStatus === 'error') {
+    return {
+      name: 'Vehicle GPS',
+      status: 'Error',
+      helper: 'GPS depends on vehicle telemetry',
+      tone: 'red',
+    }
+  }
+
+  return {
+    name: 'Vehicle GPS',
+    status: 'Disconnected',
+    helper: 'Waiting for vehicle GPS fix',
+    tone: 'gray',
+  }
+}
+
+function batteryTelemetryCard(
+  name: 'Battery A Telemetry' | 'Battery B Telemetry',
+  nodeId: 'battery-a' | 'battery-b',
+  cloudHealth?: CloudTelemetryHealth | null
+): ConnectionItem {
+  const nodeHealth = findNodeHealth(cloudHealth, nodeId)
+
+  if (!nodeHealth) {
+    return {
+      name,
+      status: 'Not configured',
+      helper: `${name.replace(' Telemetry', '')} node not reporting yet`,
+      tone: 'gray',
+    }
+  }
+
+  if (nodeHealth.ageSeconds === null || nodeHealth.ageSeconds === undefined) {
+    return {
+      name,
+      status: 'Disconnected',
+      helper: 'No packet timestamp available',
+      tone: 'gray',
+    }
+  }
+
+  if (nodeHealth.ageSeconds <= 30) {
+    return {
+      name,
+      status: 'Connected',
+      helper: formatAgeHelper(nodeHealth.ageSeconds, 'Latest BMS packet'),
+      tone: 'green',
+    }
+  }
+
+  if (nodeHealth.ageSeconds <= 120) {
+    return {
+      name,
+      status: 'Stale',
+      helper: formatAgeHelper(nodeHealth.ageSeconds, 'Last BMS packet'),
+      tone: 'yellow',
+    }
+  }
+
+  return {
+    name,
+    status: 'Disconnected',
+    helper: formatAgeHelper(nodeHealth.ageSeconds, 'Last BMS packet'),
+    tone: 'red',
+  }
+}
+
+function findNodeHealth(
+  cloudHealth: CloudTelemetryHealth | null | undefined,
+  nodeId: 'battery-a' | 'battery-b'
+) {
+  const aliases =
+    nodeId === 'battery-a'
+      ? ['battery-a', 'batteryA', 'bms-a', 'bmsA', 'pack-a', 'packA']
+      : ['battery-b', 'batteryB', 'bms-b', 'bmsB', 'pack-b', 'packB']
+
+  return cloudHealth?.nodes?.find((nodeHealth) =>
+    aliases.includes(String(nodeHealth.node))
+  )
+}
+
+function formatAgeHelper(ageSeconds: number | null | undefined, label: string) {
+  if (ageSeconds === null || ageSeconds === undefined) return label
+  if (ageSeconds < 60) return `${label}: ${Math.round(ageSeconds)}s ago`
+
+  return `${label}: ${Math.round(ageSeconds / 60)}m ago`
 }
