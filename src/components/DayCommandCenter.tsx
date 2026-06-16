@@ -2118,6 +2118,7 @@ function StrategyEngineeringCenter({
           prediction={racePrediction}
           recommendation={authoritativeStrategy.strategyRecommendation}
           swapRecommendation={batterySwapRecommendation}
+          terrainDiagnostics={authoritativeStrategy.terrainDiagnostics}
           currentWhPerMile={currentWhPerMile}
           requiredWhPerMile={requiredWhPerMile}
         />
@@ -2298,6 +2299,7 @@ function StrategyPipelineDebugPanel({
   prediction,
   recommendation,
   swapRecommendation,
+  terrainDiagnostics,
   currentWhPerMile,
   requiredWhPerMile,
 }: {
@@ -2308,6 +2310,7 @@ function StrategyPipelineDebugPanel({
   prediction: RacePrediction
   recommendation: DeterministicStrategyRecommendation
   swapRecommendation: BatterySwapRecommendation
+  terrainDiagnostics?: AuthoritativeStrategyState['terrainDiagnostics']
   currentWhPerMile: number
   requiredWhPerMile: number
 }) {
@@ -2353,16 +2356,48 @@ function StrategyPipelineDebugPanel({
             <StatusMetric label="Projected Drive Energy" value={formatEnergyWh(prediction.projectedDriveEnergyWh)} />
             <StatusMetric label="Projected Solar Recovery" value={formatEnergyWh(prediction.projectedSolarRecoveredWh)} />
             <StatusMetric label="Projected Finish SOC" value={formatPredictionSoc(prediction.projectedEndDaySocPercent)} />
+            <StatusMetric label="Projected Finish Energy" value={formatEnergyWh(prediction.projectedEndDayEnergyWh)} />
             <StatusMetric label="Forecast Net Energy" value={formatForecastNetEnergy(prediction.projectedNetEnergyWh)} />
+            <StatusMetric label="Energy Margin Source" value={prediction.energyMarginSource} />
             <StatusMetric label="Recommended Action" value={recommendation.title} />
             <StatusMetric label="Confidence Source" value={dataSource.confidenceSource} />
             <StatusMetric label="Data Source" value={dataSource.primarySource} />
+            <StatusMetric label="Telemetry Null Fallback" value={prediction.telemetryNullFallbackSource ?? 'not used'} />
+            <StatusMetric label="Battery State Fallback" value={prediction.raceBatteryStateProjectionFallbackUsed ? 'used' : 'not used'} />
             <StatusMetric label="Telemetry Age" value={formatTelemetryAge(telemetryAgeSeconds)} />
             <StatusMetric label="Spare Advantage" value={`${spareAdvantagePercent.toFixed(1)}%`} />
             <StatusMetric label="Swap Threshold" value={`${meaningfulSpareAdvantagePercent}%`} />
             <StatusMetric label="Swap Guard" value={swapAllowed ? 'allowed' : 'blocked'} />
+            <StatusMetric label="Trailering Trigger" value={recommendation.diagnostics?.traileringCommandTrigger ?? 'none'} />
+            <StatusMetric label="Final Priority" value={recommendation.diagnostics ? String(recommendation.diagnostics.finalCommandPriority) : '--'} />
             <StatusMetric label="Final Recommendation" value={recommendation.title} />
+            <StatusMetric label="Terrain Window" value={formatTerrainWindow(prediction.terrainWindowStartMile, prediction.terrainWindowEndMile)} />
+            <StatusMetric label="Applied Terrain Window" value={formatTerrainWindow(prediction.terrainAppliedWindowStartMile, prediction.terrainAppliedWindowEndMile)} />
+            <StatusMetric label="Climb Energy" value={formatEnergyWh(prediction.climbEnergyWh)} />
+            <StatusMetric label="Descent Recovery" value={formatEnergyWh(prediction.descentRecoveryWh)} />
+            <StatusMetric label="Net Terrain" value={formatEnergyWh(prediction.netTerrainWh)} />
+            <StatusMetric label="Applied Terrain" value={formatEnergyWh(prediction.terrainEnergyWh)} />
+            <StatusMetric label="Terrain Denominator" value={formatMiles(prediction.terrainAdjustmentDistanceMiles)} />
+            <StatusMetric label="Terrain Source" value={prediction.terrainAdjustmentSource ?? '--'} />
+            <StatusMetric label="Terrain Weight" value={formatTerrainWeight(prediction.terrainAdjustmentWeight)} />
+            <StatusMetric label="Next Stop Before Terrain" value={formatPredictionSoc(terrainDiagnostics?.projectedNextStopSocBeforeTerrain)} />
+            <StatusMetric label="Next Stop After Terrain" value={formatPredictionSoc(terrainDiagnostics?.projectedNextStopSocAfterTerrain)} />
+            <StatusMetric label="Finish Before Terrain" value={formatPredictionSoc(terrainDiagnostics?.projectedEndDaySocBeforeTerrain)} />
+            <StatusMetric label="Finish After Terrain" value={formatPredictionSoc(terrainDiagnostics?.projectedEndDaySocAfterTerrain)} />
+            <StatusMetric label="Recommendation Before Terrain" value={terrainDiagnostics?.recommendationBeforeTerrainTitle ?? '--'} />
+            <StatusMetric label="Recommendation After Terrain" value={terrainDiagnostics?.recommendationAfterTerrainTitle ?? recommendation.title} />
           </div>
+          <p className="mt-3 text-xs font-semibold leading-5 text-slate-400">
+            Energy margin formula: {prediction.energyMarginFormula}
+          </p>
+          <p className="mt-2 text-xs font-semibold leading-5 text-slate-400">
+            Terrain correction: {prediction.terrainAdjustmentReason ?? 'Terrain adjustment not evaluated.'}
+          </p>
+          {prediction.terrainDataWarnings && prediction.terrainDataWarnings.length > 0 ? (
+            <p className="mt-2 text-xs font-semibold leading-5 text-yellow-100">
+              Terrain data warning: {prediction.terrainDataWarnings.join(' / ')}
+            </p>
+          ) : null}
         </MiniPanel>
 
         <MiniPanel title="Decision Reasoning">
@@ -2371,6 +2406,7 @@ function StrategyPipelineDebugPanel({
             <StatusMetric label="Trigger" value={trigger.trigger} />
             <StatusMetric label="Threshold" value={trigger.threshold} />
             <StatusMetric label="Value Used" value={trigger.value} />
+            <StatusMetric label="Critical Reason" value={recommendation.diagnostics?.criticalReason ?? 'none'} />
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-300">
             {recommendation.reason}
@@ -2468,6 +2504,14 @@ function strategyTriggerExplanation({
   prediction: RacePrediction
   activeSocPercent: number
 }) {
+  if (recommendation.diagnostics) {
+    return {
+      trigger: recommendation.diagnostics.triggerRule,
+      threshold: recommendation.diagnostics.thresholdDetail,
+      value: recommendation.reason,
+    }
+  }
+
   if (swapRecommendation.action === 'swap_now') {
     return {
       trigger: 'swapRecommendation.action === swap_now',
@@ -2996,6 +3040,8 @@ function strategyCommandClass(
   command: DeterministicStrategyRecommendation['command']
 ) {
   if (command === 'swap_now' || command === 'reduce_speed') return 'text-[#ff8fcb]'
+  if (command === 'trailer_now') return 'text-[#ff8fcb]'
+  if (command === 'consider_trailering') return 'text-orange-200'
   if (command === 'plan_swap' || command === 'prioritize_charging') return 'text-yellow-100'
   if (command === 'increase_speed_allowed') return 'text-sky-200'
 
@@ -3022,6 +3068,31 @@ function formatEnergyWh(value?: number) {
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(2)} kWh`
 
   return `${value.toFixed(0)} Wh`
+}
+
+function formatTerrainWindow(startMile?: number, endMile?: number) {
+  if (
+    startMile === undefined ||
+    endMile === undefined ||
+    !Number.isFinite(startMile) ||
+    !Number.isFinite(endMile)
+  ) {
+    return '--'
+  }
+
+  return `${startMile.toFixed(1)}-${endMile.toFixed(1)} mi`
+}
+
+function formatMiles(value?: number) {
+  return value === undefined || !Number.isFinite(value)
+    ? '--'
+    : `${value.toFixed(1)} mi`
+}
+
+function formatTerrainWeight(value?: number) {
+  return value === undefined || !Number.isFinite(value)
+    ? '--'
+    : `${(value * 100).toFixed(0)}%`
 }
 
 export function formatForecastNetEnergy(value?: number) {

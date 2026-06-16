@@ -1,6 +1,12 @@
 import type { RaceDay, RouteSegment } from '@/data/raceRoute'
 import type { TelemetryHistorySample } from '@/hooks/useTelemetry'
 import { rx2Config } from '@/lib/race/rx2Config'
+import type { RaceBatteryState } from '@/lib/raceBatteryStrategy'
+import {
+  estimateElevationEnergyWh,
+  getRaceDayElevationWindow,
+  type RaceDayElevationWindow,
+} from '@/lib/elevationEnergy'
 import {
   buildRaceSchedule,
   forecastRaceScheduleEnergy,
@@ -8,16 +14,25 @@ import {
   type RaceScheduleEventType,
   type RaceScheduleForecastMode,
 } from '@/lib/raceSchedule'
+import { calculateScoringMilesRemaining } from '@/lib/routeMileage'
 import { getRawTelemetryWhPerMile } from '@/lib/safeWhPerMile'
 import type { TelemetryData } from '@/types/telemetry'
 
 export type PredictionConfidence = 'high' | 'medium' | 'low'
+
+export type BatteryProjectionSource =
+  | 'telemetry_energy'
+  | 'telemetry_soc'
+  | 'race_battery_state'
+  | 'unavailable_fallback'
 
 export type RacePrediction = {
   timestamp: number
   confidence: PredictionConfidence
   warnings: string[]
   predictedWhPerMile: number
+  predictedWhPerMileBeforeTerrain?: number
+  terrainAdjustedWhPerMile?: number
   predictedMpptWatts: number
   currentBatteryEnergyWh: number
   currentSocPercent: number
@@ -25,6 +40,9 @@ export type RacePrediction = {
   projectedNextStopSocPercent?: number
   projectedAfterNextStopSocPercent?: number
   projectedEndDaySocPercent?: number
+  projectedEndSegmentSocPercentBeforeTerrain?: number
+  projectedNextStopSocPercentBeforeTerrain?: number
+  projectedEndDaySocPercentBeforeTerrain?: number
   projectedDriveEnergyWh?: number
   projectedSolarRecoveredDrivingWh?: number
   projectedSolarRecoveredStoppedWh?: number
@@ -35,6 +53,12 @@ export type RacePrediction = {
   usableSolarRecoveryWh?: number
   wastedSolarRecoveryWh?: number
   projectedNetEnergyWh?: number
+  projectedEndDayEnergyWh?: number
+  batteryProjectionSource: BatteryProjectionSource
+  telemetryNullFallbackSource?: 'raceBatteryState.activePack' | 'unavailable'
+  raceBatteryStateProjectionFallbackUsed: boolean
+  energyMarginSource: 'projectedEndDayEnergyWh'
+  energyMarginFormula: string
   forecastMode?: RaceScheduleForecastMode
   usesDefaultScheduleAssumptions?: boolean
   defaultScheduleWarningCount?: number
@@ -49,9 +73,41 @@ export type RacePrediction = {
   nextStopMiles?: number
   nextScheduleEventLabel?: string
   nextScheduleEventType?: RaceScheduleEventType
+  terrainWindowStartMile?: number
+  terrainWindowEndMile?: number
+  terrainAppliedWindowStartMile?: number
+  terrainAppliedWindowEndMile?: number
+  climbEnergyWh?: number
+  descentRecoveryWh?: number
+  netTerrainWh?: number
+  terrainEnergyWh?: number
+  terrainAdjustmentDistanceMiles?: number
+  terrainAdjustmentApplied?: boolean
+  terrainAdjustmentWeight?: number
+  terrainAdjustmentSource?: ValueSource | 'disabled' | 'unavailable'
+  terrainAdjustmentReason?: string
+  terrainDataWarnings?: string[]
 }
 
 type ValueSource = 'live' | 'rolling' | 'fallback'
+type TerrainAdjustmentMode = 'enabled' | 'disabled'
+
+type TerrainCorrection = {
+  windowStartMile: number
+  windowEndMile: number
+  appliedWindowStartMile: number
+  appliedWindowEndMile: number
+  climbEnergyWh: number
+  descentRecoveryWh: number
+  netTerrainWh: number
+  terrainEnergyWh: number
+  adjustmentWeight: number
+  source: ValueSource | 'disabled' | 'unavailable'
+  reason: string
+  warnings: string[]
+  dataAvailable: boolean
+  applied: boolean
+}
 
 export const freshTelemetryWindowSeconds = 10
 export const minPredictionWhPerMile = 25
@@ -64,8 +120,10 @@ export function buildRacePrediction({
   currentSegment,
   currentMile,
   telemetryTimestampMs,
+  raceBatteryState,
   scheduleEvents,
   forecastMode = 'normal',
+  terrainAdjustmentMode = 'enabled',
   now = Date.now(),
 }: {
   telemetry: TelemetryData | null
@@ -74,8 +132,10 @@ export function buildRacePrediction({
   currentSegment?: RouteSegment | null
   currentMile: number
   telemetryTimestampMs?: number
+  raceBatteryState?: RaceBatteryState | null
   scheduleEvents?: RaceScheduleEvent[]
   forecastMode?: RaceScheduleForecastMode
+  terrainAdjustmentMode?: TerrainAdjustmentMode
   now?: number
 }): RacePrediction {
   const warnings: string[] = []
@@ -96,10 +156,15 @@ export function buildRacePrediction({
   const mppt = predictedMpptWatts(telemetry)
   const battery = currentBatteryEnergy({
     telemetry,
+    raceBatteryState,
     batteryCapacityWh: rx2Config.mainBatteryUsableWh,
   })
   const routeKnown = Boolean(raceDay && currentSegment)
   const remainingDayMiles = Math.max(0, raceDay.distanceMiles - currentMile)
+  const remainingDrivingMiles = calculateScoringMilesRemaining({
+    raceDay,
+    currentMile,
+  })
   const remainingSegmentMiles = currentSegment
     ? Math.max(0, currentSegment.mileEnd - currentMile)
     : undefined
@@ -117,17 +182,65 @@ export function buildRacePrediction({
     : rx2Config.reserveSocPercent
   const reserveEnergyWh =
     (reserveSocPercent / 100) * rx2Config.mainBatteryUsableWh
+  const endSegmentTerrain = terrainCorrectionForWindow({
+    mode: terrainAdjustmentMode,
+    raceDay,
+    currentMile,
+    endMile:
+      remainingSegmentMiles !== undefined
+        ? currentMile + remainingSegmentMiles
+        : currentMile,
+    source: wh.source,
+    rollingHorizonMiles: wh.rollingHorizonMiles,
+  })
+  const nextStopTerrain = terrainCorrectionForWindow({
+    mode: terrainAdjustmentMode,
+    raceDay,
+    currentMile,
+    endMile:
+      nextStopMiles !== undefined
+        ? currentMile + nextStopMiles
+        : currentMile,
+    source: wh.source,
+    rollingHorizonMiles: wh.rollingHorizonMiles,
+  })
+  const endDayTerrain = terrainCorrectionForWindow({
+    mode: terrainAdjustmentMode,
+    raceDay,
+    currentMile,
+    endMile: raceDay.distanceMiles,
+    source: wh.source,
+    rollingHorizonMiles: wh.rollingHorizonMiles,
+  })
+  const terrainAdjustedWhPerMile = terrainAdjustedWhPerMileForWindow({
+    baseWhPerMile: wh.value,
+    miles: remainingDrivingMiles,
+    terrainEnergyWh: endDayTerrain.terrainEnergyWh,
+  })
   const scheduleForecast = forecastRaceScheduleEnergy({
     events: raceScheduleEvents,
     currentMile,
     currentBatteryEnergyWh: battery.value,
-    predictedWhPerMile: wh.value,
+    predictedWhPerMile: terrainAdjustedWhPerMile,
     predictedMpptWatts: mppt.value,
     driveSpeedMph: speedForPredictionMph,
     batteryCapacityWh: rx2Config.mainBatteryUsableWh,
     defaultTrailerSpeedMph: rx2Config.defaultTrailerSpeedMph,
     forecastMode,
   })
+  const scheduleForecastBeforeTerrain = terrainAdjustmentMode === 'enabled'
+    ? forecastRaceScheduleEnergy({
+        events: raceScheduleEvents,
+        currentMile,
+        currentBatteryEnergyWh: battery.value,
+        predictedWhPerMile: wh.value,
+        predictedMpptWatts: mppt.value,
+        driveSpeedMph: speedForPredictionMph,
+        batteryCapacityWh: rx2Config.mainBatteryUsableWh,
+        defaultTrailerSpeedMph: rx2Config.defaultTrailerSpeedMph,
+        forecastMode,
+      })
+    : scheduleForecast
 
   if (staleTelemetry) {
     warnings.push('Telemetry is stale; prediction confidence is low.')
@@ -162,8 +275,16 @@ export function buildRacePrediction({
   ) {
     warnings.push('Battery SOC telemetry was outside 0-100% and was clamped.')
   }
-  if (battery.source !== 'telemetry') {
+  if (battery.source === 'telemetry_soc') {
     warnings.push('Battery energy is estimated from SOC.')
+  } else if (battery.source === 'race_battery_state') {
+    warnings.push(
+      'Battery telemetry is unavailable; using race battery state active pack for projection.'
+    )
+  } else if (battery.source === 'unavailable_fallback') {
+    warnings.push(
+      'Battery energy is unavailable; using an uncertainty fallback for projection.'
+    )
   }
   if (!scheduleForecast.scheduleKnown) {
     warnings.push(
@@ -190,8 +311,30 @@ export function buildRacePrediction({
       'No explicit morning charging window is configured; morning solar recovery is excluded.'
     )
   }
+  if (terrainAdjustmentMode === 'enabled' && !endDayTerrain.dataAvailable) {
+    warnings.push(
+      'Elevation data is unavailable for this projection window; terrain correction is disabled.'
+    )
+  }
+  if (terrainAdjustmentMode === 'enabled') {
+    for (const warning of endDayTerrain.warnings) {
+      warnings.push(`Terrain data: ${warning}`)
+    }
+  }
 
   const endSegment =
+    remainingSegmentMiles !== undefined
+      ? projectEnergy({
+          currentBatteryEnergyWh: battery.value,
+          miles: remainingSegmentMiles,
+          predictedWhPerMile: wh.value,
+          terrainAdjustmentWh: endSegmentTerrain.terrainEnergyWh,
+          predictedMpptWatts: mppt.value,
+          speedMph: speedForPredictionMph,
+          batteryCapacityWh: rx2Config.mainBatteryUsableWh,
+        })
+      : null
+  const endSegmentBeforeTerrain =
     remainingSegmentMiles !== undefined
       ? projectEnergy({
           currentBatteryEnergyWh: battery.value,
@@ -208,12 +351,33 @@ export function buildRacePrediction({
           currentBatteryEnergyWh: battery.value,
           miles: nextStopMiles,
           predictedWhPerMile: wh.value,
+          terrainAdjustmentWh: nextStopTerrain.terrainEnergyWh,
+          predictedMpptWatts: mppt.value,
+          speedMph: speedForPredictionMph,
+          batteryCapacityWh: rx2Config.mainBatteryUsableWh,
+        })
+      : null
+  const nextStopBeforeTerrain =
+    nextStopMiles !== undefined
+      ? projectEnergy({
+          currentBatteryEnergyWh: battery.value,
+          miles: nextStopMiles,
+          predictedWhPerMile: wh.value,
           predictedMpptWatts: mppt.value,
           speedMph: speedForPredictionMph,
           batteryCapacityWh: rx2Config.mainBatteryUsableWh,
         })
       : null
   const endDay = projectEnergy({
+    currentBatteryEnergyWh: battery.value,
+    miles: remainingDayMiles,
+    predictedWhPerMile: wh.value,
+    terrainAdjustmentWh: endDayTerrain.terrainEnergyWh,
+    predictedMpptWatts: mppt.value,
+    speedMph: speedForPredictionMph,
+    batteryCapacityWh: rx2Config.mainBatteryUsableWh,
+  })
+  const endDayBeforeTerrain = projectEnergy({
     currentBatteryEnergyWh: battery.value,
     miles: remainingDayMiles,
     predictedWhPerMile: wh.value,
@@ -236,18 +400,20 @@ export function buildRacePrediction({
   const projectedEndDaySocPercent = scheduleForecast.scheduleKnown
     ? scheduleForecast.projectedEndDaySocPercent
     : endDay.socPercent
-  const energyMarginWh =
-    battery.value +
-    projectedSolarRecoveredWh -
-    projectedDriveEnergyWh -
-    reserveEnergyWh
+  const projectedEndDaySocPercentBeforeTerrain =
+    scheduleForecastBeforeTerrain.scheduleKnown
+      ? scheduleForecastBeforeTerrain.projectedEndDaySocPercent
+      : endDayBeforeTerrain.socPercent
+  const projectedEndDayEnergyWh =
+    (projectedEndDaySocPercent / 100) * rx2Config.mainBatteryUsableWh
+  const energyMarginWh = projectedEndDayEnergyWh - reserveEnergyWh
 
   return {
     timestamp: now,
     confidence: confidenceLevel({
       staleTelemetry,
       routeKnown,
-      missingBatteryEnergy: battery.source !== 'telemetry',
+      missingBatteryEnergy: battery.source !== 'telemetry_energy',
       fallbackCount: [wh.source, mppt.source].filter(
         (source) => source === 'fallback'
       ).length,
@@ -256,9 +422,13 @@ export function buildRacePrediction({
       usesDefaultScheduleAssumptions:
         scheduleForecast.usesDefaultDurations ||
         scheduleForecast.usesEstimatedDurations,
+      terrainDataUnavailable:
+        terrainAdjustmentMode === 'enabled' && !endDayTerrain.dataAvailable,
     }),
     warnings: dedupeWarnings(warnings),
-    predictedWhPerMile: wh.value,
+    predictedWhPerMile: terrainAdjustedWhPerMile,
+    predictedWhPerMileBeforeTerrain: wh.value,
+    terrainAdjustedWhPerMile,
     predictedMpptWatts: mppt.value,
     currentBatteryEnergyWh: battery.value,
     currentSocPercent: battery.socPercent,
@@ -269,6 +439,12 @@ export function buildRacePrediction({
     projectedAfterNextStopSocPercent:
       scheduleForecast.projectedAfterNextStopSocPercent,
     projectedEndDaySocPercent,
+    projectedEndSegmentSocPercentBeforeTerrain:
+      endSegmentBeforeTerrain?.socPercent,
+    projectedNextStopSocPercentBeforeTerrain:
+      scheduleForecastBeforeTerrain.projectedNextScheduleEventSocPercent ??
+      nextStopBeforeTerrain?.socPercent,
+    projectedEndDaySocPercentBeforeTerrain,
     projectedDriveEnergyWh,
     projectedSolarRecoveredDrivingWh:
       scheduleForecast.projectedSolarRecoveredDrivingWh,
@@ -286,6 +462,18 @@ export function buildRacePrediction({
     projectedNetEnergyWh: scheduleForecast.scheduleKnown
       ? scheduleForecast.projectedNetEnergyWh
       : endDay.netEnergyWh,
+    projectedEndDayEnergyWh,
+    batteryProjectionSource: battery.source,
+    telemetryNullFallbackSource: !telemetry
+      ? battery.source === 'race_battery_state'
+        ? 'raceBatteryState.activePack'
+        : 'unavailable'
+      : undefined,
+    raceBatteryStateProjectionFallbackUsed:
+      battery.source === 'race_battery_state',
+    energyMarginSource: 'projectedEndDayEnergyWh',
+    energyMarginFormula:
+      'projectedEndDaySocPercent / 100 * batteryCapacityWh - reserveEnergyWh',
     forecastMode: scheduleForecast.forecastMode,
     usesDefaultScheduleAssumptions:
       scheduleForecast.usesDefaultDurations ||
@@ -309,6 +497,20 @@ export function buildRacePrediction({
     nextStopMiles,
     nextScheduleEventLabel: scheduleForecast.nextScheduleEventLabel,
     nextScheduleEventType: scheduleForecast.nextScheduleEventType,
+    terrainWindowStartMile: endDayTerrain.windowStartMile,
+    terrainWindowEndMile: endDayTerrain.windowEndMile,
+    terrainAppliedWindowStartMile: endDayTerrain.appliedWindowStartMile,
+    terrainAppliedWindowEndMile: endDayTerrain.appliedWindowEndMile,
+    climbEnergyWh: endDayTerrain.climbEnergyWh,
+    descentRecoveryWh: endDayTerrain.descentRecoveryWh,
+    netTerrainWh: endDayTerrain.netTerrainWh,
+    terrainEnergyWh: endDayTerrain.terrainEnergyWh,
+    terrainAdjustmentDistanceMiles: remainingDrivingMiles,
+    terrainAdjustmentApplied: endDayTerrain.applied,
+    terrainAdjustmentWeight: endDayTerrain.adjustmentWeight,
+    terrainAdjustmentSource: endDayTerrain.source,
+    terrainAdjustmentReason: endDayTerrain.reason,
+    terrainDataWarnings: endDayTerrain.warnings,
   }
 }
 
@@ -325,7 +527,7 @@ function predictedWhPerMile({
 }) {
   const rollingWh = rollingRecentWhPerMile(telemetryHistory)
   const liveWh = finitePositiveNumber(getRawTelemetryWhPerMile(telemetry))
-  const rawValue = rollingWh ?? liveWh
+  const rawValue = rollingWh?.value ?? liveWh
   const fallbackUsed = rawValue === undefined
   const unclampedValue = rawValue ?? rx2Config.defaultRaceWhPerMile
   const value = clamp(
@@ -342,6 +544,191 @@ function predictedWhPerMile({
         ? 'fallback' as ValueSource
         : 'live' as ValueSource,
     clamped: value !== unclampedValue,
+    rollingHorizonMiles: rollingWh?.horizonMiles,
+  }
+}
+
+function terrainCorrectionForWindow({
+  mode,
+  raceDay,
+  currentMile,
+  endMile,
+  source,
+  rollingHorizonMiles,
+}: {
+  mode: TerrainAdjustmentMode
+  raceDay: RaceDay
+  currentMile: number
+  endMile: number
+  source: ValueSource
+  rollingHorizonMiles?: number
+}): TerrainCorrection {
+  const windowStartMile = clamp(
+    Math.min(currentMile, endMile),
+    0,
+    raceDay.distanceMiles
+  )
+  const windowEndMile = clamp(
+    Math.max(currentMile, endMile),
+    0,
+    raceDay.distanceMiles
+  )
+
+  if (mode === 'disabled' || windowEndMile <= windowStartMile) {
+    return emptyTerrainCorrection({
+      windowStartMile,
+      windowEndMile,
+      source: mode === 'disabled' ? 'disabled' : source,
+      reason:
+        mode === 'disabled'
+          ? 'Terrain adjustment disabled for baseline projection.'
+          : 'Terrain window has no remaining distance.',
+    })
+  }
+
+  const rollingCoveredMiles =
+    source === 'rolling' ? Math.max(0, rollingHorizonMiles ?? 0) : 0
+  const appliedWindowStartMile = clamp(
+    windowStartMile + rollingCoveredMiles,
+    windowStartMile,
+    windowEndMile
+  )
+  const appliedWindowEndMile = windowEndMile
+  const window = getRaceDayElevationWindow({
+    day: raceDay.day,
+    startMile: appliedWindowStartMile,
+    endMile: appliedWindowEndMile,
+  })
+  const dataAvailable = terrainWindowHasData(window)
+
+  if (!dataAvailable) {
+    return emptyTerrainCorrection({
+      windowStartMile,
+      windowEndMile,
+      appliedWindowStartMile,
+      appliedWindowEndMile,
+      source: 'unavailable',
+      reason: 'Elevation data unavailable; projection used the non-terrain baseline.',
+      warnings: window.dataQualityWarnings,
+      dataAvailable: false,
+    })
+  }
+
+  const estimate = estimateElevationEnergyWh({
+    elevationGainFt: window.elevationGainFt,
+    elevationLossFt: window.elevationLossFt,
+    vehicleWeightLbs: rx2Config.estimatedRaceWeightLbs,
+    distanceMiles: window.distanceMiles,
+  })
+  const adjustmentWeight = terrainAdjustmentWeight(source)
+  const terrainEnergyWh = roundWh(estimate.netElevationEnergyWh * adjustmentWeight)
+
+  return {
+    windowStartMile,
+    windowEndMile,
+    appliedWindowStartMile,
+    appliedWindowEndMile,
+    climbEnergyWh: estimate.climbEnergyWh,
+    descentRecoveryWh: estimate.descentRecoveryWh,
+    netTerrainWh: estimate.netElevationEnergyWh,
+    terrainEnergyWh,
+    adjustmentWeight,
+    source,
+    reason: terrainAdjustmentReason({
+      source,
+      rollingCoveredMiles,
+      adjustmentWeight,
+    }),
+    warnings: window.dataQualityWarnings,
+    dataAvailable,
+    applied: terrainEnergyWh !== 0,
+  }
+}
+
+function terrainAdjustedWhPerMileForWindow({
+  baseWhPerMile,
+  miles,
+  terrainEnergyWh,
+}: {
+  baseWhPerMile: number
+  miles: number
+  terrainEnergyWh: number
+}) {
+  if (miles <= 0) return baseWhPerMile
+
+  return clamp(
+    baseWhPerMile + terrainEnergyWh / miles,
+    minPredictionWhPerMile,
+    maxPredictionWhPerMile
+  )
+}
+
+function terrainAdjustmentWeight(source: ValueSource) {
+  if (source === 'rolling') return 0.35
+  if (source === 'live') return 0.6
+  return 1
+}
+
+function terrainAdjustmentReason({
+  source,
+  rollingCoveredMiles,
+  adjustmentWeight,
+}: {
+  source: ValueSource
+  rollingCoveredMiles: number
+  adjustmentWeight: number
+}) {
+  if (source === 'rolling') {
+    return `Rolling Wh/mi is primary; terrain correction starts ${rollingCoveredMiles.toFixed(1)} mi ahead of the rolling horizon and is weighted at ${(adjustmentWeight * 100).toFixed(0)}%.`
+  }
+
+  if (source === 'live') {
+    return `Live Wh/mi is primary; upcoming terrain is advisory and weighted at ${(adjustmentWeight * 100).toFixed(0)}%.`
+  }
+
+  return 'No rolling telemetry is available; terrain correction is fully applied to the configured Wh/mi baseline.'
+}
+
+function terrainWindowHasData(window: RaceDayElevationWindow) {
+  return !window.dataQualityWarnings.some((warning) =>
+    warning.toLowerCase().includes('no elevation')
+  )
+}
+
+function emptyTerrainCorrection({
+  windowStartMile,
+  windowEndMile,
+  appliedWindowStartMile = windowStartMile,
+  appliedWindowEndMile = windowEndMile,
+  source,
+  reason,
+  warnings = [],
+  dataAvailable = true,
+}: {
+  windowStartMile: number
+  windowEndMile: number
+  appliedWindowStartMile?: number
+  appliedWindowEndMile?: number
+  source: TerrainCorrection['source']
+  reason: string
+  warnings?: string[]
+  dataAvailable?: boolean
+}): TerrainCorrection {
+  return {
+    windowStartMile,
+    windowEndMile,
+    appliedWindowStartMile,
+    appliedWindowEndMile,
+    climbEnergyWh: 0,
+    descentRecoveryWh: 0,
+    netTerrainWh: 0,
+    terrainEnergyWh: 0,
+    adjustmentWeight: 0,
+    source,
+    reason,
+    warnings,
+    dataAvailable,
+    applied: false,
   }
 }
 
@@ -363,15 +750,39 @@ function predictedMpptWatts(telemetry: TelemetryData | null) {
 
 function currentBatteryEnergy({
   telemetry,
+  raceBatteryState,
   batteryCapacityWh,
 }: {
   telemetry: TelemetryData | null
+  raceBatteryState?: RaceBatteryState | null
   batteryCapacityWh: number
 }) {
   const telemetryEnergy = finitePositiveNumber(telemetry?.batteryEnergyWh)
-  const socPercent = clamp(telemetry?.batterySocPercent ?? 0, 0, 100)
+  const telemetrySocPercent = finiteNumber(telemetry?.batterySocPercent)
+  const activePack =
+    raceBatteryState?.packs?.[raceBatteryState.activePackId]
+  const activePackEnergyWh = finiteNumber(activePack?.energyWh)
+  const activePackSocPercent = finiteNumber(activePack?.socPercent)
+  const fallbackSocPercent = 100
+  const source: BatteryProjectionSource =
+    telemetryEnergy !== undefined
+      ? 'telemetry_energy'
+      : telemetrySocPercent !== undefined
+        ? 'telemetry_soc'
+        : activePackEnergyWh !== undefined ||
+            activePackSocPercent !== undefined
+          ? 'race_battery_state'
+          : 'unavailable_fallback'
+  const socPercent = clamp(
+    telemetrySocPercent ??
+      activePackSocPercent ??
+      fallbackSocPercent,
+    0,
+    100
+  )
   const value =
     telemetryEnergy ??
+    activePackEnergyWh ??
     clamp((socPercent / 100) * batteryCapacityWh, 0, batteryCapacityWh)
   const clampedValue = clamp(value, 0, batteryCapacityWh)
 
@@ -381,9 +792,7 @@ function currentBatteryEnergy({
       batteryCapacityWh > 0
         ? clamp((clampedValue / batteryCapacityWh) * 100, 0, 100)
         : socPercent,
-    source: telemetryEnergy === undefined
-      ? 'soc' as const
-      : 'telemetry' as const,
+    source,
   }
 }
 
@@ -391,6 +800,7 @@ function projectEnergy({
   currentBatteryEnergyWh,
   miles,
   predictedWhPerMile,
+  terrainAdjustmentWh = 0,
   predictedMpptWatts,
   speedMph,
   batteryCapacityWh,
@@ -398,11 +808,15 @@ function projectEnergy({
   currentBatteryEnergyWh: number
   miles: number
   predictedWhPerMile: number
+  terrainAdjustmentWh?: number
   predictedMpptWatts: number
   speedMph: number
   batteryCapacityWh: number
 }) {
-  const driveEnergyWh = Math.max(0, miles) * predictedWhPerMile
+  const driveEnergyWh = Math.max(
+    0,
+    Math.max(0, miles) * predictedWhPerMile + terrainAdjustmentWh
+  )
   const driveHours = speedMph > 1 ? Math.max(0, miles) / speedMph : 0
   const solarRecoveredWh = predictedMpptWatts * driveHours
   const netEnergyWh = driveEnergyWh - solarRecoveredWh
@@ -460,7 +874,10 @@ function rollingRecentWhPerMile(history: TelemetryHistorySample[]) {
 
   if (distanceMiles < 1 || energyWh <= 0) return undefined
 
-  return energyWh / distanceMiles
+  return {
+    value: energyWh / distanceMiles,
+    horizonMiles: distanceMiles,
+  }
 }
 
 function nextStopDistance({
@@ -509,6 +926,7 @@ function confidenceLevel({
   zeroMppt,
   scheduleKnown,
   usesDefaultScheduleAssumptions,
+  terrainDataUnavailable,
 }: {
   staleTelemetry: boolean
   routeKnown: boolean
@@ -517,6 +935,7 @@ function confidenceLevel({
   zeroMppt: boolean
   scheduleKnown: boolean
   usesDefaultScheduleAssumptions: boolean
+  terrainDataUnavailable: boolean
 }): PredictionConfidence {
   if (
     staleTelemetry ||
@@ -527,7 +946,12 @@ function confidenceLevel({
   ) {
     return 'low'
   }
-  if (fallbackCount > 0 || zeroMppt || usesDefaultScheduleAssumptions) {
+  if (
+    fallbackCount > 0 ||
+    zeroMppt ||
+    usesDefaultScheduleAssumptions ||
+    terrainDataUnavailable
+  ) {
     return 'medium'
   }
 
@@ -546,6 +970,12 @@ function firstFiniteNumber(...values: Array<number | undefined>) {
   return values.find((value) => typeof value === 'number' && Number.isFinite(value))
 }
 
+function finiteNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined
+}
+
 function finitePositiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? value
@@ -556,6 +986,10 @@ function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min
 
   return Math.min(max, Math.max(min, value))
+}
+
+function roundWh(value: number) {
+  return Number(value.toFixed(1))
 }
 
 function dedupeWarnings(warnings: string[]) {

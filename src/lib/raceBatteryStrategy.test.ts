@@ -29,6 +29,12 @@ const basePrediction: RacePrediction = {
   projectedDriveEnergyWh: 1600,
   projectedSolarRecoveredWh: 600,
   projectedNetEnergyWh: 1000,
+  projectedEndDayEnergyWh: 1750,
+  batteryProjectionSource: 'telemetry_energy',
+  raceBatteryStateProjectionFallbackUsed: false,
+  energyMarginSource: 'projectedEndDayEnergyWh',
+  energyMarginFormula:
+    'projectedEndDaySocPercent / 100 * batteryCapacityWh - reserveEnergyWh',
   reserveEnergyWh: 1000,
   reserveMarginPercent: 15,
   energyMarginWh: 1100,

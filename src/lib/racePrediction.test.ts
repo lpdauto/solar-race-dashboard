@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RaceDay } from '@/data/raceRoute'
+import { raceRoute, type RaceDay, type RouteSegment } from '@/data/raceRoute'
+import { rx2Config } from '@/lib/race/rx2Config'
+import { createInitialRaceBatteryState } from '@/lib/raceBatteryStrategy'
 import { buildRacePrediction } from '@/lib/racePrediction'
 import type { RaceScheduleEvent } from '@/lib/raceSchedule'
 import type { TelemetryData } from '@/types/telemetry'
@@ -117,6 +119,7 @@ describe('buildRacePrediction', () => {
       currentMile: 10,
       telemetryTimestampMs: now,
       scheduleEvents,
+      terrainAdjustmentMode: 'disabled',
       now,
     })
 
@@ -146,7 +149,7 @@ describe('buildRacePrediction', () => {
     )
   })
 
-  it('calculates energy margin independently from clamped projected SOC', () => {
+  it('calculates energy margin from clamped projected end-day SOC', () => {
     const prediction = buildRacePrediction({
       telemetry: {
         ...telemetry,
@@ -214,8 +217,88 @@ describe('buildRacePrediction', () => {
     expect(prediction.usableSolarRecoveryWh).toBeCloseTo(4992, 2)
     expect(prediction.wastedSolarRecoveryWh).toBeCloseTo(3008, 2)
     expect(prediction.projectedEndDaySocPercent).toBe(100)
-    expect(prediction.energyMarginWh).toBeCloseTo(1001.6, 2)
-    expect(prediction.energyMarginKWh).toBeCloseTo(1, 2)
+    expect(prediction.projectedEndDayEnergyWh).toBeCloseTo(
+      rx2Config.mainBatteryUsableWh,
+      2
+    )
+    expect(prediction.energyMarginWh).toBeCloseTo(3993.6, 2)
+    expect(prediction.energyMarginKWh).toBeCloseTo(3.99, 2)
+    expect(prediction.energyMarginWh).toBeCloseTo(
+      (prediction.projectedEndDaySocPercent! / 100) *
+        rx2Config.mainBatteryUsableWh -
+        prediction.reserveEnergyWh,
+      2
+    )
+  })
+
+  it('does not overstate margin with wasted solar overflow near full battery', () => {
+    const prediction = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 95,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.95,
+        speedMph: 25,
+        efficiencyWhPerMile: 25,
+        whPerMile: 25,
+        mpptChargePowerWatts: 2500,
+      },
+      telemetryHistory: [],
+      raceDay: {
+        ...raceDay,
+        distanceMiles: 10,
+        routePoints: [
+          { mile: 0, lat: 30.5, lng: -97.7, label: 'Start' },
+          { mile: 10, lat: 30.3, lng: -98.9, label: 'Finish' },
+        ],
+      },
+      currentSegment: {
+        ...raceDay.segments[0],
+        mileStart: 0,
+        mileEnd: 10,
+      },
+      currentMile: 0,
+      telemetryTimestampMs: now,
+      scheduleEvents: [
+        {
+          id: 'drive',
+          day: 3,
+          type: 'drive',
+          label: 'Short sunny segment',
+          startMile: 0,
+          endMile: 10,
+          solarChargingAllowed: true,
+          countsForMileage: true,
+        },
+        {
+          id: 'finish',
+          day: 3,
+          type: 'finish',
+          label: 'Finish',
+          startMile: 10,
+          endMile: 10,
+          solarChargingAllowed: false,
+          countsForMileage: true,
+        },
+      ],
+      now,
+    })
+
+    const grossMargin =
+      rx2Config.mainBatteryUsableWh * 0.95 +
+      (prediction.projectedSolarRecoveredWh ?? 0) -
+      (prediction.projectedDriveEnergyWh ?? 0) -
+      prediction.reserveEnergyWh
+
+    expect(prediction.wastedSolarRecoveryWh ?? 0).toBeGreaterThan(0)
+    expect(prediction.projectedEndDaySocPercent).toBe(100)
+    expect(prediction.energyMarginWh).toBeCloseTo(3993.6, 2)
+    expect(prediction.energyMarginWh ?? 0).toBeLessThan(grossMargin)
+    expect(prediction.energyMarginWh).toBeCloseTo(
+      (prediction.projectedEndDaySocPercent! / 100) *
+        rx2Config.mainBatteryUsableWh -
+        prediction.reserveEnergyWh,
+      2
+    )
   })
 
   it('marks generated default schedule assumptions and lowers confidence', () => {
@@ -363,6 +446,36 @@ describe('buildRacePrediction', () => {
     )
   })
 
+  it('uses race battery state instead of zero energy when telemetry is null', () => {
+    const prediction = buildRacePrediction({
+      telemetry: null,
+      telemetryHistory: [],
+      raceDay,
+      currentSegment: raceDay.segments[0],
+      currentMile: 10,
+      raceBatteryState: createInitialRaceBatteryState({
+        now,
+        activeSocPercent: 80,
+        spareSocPercent: 90,
+      }),
+      scheduleEvents,
+      now,
+    })
+
+    expect(prediction.currentSocPercent).toBe(80)
+    expect(prediction.currentBatteryEnergyWh).toBeCloseTo(
+      rx2Config.mainBatteryUsableWh * 0.8,
+      2
+    )
+    expect(prediction.batteryProjectionSource).toBe('race_battery_state')
+    expect(prediction.telemetryNullFallbackSource).toBe(
+      'raceBatteryState.activePack'
+    )
+    expect(prediction.raceBatteryStateProjectionFallbackUsed).toBe(true)
+    expect(prediction.confidence).toBe('low')
+    expect(prediction.warnings.join(' ')).not.toContain('0%')
+  })
+
   it('clamps high Wh/mi spikes so the forecast remains bounded', () => {
     const prediction = buildRacePrediction({
       telemetry: {
@@ -400,6 +513,7 @@ describe('buildRacePrediction', () => {
       currentMile: 40,
       telemetryTimestampMs: now,
       scheduleEvents,
+      terrainAdjustmentMode: 'disabled',
       now,
     })
 
@@ -425,4 +539,275 @@ describe('buildRacePrediction', () => {
       'Race schedule is unavailable; prediction excludes stop and trailer recovery.'
     )
   })
+
+  it('applies minimal correction on a mostly flat route window', () => {
+    const day = raceRoute[3]
+    const currentMile = 130
+    const prediction = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 85,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.85,
+        whPerMile: 45,
+        efficiencyWhPerMile: 45,
+      },
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: segmentForMile(day, currentMile),
+      currentMile,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(prediction.terrainAdjustmentApplied).toBe(true)
+    expect(prediction.terrainEnergyWh ?? 0).toBeLessThan(60)
+    expect(
+      Math.abs(
+        (prediction.projectedEndDaySocPercent ?? 0) -
+          (prediction.projectedEndDaySocPercentBeforeTerrain ?? 0)
+      )
+    ).toBeLessThan(1.5)
+  })
+
+  it('lowers projected SOC when a large climb is ahead', () => {
+    const day = raceRoute[3]
+    const currentMile = 2
+    const prediction = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 90,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.9,
+        whPerMile: 42,
+        efficiencyWhPerMile: 42,
+      },
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: segmentForMile(day, currentMile),
+      currentMile,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(prediction.climbEnergyWh ?? 0).toBeGreaterThan(0)
+    expect(prediction.netTerrainWh ?? 0).toBeGreaterThan(0)
+    expect(prediction.projectedEndDaySocPercent).toBeLessThan(
+      prediction.projectedEndDaySocPercentBeforeTerrain ?? 100
+    )
+  })
+
+  it('credits descent recovery within validated caps', () => {
+    const day = {
+      ...raceRoute[3],
+      distanceMiles: 23,
+      routePoints: [
+        { mile: 0, lat: 30.2752, lng: -98.8719, label: 'Window start' },
+        { mile: 23, lat: 30.2752, lng: -98.8719, label: 'Window finish' },
+      ],
+      segments: [
+        {
+          mileStart: 13,
+          mileEnd: 23,
+          title: 'Descent validation window',
+          type: 'descent',
+          risk: 'medium',
+          notes: 'Validation descent.',
+          strategy: 'Recover conservatively.',
+        },
+      ],
+    } satisfies RaceDay
+    const currentMile = 13
+    const prediction = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 80,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.8,
+        whPerMile: 42,
+        efficiencyWhPerMile: 42,
+      },
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: day.segments[0],
+      currentMile,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(prediction.descentRecoveryWh ?? 0).toBeGreaterThan(0)
+    expect(prediction.descentRecoveryWh ?? 0).toBeLessThanOrEqual(
+      (prediction.climbEnergyWh ?? 0) * 0.3 + 0.1
+    )
+    expect(prediction.descentRecoveryWh ?? 0).toBeLessThanOrEqual(
+      ((prediction.terrainWindowEndMile ?? 0) -
+        (prediction.terrainWindowStartMile ?? 0)) *
+        35
+    )
+    expect(prediction.netTerrainWh ?? 0).toBeLessThan(
+      prediction.climbEnergyWh ?? Number.POSITIVE_INFINITY
+    )
+  })
+
+  it('reduces terrain influence when rolling telemetry is active', () => {
+    const day = raceRoute[4]
+    const currentMile = 0
+    const liveOnly = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 90,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.9,
+        whPerMile: 42,
+        efficiencyWhPerMile: 42,
+      },
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: segmentForMile(day, currentMile),
+      currentMile,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+    const rolling = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 90,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.9,
+        whPerMile: 42,
+        efficiencyWhPerMile: 42,
+      },
+      telemetryHistory: [
+        {
+          timestamp: now - 30_000,
+          distanceMiles: 0,
+          batteryEnergyUsedWh: 0,
+          speedMph: 35,
+        },
+        {
+          timestamp: now,
+          distanceMiles: 5,
+          batteryEnergyUsedWh: 210,
+          speedMph: 35,
+        },
+      ],
+      raceDay: day,
+      currentSegment: segmentForMile(day, currentMile),
+      currentMile,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(rolling.terrainAdjustmentSource).toBe('rolling')
+    expect(rolling.terrainAdjustmentWeight).toBeCloseTo(0.35, 2)
+    expect(rolling.terrainAppliedWindowStartMile).toBeGreaterThan(currentMile)
+    expect(rolling.terrainEnergyWh ?? 0).toBeLessThan(
+      liveOnly.terrainEnergyWh ?? 0
+    )
+  })
+
+  it('fully applies terrain correction when telemetry is unavailable', () => {
+    const day = raceRoute[4]
+    const currentMile = 0
+    const prediction = buildRacePrediction({
+      telemetry: null,
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: segmentForMile(day, currentMile),
+      currentMile,
+      raceBatteryState: createInitialRaceBatteryState({
+        now,
+        activeSocPercent: 80,
+        spareSocPercent: 90,
+      }),
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(prediction.terrainAdjustmentSource).toBe('fallback')
+    expect(prediction.terrainAdjustmentWeight).toBe(1)
+    expect(prediction.terrainEnergyWh ?? 0).toBeGreaterThan(0)
+    expect(prediction.predictedWhPerMile).toBeGreaterThan(
+      prediction.predictedWhPerMileBeforeTerrain ?? 0
+    )
+    expect(prediction.confidence).toBe('low')
+  })
+
+  it('spreads schedule terrain correction across remaining driving miles only', () => {
+    const day = {
+      ...raceRoute[3],
+      distanceMiles: 50,
+      scoringDistanceMiles: undefined,
+      physicalDistanceMiles: undefined,
+      mandatoryTraileringMiles: undefined,
+      routePoints: [
+        { mile: 0, lat: 30.2752, lng: -98.8719, label: 'Window start' },
+        { mile: 50, lat: 31.1352, lng: -99.3351, label: 'Window finish' },
+      ],
+      segments: [
+        {
+          mileStart: 0,
+          mileEnd: 20,
+          title: 'Driving climb',
+          type: 'climb',
+          risk: 'high',
+          notes: 'Synthetic driving window.',
+          strategy: 'Conserve.',
+        },
+        {
+          mileStart: 20,
+          mileEnd: 30,
+          title: 'Mandatory trailer test segment',
+          type: 'mandatory_trailer',
+          risk: 'low',
+          notes: 'Synthetic trailer window.',
+          strategy: 'Transport.',
+          scoringMiles: 0,
+          transportMiles: 10,
+        },
+        {
+          mileStart: 30,
+          mileEnd: 50,
+          title: 'Driving finish',
+          type: 'flat',
+          risk: 'medium',
+          notes: 'Synthetic driving window.',
+          strategy: 'Cruise.',
+        },
+      ],
+    } satisfies RaceDay
+    const prediction = buildRacePrediction({
+      telemetry: {
+        ...telemetry,
+        batterySocPercent: 90,
+        batteryEnergyWh: rx2Config.mainBatteryUsableWh * 0.9,
+        whPerMile: 42,
+        efficiencyWhPerMile: 42,
+      },
+      telemetryHistory: [],
+      raceDay: day,
+      currentSegment: day.segments[0],
+      currentMile: 0,
+      telemetryTimestampMs: now,
+      scheduleEvents: [],
+      now,
+    })
+
+    expect(prediction.terrainAdjustmentDistanceMiles).toBe(40)
+    expect(prediction.predictedWhPerMile).toBeCloseTo(
+      42 + (prediction.terrainEnergyWh ?? 0) / 40,
+      5
+    )
+  })
 })
+
+function segmentForMile(day: RaceDay, mile: number): RouteSegment {
+  return (
+    day.segments.find(
+      (segment) =>
+        segment.type !== 'mandatory_trailer' &&
+        mile >= segment.mileStart &&
+        mile < segment.mileEnd
+    ) ?? day.segments[0]
+  )
+}

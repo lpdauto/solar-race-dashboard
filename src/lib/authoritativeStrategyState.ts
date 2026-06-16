@@ -12,6 +12,7 @@ import {
 } from '@/lib/racePrediction'
 import type { RaceScheduleForecastMode } from '@/lib/raceSchedule'
 import {
+  createInitialRaceBatteryState,
   planBatterySwap,
   validateRaceBatteryState,
   type RaceBatteryState,
@@ -92,6 +93,16 @@ export type AuthoritativeStrategyState = {
   projectedNextStopSocPercent?: number
   projectedEndDaySocPercent?: number
   predictionConfidence: PredictionConfidence
+  terrainDiagnostics?: {
+    projectedNextStopSocBeforeTerrain?: number
+    projectedNextStopSocAfterTerrain?: number
+    projectedEndDaySocBeforeTerrain?: number
+    projectedEndDaySocAfterTerrain?: number
+    recommendationBeforeTerrainCommand: StrategyRecommendation['command']
+    recommendationBeforeTerrainTitle: string
+    recommendationAfterTerrainCommand: StrategyRecommendation['command']
+    recommendationAfterTerrainTitle: string
+  }
 }
 
 export function buildAuthoritativeStrategyState({
@@ -120,16 +131,32 @@ export function buildAuthoritativeStrategyState({
   telemetrySource: TelemetrySource
   telemetryStatus: TelemetryConnectionStatus
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
-  raceBatteryState: RaceBatteryState
+  raceBatteryState?: RaceBatteryState | null
   isTraileringActive?: boolean
   forecastMode?: RaceScheduleForecastMode
   now?: number
 }): AuthoritativeStrategyState {
   const batteryState = validateRaceBatteryState({
-    state: raceBatteryState,
+    state:
+      raceBatteryState ??
+      createInitialRaceBatteryState({
+        now,
+      }),
     now,
   })
   const activePack = batteryState.packs[batteryState.activePackId]
+  const predictionBeforeTerrain = buildRacePrediction({
+    telemetry,
+    telemetryHistory,
+    raceDay,
+    currentSegment,
+    currentMile,
+    telemetryTimestampMs,
+    raceBatteryState: raceBatteryState ? batteryState : null,
+    forecastMode,
+    terrainAdjustmentMode: 'disabled',
+    now,
+  })
   const prediction = buildRacePrediction({
     telemetry,
     telemetryHistory,
@@ -137,6 +164,7 @@ export function buildAuthoritativeStrategyState({
     currentSegment,
     currentMile,
     telemetryTimestampMs,
+    raceBatteryState: raceBatteryState ? batteryState : null,
     forecastMode,
     now,
   })
@@ -168,12 +196,31 @@ export function buildAuthoritativeStrategyState({
     batteryState,
     telemetry,
     telemetryAgeSeconds,
+    traileringRecommendation,
     isTraileringActive:
       isTraileringActive ||
       traileringRecommendation.action === 'TRAILER_REQUIRED' ||
       traileringRecommendation.action === 'TRAILER_RECOMMENDED',
     now,
   })
+  const swapRecommendationBeforeTerrain = planBatterySwap({
+    batteryState,
+    prediction: predictionBeforeTerrain,
+  })
+  const strategyRecommendationBeforeTerrain =
+    buildDeterministicStrategyRecommendation({
+      prediction: predictionBeforeTerrain,
+      swapRecommendation: swapRecommendationBeforeTerrain,
+      batteryState,
+      telemetry,
+      telemetryAgeSeconds,
+      traileringRecommendation,
+      isTraileringActive:
+        isTraileringActive ||
+        traileringRecommendation.action === 'TRAILER_REQUIRED' ||
+        traileringRecommendation.action === 'TRAILER_RECOMMENDED',
+      now,
+    })
   const warnings = dedupe([
     ...prediction.warnings,
     ...(batteryState.warnings ?? []),
@@ -222,6 +269,21 @@ export function buildAuthoritativeStrategyState({
     projectedNextStopSocPercent: prediction.projectedNextStopSocPercent,
     projectedEndDaySocPercent: prediction.projectedEndDaySocPercent,
     predictionConfidence: prediction.confidence,
+    terrainDiagnostics: {
+      projectedNextStopSocBeforeTerrain:
+        prediction.projectedNextStopSocPercentBeforeTerrain ??
+        predictionBeforeTerrain.projectedNextStopSocPercent,
+      projectedNextStopSocAfterTerrain: prediction.projectedNextStopSocPercent,
+      projectedEndDaySocBeforeTerrain:
+        prediction.projectedEndDaySocPercentBeforeTerrain ??
+        predictionBeforeTerrain.projectedEndDaySocPercent,
+      projectedEndDaySocAfterTerrain: prediction.projectedEndDaySocPercent,
+      recommendationBeforeTerrainCommand:
+        strategyRecommendationBeforeTerrain.command,
+      recommendationBeforeTerrainTitle: strategyRecommendationBeforeTerrain.title,
+      recommendationAfterTerrainCommand: strategyRecommendation.command,
+      recommendationAfterTerrainTitle: strategyRecommendation.title,
+    },
   }
 }
 
@@ -247,6 +309,10 @@ export function classifyMissionStatusFromCurrentChain({
     return 'CRITICAL_ENERGY'
   }
 
+  if (strategyRecommendation.command === 'trailer_now') {
+    return 'TRAILERING_RECOMMENDED'
+  }
+
   if (
     strategyRecommendation.command === 'plan_swap' ||
     swapRecommendation.action === 'plan_swap'
@@ -254,13 +320,11 @@ export function classifyMissionStatusFromCurrentChain({
     return 'SWAP_RECOMMENDED'
   }
 
-  if (prediction.confidence === 'low') {
-    return 'DATA_UNCERTAIN'
-  }
-
   if (
-    traileringRecommendation?.action === 'TRAILER_REQUIRED' ||
-    traileringRecommendation?.action === 'TRAILER_RECOMMENDED'
+    strategyRecommendation.command === 'consider_trailering' ||
+    (strategyRecommendation.command === 'hold_pace' &&
+      (traileringRecommendation?.action === 'TRAILER_REQUIRED' ||
+        traileringRecommendation?.action === 'TRAILER_RECOMMENDED'))
   ) {
     return 'TRAILERING_RECOMMENDED'
   }
@@ -270,6 +334,10 @@ export function classifyMissionStatusFromCurrentChain({
     strategyRecommendation.command === 'prioritize_charging'
   ) {
     return 'CONSERVE'
+  }
+
+  if (prediction.confidence === 'low') {
+    return 'DATA_UNCERTAIN'
   }
 
   if (

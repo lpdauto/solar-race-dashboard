@@ -8,6 +8,7 @@ import {
   type SwapRecommendation,
 } from '@/lib/raceBatteryStrategy'
 import type { RacePrediction } from '@/lib/racePrediction'
+import type { TraileringOption } from '@/lib/routeIntelligence'
 import type { TelemetryData } from '@/types/telemetry'
 
 const now = Date.parse('2026-07-21T17:00:00.000Z')
@@ -29,6 +30,12 @@ const basePrediction: RacePrediction = {
   projectedSolarRecoveredTraileringWh: 0,
   projectedSolarRecoveredWh: 600,
   projectedNetEnergyWh: 600,
+  projectedEndDayEnergyWh: 2595.84,
+  batteryProjectionSource: 'telemetry_energy',
+  raceBatteryStateProjectionFallbackUsed: false,
+  energyMarginSource: 'projectedEndDayEnergyWh',
+  energyMarginFormula:
+    'projectedEndDaySocPercent / 100 * batteryCapacityWh - reserveEnergyWh',
   reserveEnergyWh: 1000,
   reserveMarginPercent: 32,
   energyMarginWh: 2900,
@@ -156,10 +163,38 @@ describe('deterministic strategy recommendation', () => {
         speedMph: 0,
         netPowerWatts: 1000,
       },
+      traileringRecommendation: traileringOption('TRAILER_REQUIRED'),
     })
 
     expect(recommendation.command).toBe('swap_now')
     expect(recommendation.severity).toBe('urgent')
+    expect(recommendation.diagnostics?.finalCommandPriority).toBe(1)
+  })
+
+  it('recommends trailering now when route intelligence requires it and no critical swap applies', () => {
+    const recommendation = buildRecommendation({
+      traileringRecommendation: traileringOption('TRAILER_REQUIRED'),
+    })
+
+    expect(recommendation.command).toBe('trailer_now')
+    expect(recommendation.title).toBe('Trailer Now')
+    expect(recommendation.reason).toContain(
+      'Route intelligence recommends trailering this segment'
+    )
+    expect(recommendation.diagnostics?.traileringCommandTrigger).toBe(
+      'TRAILER_REQUIRED'
+    )
+    expect(recommendation.diagnostics?.finalCommandPriority).toBe(2)
+  })
+
+  it('considers trailering when route intelligence recommends it and higher-priority rules do not apply', () => {
+    const recommendation = buildRecommendation({
+      traileringRecommendation: traileringOption('TRAILER_RECOMMENDED'),
+    })
+
+    expect(recommendation.command).toBe('consider_trailering')
+    expect(recommendation.severity).toBe('caution')
+    expect(recommendation.diagnostics?.finalCommandPriority).toBe(5)
   })
 
   it('uses energy management instead of swap_now when projected next-stop SOC is low but packs are equal', () => {
@@ -322,13 +357,15 @@ function buildRecommendation({
   activeSocPercent = 70,
   spareSocPercent = 80,
   telemetryAgeSeconds,
+  traileringRecommendation,
 }: {
   prediction?: RacePrediction
-  telemetry?: TelemetryData
+  telemetry?: TelemetryData | null
   swapRecommendation?: SwapRecommendation
   activeSocPercent?: number
   spareSocPercent?: number
   telemetryAgeSeconds?: number
+  traileringRecommendation?: TraileringOption
 } = {}): StrategyRecommendation {
   return buildDeterministicStrategyRecommendation({
     prediction,
@@ -344,6 +381,21 @@ function buildRecommendation({
       spareSocPercent,
     }),
     telemetryAgeSeconds,
+    traileringRecommendation,
     now,
   })
+}
+
+function traileringOption(
+  action: TraileringOption['action']
+): TraileringOption {
+  return {
+    action,
+    reason: 'Trailering improves the energy/risk tradeoff on the lookahead.',
+    affectedMiles: 4,
+    estimatedEnergySavedWh: 600,
+    mileagePenalty: 4,
+    projectedSocIfDriven: 24,
+    projectedSocIfTrailered: 36,
+  }
 }

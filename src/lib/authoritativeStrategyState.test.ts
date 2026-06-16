@@ -4,7 +4,10 @@ import {
   buildAuthoritativeStrategyState,
   classifyMissionStatusFromCurrentChain,
 } from '@/lib/authoritativeStrategyState'
-import { createInitialRaceBatteryState } from '@/lib/raceBatteryStrategy'
+import {
+  createInitialRaceBatteryState,
+  type RaceBatteryState,
+} from '@/lib/raceBatteryStrategy'
 import type { TelemetryData } from '@/types/telemetry'
 
 const now = Date.parse('2026-07-19T16:00:00.000Z')
@@ -119,6 +122,41 @@ describe('authoritative strategy state', () => {
       'increase_speed_allowed'
     )
   })
+
+  it('uses healthy race battery state when telemetry is null without false critical energy', () => {
+    const state = buildState({
+      telemetry: null,
+      activeSocPercent: 80,
+      spareSocPercent: 90,
+      telemetryTimestampMs: undefined,
+      telemetryAgeSeconds: undefined,
+    })
+
+    expect(state.prediction.currentSocPercent).toBe(80)
+    expect(state.prediction.batteryProjectionSource).toBe('race_battery_state')
+    expect(state.prediction.raceBatteryStateProjectionFallbackUsed).toBe(true)
+    expect(state.predictionConfidence).toBe('low')
+    expect(state.missionStatus).toBe('DATA_UNCERTAIN')
+    expect(state.strategyRecommendation.command).toBe('hold_pace')
+    expect(state.strategyRecommendation.command).not.toBe('reduce_speed')
+    expect(state.missionStatus).not.toBe('CRITICAL_ENERGY')
+  })
+
+  it('returns low-confidence data uncertainty when telemetry and battery state are unavailable', () => {
+    const state = buildState({
+      telemetry: null,
+      raceBatteryState: null,
+      telemetryTimestampMs: undefined,
+      telemetryAgeSeconds: undefined,
+    })
+
+    expect(state.prediction.batteryProjectionSource).toBe('unavailable_fallback')
+    expect(state.prediction.telemetryNullFallbackSource).toBe('unavailable')
+    expect(state.predictionConfidence).toBe('low')
+    expect(state.missionStatus).toBe('DATA_UNCERTAIN')
+    expect(state.strategyRecommendation.command).toBe('hold_pace')
+    expect(state.missionStatus).not.toBe('CRITICAL_ENERGY')
+  })
 })
 
 function buildState({
@@ -127,13 +165,24 @@ function buildState({
   spareSocPercent = 90,
   telemetryTimestampMs = now,
   telemetryAgeSeconds = 0,
+  raceBatteryState,
 }: {
-  telemetry?: TelemetryData
+  telemetry?: TelemetryData | null
   activeSocPercent?: number
   spareSocPercent?: number
   telemetryTimestampMs?: number
   telemetryAgeSeconds?: number
+  raceBatteryState?: RaceBatteryState | null
 } = {}) {
+  const batteryState =
+    raceBatteryState === undefined
+      ? createInitialRaceBatteryState({
+          now,
+          activeSocPercent,
+          spareSocPercent,
+        })
+      : raceBatteryState
+
   return buildAuthoritativeStrategyState({
     raceDay,
     currentMile: 20,
@@ -160,11 +209,7 @@ function buildState({
     telemetrySource: 'manual',
     telemetryStatus: 'connected',
     connectionStatus: 'connected',
-    raceBatteryState: createInitialRaceBatteryState({
-      now,
-      activeSocPercent,
-      spareSocPercent,
-    }),
+    raceBatteryState: batteryState,
     now,
   })
 }
