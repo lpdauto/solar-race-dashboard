@@ -3845,7 +3845,7 @@ function VehicleSystemsPanel({
   )
 }
 
-function getDisplayedGpsStatus({
+export function getDisplayedGpsStatus({
   source,
   telemetry,
   geolocation,
@@ -3874,9 +3874,7 @@ function getDisplayedGpsStatus({
     (!useTelemetryGps &&
       geolocation.latitude !== null &&
       geolocation.longitude !== null)
-  const hasFix = useTelemetryGps
-    ? vehicleIsOnline && rawHasFix
-    : rawHasFix
+  const hasFix = rawHasFix
   const telemetryGpsAgeSeconds =
     typeof telemetry?.gpsAgeMs === 'number' && Number.isFinite(telemetry.gpsAgeMs)
       ? Math.max(0, Math.round(telemetry.gpsAgeMs / 1000))
@@ -3909,11 +3907,13 @@ function getDisplayedGpsStatus({
       | 'danger'
       | 'neutral',
     statusMessage:
-      useTelemetryGps && !vehicleIsOnline
-        ? 'GPS unavailable because vehicle telemetry is offline.'
-        : hasFix
-          ? 'Vehicle GPS fix available.'
-          : 'Waiting for vehicle GPS fix.',
+      hasFix && useTelemetryGps && !vehicleIsOnline
+        ? 'GPS coordinates are available; vehicle telemetry is stale or offline.'
+        : useTelemetryGps && !vehicleIsOnline
+          ? 'GPS unavailable because vehicle telemetry is offline.'
+          : hasFix
+            ? 'Vehicle GPS fix available.'
+            : 'Waiting for vehicle GPS fix.',
     ageSeconds,
     latLon,
     age: ageSeconds !== undefined ? `${ageSeconds}s` : '--',
