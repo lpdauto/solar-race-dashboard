@@ -117,6 +117,12 @@ import {
 import { generatePredictiveStrategy } from '@/lib/strategyEngine'
 import { appendStrategyEventLogEntry } from '@/lib/strategyEventLog'
 import {
+  createDefaultFiveDayStrategyPlanRaceDays,
+  defaultFiveDayStrategyPlanInputs,
+  projectFiveDayStrategyPlan,
+  type StrategyPlanResult,
+} from '@/lib/strategy/strategyPlan'
+import {
   classifyVehicleNodeStatusFromAgeMs,
   vehicleNodeStatusLabel,
 } from '@/lib/vehicleTelemetryStatus'
@@ -394,6 +400,17 @@ export default function DayCommandCenter({
       telemetryController.telemetry,
       telemetryController.telemetryHistory,
     ]
+  )
+  const fiveDayStrategyPlan = useMemo(
+    () =>
+      projectFiveDayStrategyPlan({
+        ...defaultFiveDayStrategyPlanInputs,
+        initialSocA: raceBatteryState.packs.A.socPercent,
+        initialSocB: raceBatteryState.packs.B.socPercent,
+        activePack: raceBatteryState.activePackId,
+        raceDays: createDefaultFiveDayStrategyPlanRaceDays(raceRoute),
+      }),
+    [raceBatteryState]
   )
   const generatedDaySummary = useMemo(
     () =>
@@ -814,6 +831,7 @@ export default function DayCommandCenter({
                 spareBatterySocPercent={carSetup.spareBatterySocPercent}
                 elevationGain={elevationStats.totalGain}
                 elevationLoss={elevationStats.totalLoss}
+                fiveDayStrategyPlan={fiveDayStrategyPlan}
               />
             </AccordionSection>
           </>
@@ -1131,6 +1149,7 @@ export default function DayCommandCenter({
               spareBatterySocPercent={carSetup.spareBatterySocPercent}
               elevationGain={elevationStats.totalGain}
               elevationLoss={elevationStats.totalLoss}
+              fiveDayStrategyPlan={fiveDayStrategyPlan}
             />
           </AccordionSection>
         ) : null}
@@ -4305,6 +4324,7 @@ function StrategyDebugPanel({
   spareBatterySocPercent,
   elevationGain,
   elevationLoss,
+  fiveDayStrategyPlan,
 }: {
   missionStatus: MissionStatus
   raceHealth: RaceHealth
@@ -4323,6 +4343,7 @@ function StrategyDebugPanel({
   spareBatterySocPercent: number
   elevationGain: number
   elevationLoss: number
+  fiveDayStrategyPlan: StrategyPlanResult
 }) {
   const baselineRemainingEnergyWh = strategy.safeStrategyWhPerMile * remainingMiles
   const lastPacketAgeSeconds =
@@ -4376,6 +4397,44 @@ function StrategyDebugPanel({
           Copy Debug Snapshot
         </button>
       </div>
+
+      <DebugSection title="Phase 1 Five-Day Strategy Plan">
+        <DebugField
+          label="Projected Day 5 Final SOC A"
+          value={`${fiveDayStrategyPlan.projectedFinalSocA.toFixed(1)}%`}
+          tone={strategyPlanSocTone(fiveDayStrategyPlan.projectedFinalSocA)}
+        />
+        <DebugField
+          label="Projected Day 5 Final SOC B"
+          value={`${fiveDayStrategyPlan.projectedFinalSocB.toFixed(1)}%`}
+          tone={strategyPlanSocTone(fiveDayStrategyPlan.projectedFinalSocB)}
+        />
+        <DebugField
+          label="Final Status"
+          value={formatStrategyPlanFinalStatus(fiveDayStrategyPlan.finalStatus)}
+          tone={strategyPlanStatusTone(fiveDayStrategyPlan.finalStatus)}
+        />
+        <DebugField
+          label="Total Captured Solar"
+          value={formatEnergyWh(fiveDayStrategyPlan.totalCapturedSolarWh)}
+          tone="healthy"
+        />
+        <DebugField
+          label="Total Lost Solar"
+          value={formatEnergyWh(fiveDayStrategyPlan.totalLostSolarWh)}
+          tone={fiveDayStrategyPlan.totalLostSolarWh > 0 ? 'caution' : 'healthy'}
+        />
+        <DebugField
+          label="Next Recommendation"
+          value={nextStrategyPlanRecommendation(fiveDayStrategyPlan)?.recommendation ?? 'None'}
+          tone={nextStrategyPlanRecommendation(fiveDayStrategyPlan) ? 'caution' : 'healthy'}
+        />
+        <DebugField
+          label="Recommendation Reason"
+          value={nextStrategyPlanRecommendation(fiveDayStrategyPlan)?.recommendationReason ?? 'No Phase 1 swap recommendation pending.'}
+          tone={nextStrategyPlanRecommendation(fiveDayStrategyPlan) ? 'caution' : 'neutral'}
+        />
+      </DebugSection>
 
       <DebugSection title="Mission Status">
         <DebugField label="Mission Status" value={formatMissionStatus(missionStatus)} tone={missionStatusDebugTone(missionStatus)} />
@@ -4615,6 +4674,34 @@ function DebugSection({
       </div>
     </section>
   )
+}
+
+function nextStrategyPlanRecommendation(plan: StrategyPlanResult) {
+  return (
+    plan.segmentForecasts.find((forecast) => forecast.recommendation) ?? null
+  )
+}
+
+function formatStrategyPlanFinalStatus(status: StrategyPlanResult['finalStatus']) {
+  return status.replaceAll('_', ' ')
+}
+
+function strategyPlanStatusTone(
+  status: StrategyPlanResult['finalStatus']
+): 'healthy' | 'caution' | 'danger' | 'neutral' {
+  if (status === 'ON_TARGET') return 'healthy'
+  if (status === 'TOO_AGGRESSIVE') return 'danger'
+
+  return 'caution'
+}
+
+function strategyPlanSocTone(
+  socPercent: number
+): 'healthy' | 'caution' | 'danger' | 'neutral' {
+  if (socPercent < 10) return 'danger'
+  if (socPercent > 20) return 'caution'
+
+  return 'healthy'
 }
 
 function DebugField({
