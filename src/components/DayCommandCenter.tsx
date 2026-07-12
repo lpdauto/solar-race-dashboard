@@ -4345,6 +4345,7 @@ function PhoneGpsProviderPanel({
   const [errorMessage, setErrorMessage] = useState('')
   const [uploadState, setUploadState] = useState<'idle' | 'ok' | 'failed'>('idle')
   const [uploadMessage, setUploadMessage] = useState('--')
+  const [wakeLockHeld, setWakeLockHeld] = useState(false)
   const watchIdRef = useRef<number | null>(null)
   const pendingReadingRef = useRef<PhoneGpsClientRecord | null>(null)
   const uploadTimerRef = useRef<number | null>(null)
@@ -4353,6 +4354,7 @@ function PhoneGpsProviderPanel({
   const sessionIdRef = useRef<string | null>(null)
   const providerIdRef = useRef('')
   const deviceNameRef = useRef(phoneGpsDefaultDeviceName)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
   useEffect(() => {
     const storedDeviceName = window.localStorage.getItem(phoneGpsDeviceNameStorageKey)
@@ -4394,6 +4396,29 @@ function PhoneGpsProviderPanel({
         if (cancelled) return
 
         setStatus(nextStatus)
+
+        const activeSessionId = sessionIdRef.current
+
+        if (
+          activeSessionId &&
+          nextStatus.activeProvider &&
+          nextStatus.activeProvider.sessionId !== activeSessionId
+        ) {
+          // Another device took over broadcasting (e.g. this device went
+          // offline while backgrounded/locked). Stop local GPS work and
+          // release the screen wake lock so it doesn't run forever.
+          clearPhoneGpsWatch(watchIdRef)
+          clearPhoneGpsUploadTimer(uploadTimerRef)
+          uploadAbortRef.current?.abort()
+          uploadAbortRef.current = null
+          void releaseWakeLock()
+          sessionIdRef.current = null
+          setSessionId(null)
+          setMode('idle')
+          setErrorMessage(
+            `${nextStatus.activeProvider.deviceName} took over GPS broadcasting.`
+          )
+        }
       } catch {
         // Keep local provider mode running through temporary dashboard read failures.
       }
@@ -4411,10 +4436,27 @@ function PhoneGpsProviderPanel({
   }, [])
 
   useEffect(() => {
+    function handleVisibilityChange() {
+      // The Wake Lock API auto-releases the sentinel whenever the tab is
+      // hidden, so re-acquire it only if this device is still broadcasting.
+      if (document.visibilityState === 'visible' && sessionIdRef.current) {
+        void acquireWakeLock()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
+  useEffect(() => {
     return () => {
       clearPhoneGpsWatch(watchIdRef)
       clearPhoneGpsUploadTimer(uploadTimerRef)
       uploadAbortRef.current?.abort()
+      void releaseWakeLock()
     }
   }, [])
 
@@ -4522,6 +4564,7 @@ function PhoneGpsProviderPanel({
       setUploadState('ok')
       setUploadMessage('Initial GPS upload accepted.')
       startPhoneGpsWatch()
+      void acquireWakeLock()
     } catch (error) {
       const nextMessage = gpsErrorMessage(error)
 
@@ -4531,11 +4574,42 @@ function PhoneGpsProviderPanel({
     }
   }
 
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLockRef.current) return
+
+    try {
+      const wakeLock = await navigator.wakeLock.request('screen')
+
+      wakeLockRef.current = wakeLock
+      setWakeLockHeld(true)
+      wakeLock.addEventListener('release', () => {
+        if (wakeLockRef.current === wakeLock) {
+          wakeLockRef.current = null
+          setWakeLockHeld(false)
+        }
+      })
+    } catch {
+      // Wake lock is a best-effort enhancement; broadcasting continues without it.
+    }
+  }
+
+  async function releaseWakeLock() {
+    const wakeLock = wakeLockRef.current
+
+    wakeLockRef.current = null
+    setWakeLockHeld(false)
+
+    if (wakeLock) {
+      await wakeLock.release().catch(() => undefined)
+    }
+  }
+
   async function stopProvider() {
     clearPhoneGpsWatch(watchIdRef)
     clearPhoneGpsUploadTimer(uploadTimerRef)
     uploadAbortRef.current?.abort()
     uploadAbortRef.current = null
+    void releaseWakeLock()
 
     const activeSessionId = sessionIdRef.current
 
@@ -4755,6 +4829,18 @@ function PhoneGpsProviderPanel({
                 : uploadState === 'failed'
                   ? 'FAILED'
                   : uploadMessage
+            }
+          />
+          <StatusMetric
+            label="Screen wake lock"
+            value={
+              !(typeof navigator !== 'undefined' && 'wakeLock' in navigator)
+                ? 'UNSUPPORTED'
+                : mode === 'active'
+                  ? wakeLockHeld
+                    ? 'HELD'
+                    : 'RELEASED'
+                  : '--'
             }
           />
         </SystemMetricGrid>
