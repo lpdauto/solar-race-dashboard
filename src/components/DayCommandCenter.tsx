@@ -4059,7 +4059,7 @@ function VehicleSystemsPanel({
 
   return (
     <section className="grid gap-4">
-      <SystemAccordion title="Vehicle" status={displayedVehicleNodeStatus} tone={nodeStatus.tone} defaultOpen>
+      <SystemAccordion title="Vehicle" status={displayedVehicleNodeStatus} tone={nodeStatus.tone}>
         <SystemSubsection title="Info">
           <SystemMetricGrid>
             <ConnectionField label="Vehicle Node" value={nodeStatus.label} tone={nodeStatus.tone} />
@@ -4125,7 +4125,6 @@ function VehicleSystemsPanel({
         title="Cloud"
         status={cloudStatus.badgeLabel}
         tone={cloudStatus.tone}
-        defaultOpen
       >
         <SystemSubsection title="Info">
           <SystemMetricGrid>
