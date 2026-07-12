@@ -187,7 +187,7 @@ export default function RaceTrackerClient() {
   const passenger = findTeamMemberById(currentCrew.passengerId)
   const visibleJournal = visiblePublicJournalPosts(journalPosts).slice(0, 4)
   return (
-    <main className="min-h-screen bg-[#080808] px-2 py-2 text-white sm:px-5 sm:py-4 lg:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-[#080808] px-3 py-3 text-white sm:px-5 sm:py-4 lg:px-8">
       <div className="mx-auto grid max-w-[1540px] grid-cols-1 gap-3 xl:grid-cols-[150px_minmax(0,1fr)_150px] xl:gap-4 2xl:grid-cols-[180px_minmax(0,1fr)_180px]">
         <SponsorRail
           sponsors={leftSponsors}
@@ -195,22 +195,22 @@ export default function RaceTrackerClient() {
         />
 
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:gap-4">
-        <header className="flex flex-col gap-2 rounded-lg border border-[#ff3ea5]/25 bg-[#101010] p-3 shadow-2xl shadow-black/25 sm:flex-row sm:items-end sm:justify-between sm:p-4">
+        <header className="flex flex-col gap-3 rounded-lg border border-[#ff3ea5]/25 bg-[#101010] p-3 shadow-2xl shadow-black/25 sm:flex-row sm:items-end sm:justify-between sm:p-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ff8fcb] sm:text-xs">
               Public Race Feed
             </p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:mt-2 sm:text-4xl">
+            <h1 className="mt-1 text-[1.7rem] font-black leading-none tracking-tight text-white sm:mt-2 sm:text-4xl">
               RX2 Live Race Tracker
             </h1>
-            <p className="mt-1 text-xs font-bold text-slate-300 sm:mt-2 sm:text-base">
+            <p className="mt-1 text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:text-base">
               Solar Car Challenge 2026 · Day {raceStatus.currentDay} of{' '}
               {raceStatus.totalDays} · Fort Worth → Fort Stockton
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold sm:gap-2 sm:text-sm">
+          <div className="grid w-full grid-cols-1 gap-1.5 text-xs font-bold min-[440px]:grid-cols-3 sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:text-sm">
             <span
-              className={`rounded-md border px-3 py-2 ${
+              className={`rounded-md border px-2.5 py-2 text-center sm:px-3 ${
                 fetchState === 'live'
                   ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
                   : fetchState === 'loading'
@@ -226,12 +226,12 @@ export default function RaceTrackerClient() {
                 ? 'Loading feed'
                 : 'Using last update'}
             </span>
-            <span className="rounded-md border border-sky-300/25 bg-sky-300/10 px-3 py-2 text-sky-100">
+            <span className="rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-2 text-center text-sky-100 sm:px-3">
               {raceStatus.dataSource === 'telemetry'
                 ? telemetryFreshnessLabel(raceStatus.telemetryAgeSeconds)
                 : 'Telemetry standby'}
             </span>
-            <span className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-slate-300">
+            <span className="rounded-md border border-white/10 bg-black/30 px-2.5 py-2 text-center text-slate-300 sm:px-3">
               Updated {lastUpdated}
             </span>
           </div>
@@ -241,12 +241,12 @@ export default function RaceTrackerClient() {
           <PublicRaceLeafletMap raceStatus={raceStatus} />
         </section>
 
-        <section className="grid gap-2 xl:hidden sm:grid-cols-2">
+        <section className="grid gap-2 xl:hidden min-[430px]:grid-cols-2">
           <PublicCrewCard label="Driver" member={driver} compact />
           <PublicCrewCard label="Passenger" member={passenger} compact />
         </section>
 
-        <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <section className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <MetricTile label="Current Speed" value={`${raceStatus.speedMph.toFixed(1)} mph`} accent="hot" />
           <MetricTile label="Average Speed" value={`${raceStatus.avgSpeedMph.toFixed(1)} mph`} accent="rose" />
           <MetricTile
@@ -276,7 +276,7 @@ export default function RaceTrackerClient() {
               <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
                 Current Race Status
               </p>
-              <h2 className="mt-1 text-2xl font-black text-white">
+              <h2 className="mt-1 text-[1.65rem] font-black leading-tight text-white sm:text-2xl">
                 {raceStatus.status}
               </h2>
             </div>
@@ -284,7 +284,7 @@ export default function RaceTrackerClient() {
               ETA {raceStatus.eta}
             </p>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-3 lg:grid-cols-6">
+          <div className="mt-3 grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:mt-4 sm:gap-3 lg:grid-cols-6">
             <StatusField label="Current day" value={`Day ${raceStatus.currentDay} of ${raceStatus.totalDays}`} />
             <StatusField label="Current segment" value={raceStatus.currentSegment} />
             <StatusField label="Next stop" value={raceStatus.nextStop} />
@@ -509,7 +509,7 @@ function SponsorGrid({
   sponsors: Array<{ name: string; logoUrl?: string; sponsorUrl?: string }>
 }) {
   return (
-    <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:hidden">
+    <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:hidden">
       {sponsors.map((sponsor) => (
         <SponsorLogo key={sponsor.name} sponsor={sponsor} />
       ))}
@@ -531,16 +531,16 @@ function SponsorLogo({
             src={sponsor.logoUrl}
             alt={`${sponsor.name} logo`}
             loading="lazy"
-            className="max-h-14 w-full object-contain"
+            className="max-h-10 w-full object-contain sm:max-h-14"
           />
           {showNameWithLogo ? (
-            <span className="text-center text-xs font-black text-slate-950">
+            <span className="text-center text-[11px] font-black text-slate-950 sm:text-xs">
               {sponsor.name}
             </span>
           ) : null}
         </span>
       ) : (
-        <span className="text-center text-sm font-black text-slate-950">
+        <span className="text-center text-xs font-black leading-4 text-slate-950 sm:text-sm">
           {sponsor.name}
         </span>
       )}
@@ -554,7 +554,7 @@ function SponsorLogo({
         target="_blank"
         rel="noreferrer"
         title={sponsor.name}
-        className="flex min-h-20 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-3 shadow-xl shadow-black/20"
+        className="flex min-h-16 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
       >
         {content}
       </a>
@@ -564,7 +564,7 @@ function SponsorLogo({
   return (
     <div
       title={sponsor.name}
-      className="flex min-h-20 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-3 shadow-xl shadow-black/20"
+      className="flex min-h-16 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
     >
       {content}
     </div>
@@ -593,22 +593,22 @@ function MetricTile({
 
   return (
     <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#120a10] p-3 shadow-xl shadow-black/20 sm:p-4">
-      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d58aad] sm:text-xs">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#d58aad] sm:text-xs sm:tracking-[0.16em]">
         {label}
       </p>
-      <p className={`mt-2 text-xl font-black sm:mt-3 sm:text-2xl ${colorClass}`}>{value}</p>
-      {detail ? <p className="mt-1 text-xs font-bold text-[#caa0b6] sm:text-sm">{detail}</p> : null}
+      <p className={`mt-1.5 text-[1.45rem] font-black leading-tight sm:mt-3 sm:text-2xl ${colorClass}`}>{value}</p>
+      {detail ? <p className="mt-1 text-xs font-bold leading-5 text-[#caa0b6] sm:text-sm">{detail}</p> : null}
     </div>
   )
 }
 
 function StatusField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-white/10 bg-black/30 p-2.5 sm:p-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 sm:text-xs">
+    <div className="min-w-0 rounded-md border border-white/10 bg-black/30 p-2.5 sm:p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
         {label}
       </p>
-      <p className="mt-1.5 text-sm font-black text-white sm:mt-2 sm:text-base">{value}</p>
+      <p className="mt-1.5 break-words text-base font-black leading-6 text-white sm:mt-2 sm:text-base">{value}</p>
     </div>
   )
 }
