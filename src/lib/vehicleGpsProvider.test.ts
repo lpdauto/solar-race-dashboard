@@ -258,6 +258,110 @@ describe('vehicle GPS provider', () => {
     expect(status.latest?.latitude).toBe(34.096981)
   })
 
+  it('uses fresh Android telemetry ingest GPS when the legacy provider is stale', async () => {
+    const redis = new MemoryRedis()
+    const provider: GpsProviderRecord = {
+      providerId: 'device-1',
+      sessionId: 'session-1',
+      deviceName: 'Old Browser GPS',
+      startedAt: '2026-07-11T12:00:00.000Z',
+      lastUpdateAt: '2026-07-11T12:00:00.000Z',
+    }
+    const latest: PhoneGpsRecord = {
+      ...baseInput,
+      providerId: 'device-1',
+      sessionId: 'session-1',
+      deviceName: 'Old Browser GPS',
+      speedMph: 10,
+      altitudeFeet: 203,
+      clientTimestamp: '2026-07-11T12:00:00.000Z',
+      serverReceivedAt: '2026-07-11T12:00:00.000Z',
+    }
+
+    await redis.set(gpsActiveProviderKey, provider)
+    await redis.set(gpsLatestKey, latest)
+    await redis.set('latest:vehicle', {
+      payload: {
+        gpsSource: 'android-gps',
+        gpsDeviceId: 'rx2-driver-android',
+        lat: 34.0969875,
+        lng: -118.0530284,
+        speedMph: 0.5,
+        heading: 313,
+        altitudeMeters: 71.5,
+        accuracyMeters: 8,
+        gpsTimestamp: '2026-07-11T12:00:28.000Z',
+        gpsUpdatedAt: '2026-07-11T12:00:29.000Z',
+      },
+      updated_at: '2026-07-11T12:00:29.000Z',
+    })
+
+    const status = await getGpsProviderStatus({
+      redis,
+      now: new Date('2026-07-11T12:00:30.000Z'),
+    })
+
+    expect(status.gpsStatus).toBe('live')
+    expect(status.gpsSource).toBe('phone')
+    expect(status.activeProvider).toMatchObject({
+      providerId: 'rx2-driver-android',
+      deviceName: 'Android GPS Device',
+    })
+    expect(status.latest).toMatchObject({
+      latitude: 34.0969875,
+      longitude: -118.0530284,
+      speedMph: 0.5,
+      headingDegrees: 313,
+      accuracyMeters: 8,
+      serverReceivedAt: '2026-07-11T12:00:29.000Z',
+    })
+  })
+
+  it('keeps newer legacy GPS provider data over older Android telemetry ingest GPS', async () => {
+    const redis = new MemoryRedis()
+    const provider: GpsProviderRecord = {
+      providerId: 'device-1',
+      sessionId: 'session-1',
+      deviceName: 'Browser GPS',
+      startedAt: '2026-07-11T12:00:00.000Z',
+      lastUpdateAt: '2026-07-11T12:00:29.000Z',
+    }
+    const latest: PhoneGpsRecord = {
+      ...baseInput,
+      providerId: 'device-1',
+      sessionId: 'session-1',
+      deviceName: 'Browser GPS',
+      latitude: 31.7,
+      longitude: -95.6,
+      speedMph: 10,
+      altitudeFeet: 203,
+      clientTimestamp: '2026-07-11T12:00:28.000Z',
+      serverReceivedAt: '2026-07-11T12:00:29.000Z',
+    }
+
+    await redis.set(gpsActiveProviderKey, provider)
+    await redis.set(gpsLatestKey, latest)
+    await redis.set('latest:vehicle', {
+      payload: {
+        gpsSource: 'android-gps',
+        gpsDeviceId: 'rx2-driver-android',
+        lat: 34.0969875,
+        lng: -118.0530284,
+        gpsUpdatedAt: '2026-07-11T12:00:20.000Z',
+      },
+      updated_at: '2026-07-11T12:00:20.000Z',
+    })
+
+    const status = await getGpsProviderStatus({
+      redis,
+      now: new Date('2026-07-11T12:00:30.000Z'),
+    })
+
+    expect(status.activeProvider).toEqual(provider)
+    expect(status.latest?.latitude).toBe(31.7)
+    expect(status.latest?.longitude).toBe(-95.6)
+  })
+
   it('merges fresh phone GPS over ESP32 GPS without overwriting non-GPS telemetry', () => {
     const merged = mergePhoneGpsIntoTelemetryPayload({
       payload: {

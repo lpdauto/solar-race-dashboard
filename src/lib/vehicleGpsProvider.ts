@@ -1,5 +1,6 @@
 export const gpsActiveProviderKey = 'gps:active-provider'
 export const gpsLatestKey = 'gps:latest'
+export const vehicleTelemetryLatestKey = 'latest:vehicle'
 export const vehicleLocationKey = 'vehicle:location'
 export const phoneGpsLiveThresholdMs = 10_000
 export const phoneGpsOfflineThresholdMs = 30_000
@@ -60,6 +61,11 @@ export type PhoneGpsProviderInput = PhoneGpsPositionInput & {
 
 type GpsRedisReader = {
   get<T>(key: string): Promise<T | null>
+}
+
+type TelemetryLatestRowLike = {
+  payload?: unknown
+  updated_at?: string
 }
 
 type GpsRedisWriter = GpsRedisReader & {
@@ -276,27 +282,39 @@ export async function getGpsProviderStatus({
   redis: GpsRedisReader
   now?: Date
 }): Promise<GpsProviderStatusResponse> {
-  const [activeProvider, latest] = await Promise.all([
+  const [activeProvider, latest, latestVehicleTelemetry] = await Promise.all([
     redis.get<GpsProviderRecord>(gpsActiveProviderKey),
     redis.get<PhoneGpsRecord>(gpsLatestKey),
+    redis.get<TelemetryLatestRowLike>(vehicleTelemetryLatestKey),
   ])
   const gpsAgeMs = latest
     ? Math.max(0, now.getTime() - Date.parse(latest.serverReceivedAt))
     : null
-  const gpsStatus = classifyPhoneGpsStatus(gpsAgeMs)
   const validLatest =
     activeProvider &&
     latest &&
     activeProvider.sessionId === latest.sessionId
       ? latest
       : null
+  const androidTelemetryLatest = phoneGpsFromAndroidTelemetryPayload(
+    latestVehicleTelemetry?.payload
+  )
+  const selected = selectNewestPhoneGps({
+    legacyProvider: activeProvider,
+    legacyLatest: validLatest,
+    androidLatest: androidTelemetryLatest,
+  })
+  const selectedAgeMs = selected.latest
+    ? Math.max(0, now.getTime() - Date.parse(selected.latest.serverReceivedAt))
+    : null
+  const selectedStatus = classifyPhoneGpsStatus(selectedAgeMs)
 
   return {
-    activeProvider,
-    latest: validLatest,
-    gpsSource: validLatest ? 'phone' : 'none',
-    gpsStatus: validLatest ? gpsStatus : 'offline',
-    gpsAgeMs: validLatest ? gpsAgeMs : null,
+    activeProvider: selected.provider,
+    latest: selected.latest,
+    gpsSource: selected.latest ? 'phone' : 'none',
+    gpsStatus: selected.latest ? selectedStatus : 'offline',
+    gpsAgeMs: selected.latest ? selectedAgeMs : null,
   }
 }
 
@@ -486,6 +504,115 @@ function buildPhoneGpsRecord({
     clientTimestamp: new Date(position.browserTimestamp as number).toISOString(),
     serverReceivedAt,
   }
+}
+
+function selectNewestPhoneGps({
+  legacyProvider,
+  legacyLatest,
+  androidLatest,
+}: {
+  legacyProvider: GpsProviderRecord | null
+  legacyLatest: PhoneGpsRecord | null
+  androidLatest: {
+    provider: GpsProviderRecord
+    latest: PhoneGpsRecord
+  } | null
+}): {
+  provider: GpsProviderRecord | null
+  latest: PhoneGpsRecord | null
+} {
+  if (!androidLatest) {
+    return {
+      provider: legacyProvider,
+      latest: legacyLatest,
+    }
+  }
+
+  if (!legacyLatest) {
+    return androidLatest
+  }
+
+  const androidReceivedAt = Date.parse(androidLatest.latest.serverReceivedAt)
+  const legacyReceivedAt = Date.parse(legacyLatest.serverReceivedAt)
+
+  if (
+    Number.isFinite(androidReceivedAt) &&
+    (!Number.isFinite(legacyReceivedAt) || androidReceivedAt >= legacyReceivedAt)
+  ) {
+    return androidLatest
+  }
+
+  return {
+    provider: legacyProvider,
+    latest: legacyLatest,
+  }
+}
+
+function phoneGpsFromAndroidTelemetryPayload(payload: unknown): {
+  provider: GpsProviderRecord
+  latest: PhoneGpsRecord
+} | null {
+  if (!isJsonObject(payload) || payload.gpsSource !== 'android-gps') {
+    return null
+  }
+
+  const latitude = finiteNumber(payload.lat ?? payload.latitude)
+  const longitude = finiteNumber(payload.lng ?? payload.longitude)
+  const serverReceivedAt = nonEmptyString(payload.gpsUpdatedAt)
+
+  if (
+    latitude === undefined ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude === undefined ||
+    longitude < -180 ||
+    longitude > 180 ||
+    !serverReceivedAt ||
+    !Number.isFinite(Date.parse(serverReceivedAt))
+  ) {
+    return null
+  }
+
+  const deviceId = nonEmptyString(payload.gpsDeviceId) ?? 'android-gps'
+  const speedMph = nullableNonNegativeNumber(payload.speedMph ?? payload.speed)
+  const altitudeMeters = nullableFiniteNumber(payload.altitudeMeters)
+  const gpsTimestampMs = timestampMs(payload.gpsTimestamp) ?? Date.parse(serverReceivedAt)
+  const provider: GpsProviderRecord = {
+    providerId: deviceId,
+    sessionId: deviceId,
+    deviceName: 'Android GPS Device',
+    startedAt: serverReceivedAt,
+    lastUpdateAt: serverReceivedAt,
+  }
+
+  return {
+    provider,
+    latest: {
+      providerId: provider.providerId,
+      sessionId: provider.sessionId,
+      deviceName: provider.deviceName,
+      latitude,
+      longitude,
+      speedMps: speedMph === null ? null : speedMph / 2.236936,
+      speedMph,
+      headingDegrees: nullableHeading(payload.heading),
+      altitudeMeters,
+      altitudeFeet: altitudeMeters === null ? null : altitudeMeters * 3.28084,
+      accuracyMeters: nullableNonNegativeNumber(payload.accuracyMeters),
+      altitudeAccuracyMeters: null,
+      browserTimestamp: gpsTimestampMs,
+      clientTimestamp: new Date(gpsTimestampMs).toISOString(),
+      serverReceivedAt,
+    },
+  }
+}
+
+function timestampMs(value: unknown) {
+  if (typeof value !== 'string') return null
+
+  const timestamp = Date.parse(value)
+
+  return Number.isFinite(timestamp) ? timestamp : null
 }
 
 function finiteNumber(value: unknown) {
