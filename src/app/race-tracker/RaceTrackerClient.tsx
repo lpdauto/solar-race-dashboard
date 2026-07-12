@@ -45,24 +45,26 @@ const mockFallback: PublicRaceStatus = {
   placeTotal: 22,
   standingsSourceUrl: 'https://www.solarcarchallenge.org/',
   standingsLastUpdated: 'Waiting for standings',
-  milesCompleted: 142.6,
-  milesLeft: 477.2,
-  totalMiles: 619.8,
+  milesCompleted: 0,
+  milesLeft: 755.7,
+  totalMiles: 755.7,
   currentTime: '--:--',
   weatherLocation: 'Palestine, TX',
   weatherTempF: 91,
   weatherCondition: 'Sunny',
   weatherWindMph: 8,
   weatherWindDirection: 'SE',
-  currentDay: 2,
+  racePhase: 'pre-race',
+  currentDay: 1,
+  currentDayLabel: 'Racing soon',
   totalDays: 5,
-  currentSegment: 'Palestine to Hearne',
-  nextStop: 'Hearne checkpoint',
-  eta: '2:36 PM',
-  status: 'On target',
+  currentSegment: 'Race Day 1: Fort Worth, TX to Palestine, TX',
+  nextStop: 'Fort Worth race start',
+  eta: 'Starts Jul 19',
+  status: 'Racing soon',
   lat: 31.7621,
   lng: -95.6308,
-  routeProgressPct: 23,
+  routeProgressPct: 0,
   instagramUrl: 'https://www.instagram.com/',
   sponsors: publicRaceSponsors,
 }
@@ -205,8 +207,8 @@ export default function RaceTrackerClient() {
               RX2 Live Race Tracker
             </h1>
             <p className="mt-1 text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:text-base">
-              Solar Car Challenge 2026 · Day {raceStatus.currentDay} of{' '}
-              {raceStatus.totalDays} · Fort Worth → Fort Stockton
+              Solar Car Challenge 2026 · {raceStatus.currentDayLabel} · Fort
+              Worth → Fort Stockton
             </p>
           </div>
           <div className="grid w-full grid-cols-1 gap-1.5 text-xs font-bold min-[440px]:grid-cols-3 sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:text-sm">
@@ -286,7 +288,7 @@ export default function RaceTrackerClient() {
             </p>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:mt-4 sm:gap-3 lg:grid-cols-6">
-            <StatusField label="Current day" value={`Day ${raceStatus.currentDay} of ${raceStatus.totalDays}`} />
+            <StatusField label="Current day" value={raceStatus.currentDayLabel} />
             <StatusField label="Current segment" value={raceStatus.currentSegment} />
             <StatusField label="Next stop" value={raceStatus.nextStop} />
             <StatusField label="ETA" value={raceStatus.eta} />

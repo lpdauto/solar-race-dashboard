@@ -9,6 +9,10 @@ import {
 import type { TelemetryLatestRow } from '@/lib/redisTelemetry'
 import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
 import {
+  getPublicRaceCalendarStatus,
+  type PublicRacePhase,
+} from '@/lib/publicRaceCalendar'
+import {
   hasVehicleLocationCoordinates,
   type VehicleLocation,
 } from '@/lib/vehicleLocation'
@@ -41,7 +45,9 @@ export type PublicRaceStatus = {
   weatherCondition: string
   weatherWindMph: number
   weatherWindDirection: string
+  racePhase: PublicRacePhase
   currentDay: number
+  currentDayLabel: string
   totalDays: number
   currentSegment: string
   nextStop: string
@@ -129,8 +135,10 @@ export const publicRaceSponsors: PublicSponsor[] = [
 ]
 
 export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
-  const milesCompleted = 185.4
-  const milesLeft = 620.8
+  const calendar = getPublicRaceCalendarStatus(now)
+  const isPreRace = calendar.phase === 'pre-race'
+  const milesCompleted = isPreRace ? 0 : 185.4
+  const milesLeft = isPreRace ? 755.7 : 620.8
   const totalMiles = milesCompleted + milesLeft
 
   return {
@@ -155,12 +163,16 @@ export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
     weatherCondition: 'Sunny',
     weatherWindMph: 8,
     weatherWindDirection: 'SE',
-    currentDay: 2,
-    totalDays: 5,
-    currentSegment: 'Palestine High School to Leon ISD',
-    nextStop: 'Leon ISD Junior & Senior High School',
-    eta: '2:36 PM',
-    status: 'On target',
+    racePhase: calendar.phase,
+    currentDay: calendar.currentDay,
+    currentDayLabel: calendar.currentDayLabel,
+    totalDays: calendar.totalDays,
+    currentSegment: isPreRace
+      ? `Race Day 1: ${calendar.dayRouteLabel}`
+      : 'Palestine High School to Leon ISD',
+    nextStop: isPreRace ? 'Fort Worth race start' : 'Leon ISD Junior & Senior High School',
+    eta: isPreRace ? calendar.countdownLabel : '2:36 PM',
+    status: isPreRace ? 'Racing soon' : 'On target',
     lat: 31.7621,
     lng: -95.6308,
     routeProgressPct: calculateCompletedRoutePercentage({
@@ -181,6 +193,7 @@ export function getPublicRaceStatusFromTelemetry(
     return getMockPublicRaceStatus(now)
   }
 
+  const calendar = getPublicRaceCalendarStatus(now)
   const telemetry = parseEsp32TelemetryPacket(
     (latestRow.payload ?? {}) as Parameters<typeof parseEsp32TelemetryPacket>[0]
   )
@@ -207,15 +220,17 @@ export function getPublicRaceStatusFromTelemetry(
       : null
 
   if (!liveGps || !progress) {
+    const fallback = getMockPublicRaceStatus(now)
+
     return {
-      ...getMockPublicRaceStatus(now),
+      ...fallback,
       dataSource: 'telemetry',
       telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
       telemetryUpdatedAt: latestRow.updated_at,
       routeConfidence: 'unavailable',
       vehicleLocation: vehicleLocation ?? null,
       speedMph: telemetry.speedMph,
-      status: statusFromTelemetryAge(latestRow.updated_at, now),
+      status: statusFromTelemetryAge(latestRow.updated_at, now, 'unavailable', calendar.phase),
       currentTime: formatPublicTime(now),
       standingsLastUpdated: formatPublicDateTime(now),
     }
@@ -251,8 +266,9 @@ export function getPublicRaceStatusFromTelemetry(
     placeTotal: 22,
     standingsSourceUrl: 'https://www.solarcarchallenge.org/',
     standingsLastUpdated: 'Official standings pending',
-    milesCompleted: progress.milesCompleted,
-    milesLeft: progress.milesLeft,
+    milesCompleted: calendar.phase === 'pre-race' ? 0 : progress.milesCompleted,
+    milesLeft:
+      calendar.phase === 'pre-race' ? progress.totalMiles : progress.milesLeft,
     totalMiles: progress.totalMiles,
     currentTime: formatPublicTime(now),
     weatherLocation: nextStop?.label ?? 'On course',
@@ -260,19 +276,31 @@ export function getPublicRaceStatusFromTelemetry(
     weatherCondition: 'Weather pending',
     weatherWindMph: 0,
     weatherWindDirection: '--',
-    currentDay: dayForProgress(progress.routeProgressPct),
-    totalDays: 5,
-    currentSegment,
-    nextStop: nextStop?.label ?? 'Finish',
-    eta: etaFromSpeed(progress.milesLeft, telemetry.speedMph, now),
+    racePhase: calendar.phase,
+    currentDay: calendar.currentDay,
+    currentDayLabel: calendar.currentDayLabel,
+    totalDays: calendar.totalDays,
+    currentSegment:
+      calendar.phase === 'pre-race'
+        ? `Race Day 1: ${calendar.dayRouteLabel}`
+        : currentSegment,
+    nextStop:
+      calendar.phase === 'pre-race'
+        ? 'Fort Worth race start'
+        : nextStop?.label ?? 'Finish',
+    eta:
+      calendar.phase === 'pre-race'
+        ? calendar.countdownLabel
+        : etaFromSpeed(progress.milesLeft, telemetry.speedMph, now),
     status: statusFromTelemetryAge(
       latestRow.updated_at,
       now,
-      routeConfidence
+      routeConfidence,
+      calendar.phase
     ),
     lat: mapPosition.lat,
     lng: mapPosition.lng,
-    routeProgressPct: progress.routeProgressPct,
+    routeProgressPct: calendar.phase === 'pre-race' ? 0 : progress.routeProgressPct,
     instagramUrl: 'https://www.instagram.com/',
     sponsors: publicRaceSponsors,
   }
@@ -308,8 +336,12 @@ function ageSeconds(updatedAt: string | null | undefined, now: Date) {
 function statusFromTelemetryAge(
   updatedAt: string | null | undefined,
   now: Date,
-  confidence: PublicRaceStatus['routeConfidence'] = 'unavailable'
+  confidence: PublicRaceStatus['routeConfidence'] = 'unavailable',
+  phase: PublicRacePhase = 'racing'
 ) {
+  if (phase === 'pre-race') return 'Racing soon'
+  if (phase === 'post-race') return 'Race complete'
+
   const age = ageSeconds(updatedAt, now)
 
   if (age !== null && age > 60) return 'Telemetry delayed'
@@ -327,10 +359,6 @@ function etaFromSpeed(milesLeft: number, speedMph: number, now: Date) {
 
   const eta = new Date(now.getTime() + (milesLeft / speedMph) * 60 * 60 * 1000)
   return formatPublicTime(eta)
-}
-
-function dayForProgress(routeProgressPct: number) {
-  return Math.min(5, Math.max(1, Math.floor(routeProgressPct / 20) + 1))
 }
 
 function currentSegmentForProgress(routeProgressPct: number) {

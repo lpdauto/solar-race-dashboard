@@ -6,12 +6,13 @@ import {
 
 describe('getMockPublicRaceStatus', () => {
   it('returns only public-safe race tracker fields', () => {
-    const status = getMockPublicRaceStatus(new Date('2026-06-09T18:30:00Z'))
+    const status = getMockPublicRaceStatus(new Date('2026-07-12T18:30:00Z'))
 
     expect(Object.keys(status).sort()).toEqual(
       [
         'avgSpeedMph',
         'currentDay',
+        'currentDayLabel',
         'currentPlace',
         'currentSegment',
         'currentTime',
@@ -25,6 +26,7 @@ describe('getMockPublicRaceStatus', () => {
         'milesLeft',
         'nextStop',
         'placeTotal',
+        'racePhase',
         'routeProgressPct',
         'routeConfidence',
         'speedMph',
@@ -50,8 +52,11 @@ describe('getMockPublicRaceStatus', () => {
       logoUrl: expect.any(String),
       sponsorUrl: expect.any(String),
     })
-    expect(status.routeProgressPct).toBeGreaterThan(0)
-    expect(status.routeProgressPct).toBeLessThan(100)
+    expect(status.currentDay).toBe(1)
+    expect(status.currentDayLabel).toBe('Racing soon')
+    expect(status.racePhase).toBe('pre-race')
+    expect(status.status).toBe('Racing soon')
+    expect(status.routeProgressPct).toBe(0)
     expect(status).not.toHaveProperty('batteryVoltage')
     expect(status).not.toHaveProperty('batteryCurrent')
     expect(status).not.toHaveProperty('motorTempC')
@@ -66,7 +71,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
       {
         id: 'vehicle',
         node: 'vehicle',
-        updated_at: '2026-06-09T18:29:55.000Z',
+        updated_at: '2026-07-20T18:29:55.000Z',
         payload: {
           speedMph: 24.8,
           gpsLat: 31.738999,
@@ -76,7 +81,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
           motorTempC: 58.4,
         },
       },
-      new Date('2026-06-09T18:30:00Z')
+      new Date('2026-07-20T18:30:00Z')
     )
 
     expect(status.dataSource).toBe('telemetry')
@@ -84,6 +89,8 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.telemetryAgeSeconds).toBe(5)
     expect(status.routeConfidence).toBe('live')
     expect(status.routeProgressPct).toBeGreaterThan(0)
+    expect(status.currentDay).toBe(2)
+    expect(status.currentDayLabel).toBe('Day 2 of 5')
     expect(status.status).toBe('Live GPS')
     expect(status).not.toHaveProperty('batteryVoltage')
     expect(status).not.toHaveProperty('batteryCurrent')
@@ -95,12 +102,12 @@ describe('getPublicRaceStatusFromTelemetry', () => {
       {
         id: 'vehicle',
         node: 'vehicle',
-        updated_at: '2026-06-09T18:29:55.000Z',
+        updated_at: '2026-07-20T18:29:55.000Z',
         payload: {
           speedMph: 0,
         },
       },
-      new Date('2026-06-09T18:30:00Z')
+      new Date('2026-07-20T18:30:00Z')
     )
 
     expect(status.dataSource).toBe('telemetry')
@@ -113,7 +120,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
       {
         id: 'vehicle',
         node: 'vehicle',
-        updated_at: '2026-06-09T18:29:55.000Z',
+        updated_at: '2026-07-20T18:29:55.000Z',
         payload: {
           speedMph: 0,
           gpsFix: true,
@@ -124,7 +131,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
           gpsElevationFt: 210,
         },
       },
-      new Date('2026-06-09T18:30:00Z')
+      new Date('2026-07-20T18:30:00Z')
     )
 
     expect(status.dataSource).toBe('telemetry')
@@ -142,7 +149,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
       {
         id: 'vehicle',
         node: 'vehicle',
-        updated_at: '2026-06-09T18:29:55.000Z',
+        updated_at: '2026-07-20T18:29:55.000Z',
         payload: {
           speedMph: 0,
           gpsFix: true,
@@ -150,7 +157,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
           gpsLng: 0,
         },
       },
-      new Date('2026-06-09T18:30:00Z')
+      new Date('2026-07-20T18:30:00Z')
     )
 
     expect(status.dataSource).toBe('telemetry')
@@ -168,7 +175,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
       {
         id: 'vehicle',
         node: 'vehicle',
-        updated_at: '2026-06-09T18:29:55.000Z',
+        updated_at: '2026-07-20T18:29:55.000Z',
         payload: {
           speedMph: 0,
           gpsValid: false,
@@ -177,7 +184,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
           gpsLng: 0,
         },
       },
-      new Date('2026-06-09T18:30:00Z'),
+      new Date('2026-07-20T18:30:00Z'),
       {
         latitude: 31.738999,
         longitude: -95.604293,
@@ -188,8 +195,8 @@ describe('getPublicRaceStatusFromTelemetry', () => {
         altitudeFeet: 230,
         accuracyMeters: 3,
         altitudeAccuracyMeters: null,
-        clientTimestamp: Date.parse('2026-06-09T18:29:54.000Z'),
-        serverTimestamp: Date.parse('2026-06-09T18:29:55.000Z'),
+        clientTimestamp: Date.parse('2026-07-20T18:29:54.000Z'),
+        serverTimestamp: Date.parse('2026-07-20T18:29:55.000Z'),
         ageMs: 5000,
         status: 'online',
         providerName: 'Android GPS Device',
@@ -202,5 +209,13 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.lng).toBe(-95.604293)
     expect(status.speedMph).toBe(10)
     expect(status.vehicleLocation?.providerName).toBe('Android GPS Device')
+  })
+
+  it('updates the public day label from the official race calendar', () => {
+    const status = getMockPublicRaceStatus(new Date('2026-07-20T18:30:00Z'))
+
+    expect(status.currentDay).toBe(2)
+    expect(status.currentDayLabel).toBe('Day 2 of 5')
+    expect(status.racePhase).toBe('racing')
   })
 })
