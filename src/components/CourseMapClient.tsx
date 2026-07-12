@@ -8,10 +8,13 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  ZoomControl,
   useMap,
 } from 'react-leaflet'
 import type { RaceDay, RiskLevel, RoutePoint } from '@/data/raceRoute'
+import routeElevation from '@/data/routeElevation.json'
 import {
+  classifyElevationSeverityFromGrade,
   classifyRouteSegmentSeverity,
   findSegmentForMile,
   getCurrentDayBounds,
@@ -19,6 +22,10 @@ import {
   getSeverityColor,
   type MapSeverity,
 } from '@/lib/mapSeverity'
+import {
+  mandatoryTraileringLegendLabel,
+  mandatoryTraileringMapColor,
+} from '@/lib/routeMileage'
 
 type CourseMapProps = {
   days: RaceDay[]
@@ -27,9 +34,16 @@ type CourseMapProps = {
   currentLocation?: {
     lat: number
     lng: number
+    label?: string
+    fix?: boolean
+    ageMs?: number
+    satellites?: number
+    heading?: number
+    elevationFt?: number
   }
   heightClass?: string
   showAllDays?: boolean
+  showRiskAnnotations?: boolean
 }
 
 type RouteLine = {
@@ -42,7 +56,33 @@ type RouteLine = {
   isCurrentSegment: boolean
 }
 
+type ElevationPoint = {
+  day: number
+  latitude: number
+  longitude: number
+  cumulativeMiles: number
+  elevationFt?: number | null
+  gradePercent?: number | null
+  smoothedGradePercent?: number | null
+  segmentType?: string
+}
+
+type ElevationRouteLine = {
+  key: string
+  day: RaceDay
+  positions: Array<[number, number]>
+  severity: MapSeverity
+  startMile: number
+  endMile: number
+  elevationGainFt: number
+  elevationLossFt: number
+  maxGradePercent: number | null
+  isCurrentDay: boolean
+  isCurrentSegment: boolean
+}
+
 const texasCenter: [number, number] = [31.35, -99.25]
+const elevationPoints = routeElevation.points as ElevationPoint[]
 
 export default function CourseMapClient({
   days,
@@ -51,6 +91,7 @@ export default function CourseMapClient({
   currentLocation,
   heightClass = 'h-[360px] md:h-[500px]',
   showAllDays = true,
+  showRiskAnnotations = true,
 }: CourseMapProps) {
   const mapRef = useRef<L.Map | null>(null)
   const visibleDays = useMemo(
@@ -62,16 +103,37 @@ export default function CourseMapClient({
   )
   const currentDay =
     days.find((day) => day.day === currentDayNumber) ?? visibleDays[0]
-  const bounds = useMemo(() => getDayBounds(visibleDays), [visibleDays])
+  const bounds = useMemo(
+    () => [
+      ...getDayBounds(visibleDays),
+      ...(currentLocation ? [[currentLocation.lat, currentLocation.lng] as [number, number]] : []),
+    ],
+    [currentLocation, visibleDays]
+  )
   const currentDayBounds = useMemo(
     () => (currentDay ? getCurrentDayBounds(currentDay) : bounds),
     [bounds, currentDay]
+  )
+  const elevationRouteLines = useMemo(
+    () =>
+      buildElevationRouteLines({
+        days: visibleDays,
+        currentDayNumber,
+        currentMile,
+      }),
+    [currentDayNumber, currentMile, visibleDays]
   )
   const routeLines = useMemo(
     () =>
       visibleDays.flatMap((day) =>
         day.routePoints.slice(0, -1).map((point, index) => {
           const pointB = day.routePoints[index + 1]
+          const midpointMile = (point.mile + pointB.mile) / 2
+
+          if (isMandatoryTraileringMile(day, midpointMile)) {
+            return null
+          }
+
           const severity = classifyRouteSegmentSeverity(
             point,
             pointB,
@@ -94,10 +156,11 @@ export default function CourseMapClient({
             isCurrentDay,
             isCurrentSegment,
           }
-        })
+        }).filter((line): line is RouteLine => line !== null)
       ),
     [currentDayNumber, currentMile, visibleDays]
   )
+  const shouldUseElevationLines = elevationRouteLines.length > 0
   const currentSegment =
     currentDay && currentMile !== undefined
       ? findSegmentForMile(currentDay, currentMile)
@@ -106,6 +169,20 @@ export default function CourseMapClient({
     currentDay && currentMile !== undefined
       ? Math.max(0, currentDay.distanceMiles - currentMile)
       : null
+  const mandatoryTrailerSegments = useMemo(
+    () =>
+      visibleDays.flatMap((day) =>
+        day.segments
+          .filter(
+            (segment) =>
+              segment.type === 'mandatory_trailer' &&
+              segment.routeCoordinates &&
+              segment.routeCoordinates.length >= 2
+          )
+          .map((segment) => ({ day, segment }))
+      ),
+    [visibleDays]
+  )
 
   function fitFullRoute() {
     if (!mapRef.current || bounds.length === 0) return
@@ -125,15 +202,34 @@ export default function CourseMapClient({
           zoom={6}
           className="h-full w-full"
           scrollWheelZoom
+          zoomControl={false}
           ref={mapRef}
         >
+          <ZoomControl position="bottomright" />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <FitBounds bounds={bounds} />
 
-          {routeLines.map((line) => (
+          {shouldUseElevationLines ? elevationRouteLines.map((line) => (
+            <Polyline
+              key={line.key}
+              positions={line.positions}
+              pathOptions={{
+                color: showRiskAnnotations ? getSeverityColor(line.severity) : '#22c55e',
+                opacity: line.isCurrentDay ? 0.98 : 0.5,
+                weight: line.isCurrentSegment ? 9 : line.isCurrentDay ? 7 : 4,
+              }}
+            >
+              <Popup>
+                <ElevationMapPopupLine
+                  line={line}
+                  showRiskAnnotations={showRiskAnnotations}
+                />
+              </Popup>
+            </Polyline>
+          )) : routeLines.map((line) => (
             <Polyline
               key={line.key}
               positions={[
@@ -141,13 +237,45 @@ export default function CourseMapClient({
                 [line.pointB.lat, line.pointB.lng],
               ]}
               pathOptions={{
-                color: getSeverityColor(line.severity),
+                color: showRiskAnnotations ? getSeverityColor(line.severity) : '#22c55e',
                 opacity: line.isCurrentDay ? 0.98 : 0.48,
                 weight: line.isCurrentSegment ? 9 : line.isCurrentDay ? 7 : 4,
               }}
             >
               <Popup>
-                <MapPopupLine line={line} />
+                <MapPopupLine
+                  line={line}
+                  showRiskAnnotations={showRiskAnnotations}
+                />
+              </Popup>
+            </Polyline>
+          ))}
+
+          {mandatoryTrailerSegments.map(({ day, segment }) => (
+            <Polyline
+              key={`mandatory-trailer-${day.day}-${segment.title}`}
+              positions={segment.routeCoordinates!.map((point) => [
+                point.lat,
+                point.lng,
+              ])}
+              pathOptions={{
+                color: mandatoryTraileringMapColor,
+                dashArray: '10 8',
+                opacity: 0.95,
+                weight: 7,
+              }}
+            >
+              <Popup>
+                <div className="grid gap-1 text-sm">
+                  <strong>{mandatoryTraileringLegendLabel}</strong>
+                  <span>{segment.title}</span>
+                  <span>
+                    Distance:{' '}
+                    {(segment.transportMiles ?? segment.mileEnd - segment.mileStart).toFixed(1)} mi
+                  </span>
+                  <span>Scoring miles: 0</span>
+                  <span>Strategy: battery preserved / solar charging opportunity</span>
+                </div>
               </Popup>
             </Polyline>
           ))}
@@ -195,63 +323,234 @@ export default function CourseMapClient({
               <Popup>
                 <div className="grid gap-1 text-sm">
                   <strong>Current Vehicle</strong>
+                  {currentLocation.label ? <span>{currentLocation.label}</span> : null}
                   <span>
                     {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}
                   </span>
+                  {currentLocation.fix !== undefined ? (
+                    <span>GPS fix: {currentLocation.fix ? 'available' : 'unavailable'}</span>
+                  ) : null}
+                  {currentLocation.ageMs !== undefined ? (
+                    <span>GPS age: {Math.round(currentLocation.ageMs / 1000)}s</span>
+                  ) : null}
+                  {currentLocation.satellites !== undefined ? (
+                    <span>Satellites: {currentLocation.satellites.toFixed(0)}</span>
+                  ) : null}
+                  {currentLocation.heading !== undefined ? (
+                    <span>Heading: {currentLocation.heading.toFixed(0)} deg</span>
+                  ) : null}
+                  {currentLocation.elevationFt !== undefined ? (
+                    <span>Altitude: {currentLocation.elevationFt.toFixed(0)} ft</span>
+                  ) : null}
                 </div>
               </Popup>
             </Marker>
           ) : null}
         </MapContainer>
 
-        <div className="pointer-events-none absolute left-3 top-3 z-[500] grid max-w-[18rem] gap-2">
-          <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
+        <div className="pointer-events-none absolute left-2 right-2 top-2 z-[500] grid gap-2 sm:left-3 sm:right-auto sm:top-3 sm:max-w-[18rem]">
+          <div className="pointer-events-auto rounded-md border border-white/10 bg-black/75 p-2 shadow-xl backdrop-blur sm:rounded-lg sm:bg-black/80 sm:p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ff8fcb] sm:text-xs">
               Course Map
             </p>
-            <dl className="mt-2 grid gap-1 text-xs text-[#cfcfcf]">
+            <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-[#cfcfcf] sm:mt-2 sm:grid-cols-1 sm:gap-1 sm:text-xs">
               <MapMetric label="Current day" value={currentDayNumber ? `Day ${currentDayNumber}` : 'Full route'} />
               <MapMetric label="Current mile" value={currentMile !== undefined ? currentMile.toFixed(1) : '--'} />
               <MapMetric label="Remaining" value={distanceRemaining !== null ? `${distanceRemaining.toFixed(1)} mi` : '--'} />
-              <MapMetric label="Segment severity" value={currentSegment?.risk ?? currentDay?.riskLevel ?? '--'} />
+              {showRiskAnnotations ? (
+                <MapMetric label="Segment severity" value={currentSegment?.risk ?? currentDay?.riskLevel ?? '--'} />
+              ) : null}
             </dl>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3">
               <button
                 type="button"
                 onClick={fitFullRoute}
-                className="rounded-md border border-[#ff3ea5]/30 bg-[#ff3ea5]/15 px-2 py-2 text-xs font-bold text-[#ff8fcb] transition hover:bg-[#ff3ea5]/25"
+                className="rounded-md border border-[#ff3ea5]/30 bg-[#ff3ea5]/15 px-2 py-1.5 text-[11px] font-bold text-[#ff8fcb] transition hover:bg-[#ff3ea5]/25 sm:py-2 sm:text-xs"
               >
                 Fit full
               </button>
               <button
                 type="button"
                 onClick={fitCurrentDay}
-                className="rounded-md border border-white/10 bg-white/10 px-2 py-2 text-xs font-bold text-white transition hover:border-[#ff3ea5]/30"
+                className="rounded-md border border-white/10 bg-white/10 px-2 py-1.5 text-[11px] font-bold text-white transition hover:border-[#ff3ea5]/30 sm:py-2 sm:text-xs"
               >
                 Fit day
               </button>
             </div>
           </div>
 
-          <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur">
+          <div className="pointer-events-auto hidden rounded-lg border border-white/10 bg-black/80 p-3 shadow-xl backdrop-blur sm:block">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-white">
               Legend
             </p>
             <div className="mt-2 grid gap-1.5 text-xs font-semibold text-[#cfcfcf]">
-              <LegendItem color="#22c55e" label="Low elevation severity" />
-              <LegendItem color="#facc15" label="Moderate" />
-              <LegendItem color="#fb923c" label="High" />
-              <LegendItem color="#ef4444" label="Severe" />
-              <LegendItem color="#38bdf8" label="Current vehicle" />
+              {showRiskAnnotations ? (
+                <>
+                  <LegendItem color="#22c55e" label="Low elevation severity" />
+                  <LegendItem color="#facc15" label="Moderate" />
+                  <LegendItem color="#fb923c" label="High" />
+                  <LegendItem color="#ef4444" label="Severe" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              ) : (
+                <>
+                  <LegendItem color="#22c55e" label="Route segment" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              )}
             </div>
           </div>
         </div>
+
+        <details className="pointer-events-auto absolute bottom-2 left-2 z-[500] max-w-[calc(100%-4.5rem)] rounded-md border border-white/10 bg-black/75 p-2 shadow-xl backdrop-blur sm:hidden">
+          <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.16em] text-white">
+            Legend
+          </summary>
+          <div className="mt-2 max-h-32 overflow-y-auto pr-1">
+            <div className="grid gap-1.5 text-[11px] font-semibold text-[#cfcfcf]">
+              {showRiskAnnotations ? (
+                <>
+                  <LegendItem color="#22c55e" label="Low elevation severity" />
+                  <LegendItem color="#facc15" label="Moderate" />
+                  <LegendItem color="#fb923c" label="High" />
+                  <LegendItem color="#ef4444" label="Severe" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              ) : (
+                <>
+                  <LegendItem color="#22c55e" label="Route segment" />
+                  <LegendItem color="#38bdf8" label="Current vehicle" />
+                  <LegendItem color={mandatoryTraileringMapColor} label={mandatoryTraileringLegendLabel} dashed />
+                </>
+              )}
+            </div>
+          </div>
+        </details>
       </div>
 
       <p className="border-t border-white/10 bg-black/30 px-4 py-3 text-xs leading-5 text-[#a8a8a8]">
         Map tiles require internet unless previously cached. Route, GPS, and strategy data still work offline.
       </p>
     </section>
+  )
+}
+
+function buildElevationRouteLines({
+  days,
+  currentDayNumber,
+  currentMile,
+}: {
+  days: RaceDay[]
+  currentDayNumber?: number
+  currentMile?: number
+}) {
+  const dayMap = new Map(days.map((day) => [day.day, day]))
+  const dayStartMiles = new Map<number, number>()
+
+  for (const point of elevationPoints) {
+    if (!dayMap.has(point.day)) continue
+
+    const currentStart = dayStartMiles.get(point.day)
+    if (currentStart === undefined || point.cumulativeMiles < currentStart) {
+      dayStartMiles.set(point.day, point.cumulativeMiles)
+    }
+  }
+
+  const lines: ElevationRouteLine[] = []
+
+  for (const day of days) {
+    const points = elevationPoints
+      .filter(
+        (point) =>
+          point.day === day.day &&
+          Number.isFinite(point.latitude) &&
+          Number.isFinite(point.longitude)
+      )
+      .sort((left, right) => left.cumulativeMiles - right.cumulativeMiles)
+    const dayStartMile = dayStartMiles.get(day.day) ?? points[0]?.cumulativeMiles ?? 0
+
+    let activeLine: ElevationRouteLine | null = null
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const pointA = points[index]
+      const pointB = points[index + 1]
+      const grade =
+        pointB.smoothedGradePercent ??
+        pointB.gradePercent ??
+        pointA.smoothedGradePercent ??
+        pointA.gradePercent
+      const severity =
+        typeof grade === 'number'
+          ? classifyElevationSeverityFromGrade(grade)
+          : day.riskLevel
+      const startMile = pointA.cumulativeMiles - dayStartMile
+      const endMile = pointB.cumulativeMiles - dayStartMile
+      const midpointMile = (startMile + endMile) / 2
+
+      if (isMandatoryTraileringMile(day, midpointMile)) {
+        activeLine = null
+        continue
+      }
+
+      const isCurrentDay = day.day === currentDayNumber
+      const isCurrentSegment =
+        isCurrentDay &&
+        currentMile !== undefined &&
+        currentMile >= startMile &&
+        currentMile <= endMile
+      const legGain = Math.max(0, (pointB.elevationFt ?? 0) - (pointA.elevationFt ?? 0))
+      const legLoss = Math.max(0, (pointA.elevationFt ?? 0) - (pointB.elevationFt ?? 0))
+      const absoluteGrade = typeof grade === 'number' ? Math.abs(grade) : null
+
+      if (
+        activeLine &&
+        activeLine.severity === severity &&
+        activeLine.day.day === day.day &&
+        !isCurrentSegment
+      ) {
+        activeLine.positions.push([pointB.latitude, pointB.longitude])
+        activeLine.endMile = endMile
+        activeLine.elevationGainFt += legGain
+        activeLine.elevationLossFt += legLoss
+        activeLine.maxGradePercent =
+          absoluteGrade === null
+            ? activeLine.maxGradePercent
+            : Math.max(activeLine.maxGradePercent ?? 0, absoluteGrade)
+        activeLine.isCurrentSegment = activeLine.isCurrentSegment || isCurrentSegment
+      } else {
+        activeLine = {
+          key: `elevation-${day.day}-${index}-${severity}`,
+          day,
+          positions: [
+            [pointA.latitude, pointA.longitude],
+            [pointB.latitude, pointB.longitude],
+          ],
+          severity,
+          startMile,
+          endMile,
+          elevationGainFt: legGain,
+          elevationLossFt: legLoss,
+          maxGradePercent: absoluteGrade,
+          isCurrentDay,
+          isCurrentSegment,
+        }
+        lines.push(activeLine)
+      }
+    }
+  }
+
+  return lines
+}
+
+function isMandatoryTraileringMile(day: RaceDay, mile: number) {
+  return day.segments.some(
+    (segment) =>
+      segment.type === 'mandatory_trailer' &&
+      mile >= segment.mileStart &&
+      mile <= segment.mileEnd
   )
 }
 
@@ -267,7 +566,13 @@ function FitBounds({ bounds }: { bounds: Array<[number, number]> }) {
   return null
 }
 
-function MapPopupLine({ line }: { line: RouteLine }) {
+function MapPopupLine({
+  line,
+  showRiskAnnotations,
+}: {
+  line: RouteLine
+  showRiskAnnotations: boolean
+}) {
   const midpoint = (line.pointA.mile + line.pointB.mile) / 2
   const segment = findSegmentForMile(line.day, midpoint)
 
@@ -277,11 +582,39 @@ function MapPopupLine({ line }: { line: RouteLine }) {
       <span>
         Mile {line.pointA.mile.toFixed(1)} to {line.pointB.mile.toFixed(1)}
       </span>
-      <span>Severity: {line.severity}</span>
+      {showRiskAnnotations ? <span>Severity: {line.severity}</span> : null}
       <span>
         {line.pointA.label ?? 'Route point'} to {line.pointB.label ?? 'route point'}
       </span>
       {segment ? <span>{segment.notes}</span> : null}
+    </div>
+  )
+}
+
+function ElevationMapPopupLine({
+  line,
+  showRiskAnnotations,
+}: {
+  line: ElevationRouteLine
+  showRiskAnnotations: boolean
+}) {
+  return (
+    <div className="grid gap-1 text-sm">
+      <strong>Day {line.day.day} elevation sector</strong>
+      <span>
+        Mile {line.startMile.toFixed(1)} to {line.endMile.toFixed(1)}
+      </span>
+      {showRiskAnnotations ? (
+        <span>Elevation severity: {line.severity}</span>
+      ) : null}
+      <span>Gain: {line.elevationGainFt.toFixed(0)} ft</span>
+      <span>Loss: {line.elevationLossFt.toFixed(0)} ft</span>
+      <span>
+        Max smoothed grade:{' '}
+        {line.maxGradePercent !== null
+          ? `${line.maxGradePercent.toFixed(1)}%`
+          : '--'}
+      </span>
     </div>
   )
 }
@@ -317,12 +650,23 @@ function MapMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LegendItem({ color, label }: { color: string; label: string }) {
+function LegendItem({
+  color,
+  label,
+  dashed = false,
+}: {
+  color: string
+  label: string
+  dashed?: boolean
+}) {
   return (
     <div className="flex items-center gap-2">
       <span
         className="h-2.5 w-6 rounded-full"
-        style={{ backgroundColor: color }}
+        style={{
+          backgroundColor: dashed ? 'transparent' : color,
+          borderTop: dashed ? `3px dashed ${color}` : undefined,
+        }}
       />
       <span>{label}</span>
     </div>

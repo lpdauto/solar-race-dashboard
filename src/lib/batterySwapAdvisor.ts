@@ -1,6 +1,9 @@
 import type { RaceDay } from '@/data/raceRoute'
 import { rx2Config } from '@/lib/race/rx2Config'
 
+// Legacy Compatibility: retained for the historical predictive strategy/debug path.
+// Visible Race Captain and Strategy decisions use raceBatteryStrategy.ts.
+
 export type BatteryState = {
   id: 'A' | 'B'
   socPercent: number

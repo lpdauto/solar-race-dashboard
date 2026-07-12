@@ -9,6 +9,12 @@ type ElevationPoint = {
   smoothedGradePercent?: number | null
 }
 
+type ElevationDaySummary = {
+  day: number
+  startMile: number
+  endMile: number
+}
+
 export type ElevationWindow = {
   elevationGainFt: number
   elevationLossFt: number
@@ -27,6 +33,14 @@ export type ElevationEnergyEstimate = {
 export type ElevationWindowOptions = {
   day?: number
   includeTrailerSegments?: boolean
+}
+
+export type RaceDayElevationWindow = ElevationWindow & {
+  day: number
+  dayStartMile: number
+  dayEndMile: number
+  cumulativeStartMile: number
+  cumulativeEndMile: number
 }
 
 export type ElevationEnergyInput = {
@@ -107,6 +121,55 @@ export function getElevationWindow(
       maxSmoothedGradePercent,
       distanceMiles,
     }),
+  }
+}
+
+export function getRaceDayElevationWindow({
+  day,
+  startMile,
+  endMile,
+  includeTrailerSegments = false,
+}: {
+  day: number
+  startMile: number
+  endMile: number
+  includeTrailerSegments?: boolean
+}): RaceDayElevationWindow {
+  const daySummary = (routeElevation.days as ElevationDaySummary[]).find(
+    (summary) => summary.day === day
+  )
+  const normalizedStartMile = Math.min(startMile, endMile)
+  const normalizedEndMile = Math.max(startMile, endMile)
+
+  if (!daySummary) {
+    return {
+      ...emptyElevationWindow({
+        startMile: normalizedStartMile,
+        endMile: normalizedEndMile,
+        warning: `No elevation day summary found for day ${day}.`,
+      }),
+      day,
+      dayStartMile: normalizedStartMile,
+      dayEndMile: normalizedEndMile,
+      cumulativeStartMile: normalizedStartMile,
+      cumulativeEndMile: normalizedEndMile,
+    }
+  }
+
+  const cumulativeStartMile = daySummary.startMile + normalizedStartMile
+  const cumulativeEndMile = daySummary.startMile + normalizedEndMile
+  const window = getElevationWindow(cumulativeStartMile, cumulativeEndMile, {
+    day,
+    includeTrailerSegments,
+  })
+
+  return {
+    ...window,
+    day,
+    dayStartMile: normalizedStartMile,
+    dayEndMile: normalizedEndMile,
+    cumulativeStartMile,
+    cumulativeEndMile,
   }
 }
 
@@ -212,6 +275,25 @@ function buildElevationWindowWarnings({
   }
 
   return warnings
+}
+
+function emptyElevationWindow({
+  startMile,
+  endMile,
+  warning,
+}: {
+  startMile: number
+  endMile: number
+  warning: string
+}): ElevationWindow {
+  return {
+    elevationGainFt: 0,
+    elevationLossFt: 0,
+    maxSmoothedGradePercent: null,
+    averageSmoothedGradePercent: null,
+    distanceMiles: roundMiles(Math.max(0, endMile - startMile)),
+    dataQualityWarnings: [warning],
+  }
 }
 
 function clampEfficiency(value: number, fallback: number) {

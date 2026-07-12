@@ -1,7 +1,7 @@
 import { rx2Config } from '@/lib/race/rx2Config'
 
-export const minRealisticWhPerMile = 40
-export const maxRealisticWhPerMile = 400
+export const minRealisticWhPerMile = 20
+export const maxRealisticWhPerMile = 75
 
 export type SafeWhPerMileResult = {
   value: number

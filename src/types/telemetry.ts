@@ -1,8 +1,13 @@
-export type NormalizedTelemetrySource = 'simulator' | 'esp32' | 'manual'
+export type NormalizedTelemetrySource =
+  | 'simulator'
+  | 'esp32'
+  | 'manual'
 
 export type TelemetryData = {
   timestamp: number
   source: NormalizedTelemetrySource
+  odometerMiles?: number
+  distanceMiles?: number
   speedMph: number
   batteryVoltage: number
   batteryCurrent: number
@@ -11,18 +16,53 @@ export type TelemetryData = {
   gpsLat?: number
   gpsLng?: number
   gpsElevationFt?: number
+  gpsFix?: boolean
+  gpsValid?: boolean
+  gpsLocationValid?: boolean
+  gpsAgeMs?: number
+  gpsLastUpdateAgeMs?: number
+  gpsSatellites?: number
   batteryPowerWatts?: number
   batteryTempC?: number
   motorTempC?: number
   controllerTempC?: number
   motorRpm?: number
   throttlePercent?: number
+  throttleVoltage?: number
   motorPowerWatts?: number
+  phaseA?: number
+  phaseC?: number
+  modulation?: number
+  gear?: number
+  controllerSerial?: string
+  bleConnected?: boolean
+  telemetryFresh?: boolean
+  packetRateHz?: number
+  lastPacketAgeMs?: number
+  lastCloudStatus?: number
+  firmwareVersion?: string
+  uptimeMs?: number
+  cloudConnectionStatus?: string
+  cloudUpdatedAt?: string
+  cloudNode?: TelemetryNodeId
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
+  mpptPvVoltage?: number
+  mpptPvCurrent?: number
+  mpptPvPowerWatts?: number
+  mpptBatteryVoltage?: number
+  mpptChargeCurrent?: number
+  mpptChargePowerWatts?: number
+  mpptDailyEnergyWh?: number
+  mpptStatus?: string
+  mpptFault?: string
   mpptChargeState?: string
   regenWatts?: number
+  netPowerWatts?: number
+  energyConsumedWh?: number
+  energyRecoveredWh?: number
+  batteryEnergyWh?: number
   whPerMile?: number
   solarPowerWatts?: number
   solarCurrent?: number
@@ -44,10 +84,18 @@ export type TelemetryInput = Partial<TelemetryData> & {
 export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
   const mpptVoltage = input.mpptVoltage ?? input.solarVoltage
   const mpptCurrent = input.mpptCurrent ?? input.solarCurrent
+  const mpptPvVoltage = input.mpptPvVoltage ?? mpptVoltage
+  const mpptPvCurrent = input.mpptPvCurrent ?? mpptCurrent
   const mpptPowerWatts =
     input.mpptPowerWatts ??
+    input.mpptPvPowerWatts ??
     input.solarPowerWatts ??
-    multiplyIfNumbers(mpptVoltage, mpptCurrent)
+    multiplyIfNumbers(mpptPvVoltage, mpptPvCurrent)
+  const mpptPvPowerWatts =
+    input.mpptPvPowerWatts ?? mpptPowerWatts
+  const mpptChargePowerWatts =
+    input.mpptChargePowerWatts ??
+    multiplyIfNumbers(input.mpptBatteryVoltage, input.mpptChargeCurrent)
   const batteryPowerWatts =
     input.batteryPowerWatts ??
     multiplyIfNumbers(input.batteryVoltage, input.batteryCurrent)
@@ -60,10 +108,18 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
   return {
     timestamp: input.timestamp ?? Date.now(),
     source: input.source ?? 'manual',
+    odometerMiles: input.odometerMiles,
+    distanceMiles: input.distanceMiles,
     speedMph: finiteNumber(input.speedMph, 0),
     gpsLat: input.gpsLat,
     gpsLng: input.gpsLng,
     gpsElevationFt: input.gpsElevationFt,
+    gpsFix: input.gpsFix,
+    gpsValid: input.gpsValid,
+    gpsLocationValid: input.gpsLocationValid,
+    gpsAgeMs: input.gpsAgeMs,
+    gpsLastUpdateAgeMs: input.gpsLastUpdateAgeMs ?? input.gpsAgeMs,
+    gpsSatellites: input.gpsSatellites,
     batteryVoltage: finiteNumber(input.batteryVoltage, 0),
     batteryCurrent: finiteNumber(input.batteryCurrent, 0),
     batterySocPercent: clampPercent(input.batterySocPercent ?? 0),
@@ -77,14 +133,43 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
       input.throttlePercent === undefined
         ? undefined
         : clampPercent(input.throttlePercent),
+    throttleVoltage: input.throttleVoltage,
     motorPowerWatts: input.motorPowerWatts,
+    phaseA: input.phaseA,
+    phaseC: input.phaseC,
+    modulation: input.modulation,
+    gear: input.gear,
+    controllerSerial: input.controllerSerial,
+    bleConnected: input.bleConnected,
+    telemetryFresh: input.telemetryFresh,
+    packetRateHz: input.packetRateHz,
+    lastPacketAgeMs: input.lastPacketAgeMs,
+    lastCloudStatus: input.lastCloudStatus,
+    firmwareVersion: input.firmwareVersion,
+    uptimeMs: input.uptimeMs,
+    cloudConnectionStatus: input.cloudConnectionStatus,
+    cloudUpdatedAt: input.cloudUpdatedAt,
+    cloudNode: input.cloudNode,
     mpptVoltage,
     mpptCurrent,
     mpptPowerWatts,
+    mpptPvVoltage,
+    mpptPvCurrent,
+    mpptPvPowerWatts,
+    mpptBatteryVoltage: input.mpptBatteryVoltage,
+    mpptChargeCurrent: input.mpptChargeCurrent,
+    mpptChargePowerWatts,
+    mpptDailyEnergyWh: input.mpptDailyEnergyWh,
+    mpptStatus: input.mpptStatus,
+    mpptFault: input.mpptFault,
     mpptChargeState: input.mpptChargeState,
     regenWatts: input.regenWatts,
+    netPowerWatts: input.netPowerWatts,
+    energyConsumedWh: input.energyConsumedWh,
+    energyRecoveredWh: input.energyRecoveredWh,
+    batteryEnergyWh: input.batteryEnergyWh,
     whPerMile,
-    solarPowerWatts: input.solarPowerWatts ?? mpptPowerWatts,
+    solarPowerWatts: input.solarPowerWatts ?? mpptChargePowerWatts ?? mpptPowerWatts,
     solarCurrent: input.solarCurrent ?? mpptCurrent,
     solarVoltage: input.solarVoltage ?? mpptVoltage,
     wheelRpm: input.wheelRpm,
@@ -118,13 +203,71 @@ export type TelemetryConnectionStatus =
   | 'disconnected'
   | 'connecting'
   | 'connected'
+  | 'warning'
   | 'simulated'
   | 'error'
+
+export const telemetryNodeOptions = [
+  'vehicle',
+  'mppt',
+  'spare-battery',
+] as const
+
+export type KnownTelemetryNode = (typeof telemetryNodeOptions)[number]
+export type TelemetryNodeId = KnownTelemetryNode | (string & {})
+
+export type TelemetryFreshness = 'idle' | 'healthy' | 'warning' | 'stale'
+export type VehicleNodeStatus = 'online' | 'stale' | 'offline'
+
+export type TelemetryEffectiveStatusSource =
+  | 'health'
+  | 'latest'
+  | 'simulator'
+  | 'fallback'
+
+export type TelemetryPacketStats = {
+  packetsReceived: number
+  packetsPerMinute: number
+  averageUpdateIntervalSeconds: number | null
+  packetLossEstimatePercent: number | null
+}
+
+export type CloudTelemetryHealth = {
+  ok: boolean
+  cloudBackendStatus?: 'connected' | 'error'
+  healthEndpointStatus?: 'healthy' | 'error'
+  redis: 'connected' | 'error' | 'not_configured'
+  latestVehiclePacketAgeSeconds: number | null
+  latestVehiclePacketAgeMs?: number | null
+  latestVehicleUpdatedAt: string | null
+  latestVehicleNode: TelemetryNodeId | null
+  vehicleNodeStatus?: VehicleNodeStatus
+  vehicleTelemetryFresh?: boolean
+  lastRedisReadAt?: string | null
+  nodes?: Array<{
+    node: TelemetryNodeId
+    updated_at: string | null
+    ageSeconds: number | null
+  }>
+  error?: string
+}
+
+export type CloudTelemetryPacketStatus = {
+  source?: string
+  node?: TelemetryNodeId
+  updatedAt?: string | null
+  connectionStatus?: string
+  telemetryFresh?: boolean
+  packetRateHz?: number
+  lastPacketAgeMs?: number
+  lastCloudStatus?: number
+}
 
 export type TelemetrySource =
   | 'simulator'
   | 'mock-esp32'
   | 'esp32'
+  | 'cloud'
   | 'manual'
   | 'websocket'
   | 'serial'

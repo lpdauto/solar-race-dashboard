@@ -9,10 +9,16 @@ export default function OfflineStatusBanner() {
   const isOnline = useOnlineStatus()
   const pathname = usePathname()
   const showLogout = pathname !== '/login'
+  const isPublicRaceTracker =
+    pathname === '/race-tracker' || pathname.startsWith('/race-tracker/')
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  if (isPublicRaceTracker) {
+    return null
+  }
 
   if (!mounted || isOnline === null) {
     return (

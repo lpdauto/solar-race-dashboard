@@ -3,5 +3,7 @@ node_modules
 .env
 .env.local
 *.log
+mission-control-cleanup-*.png
 dist
 out
+.vercel

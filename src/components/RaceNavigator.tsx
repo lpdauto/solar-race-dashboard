@@ -27,12 +27,15 @@ const riskStyles: Record<RiskLevel, string> = {
 }
 
 const typeStyles: Record<SegmentType, string> = {
+  drive: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   climb: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
   descent: 'border-sky-300/30 bg-sky-300/10 text-sky-100',
   flat: 'border-[#ff3ea5]/30 bg-[#ff3ea5]/10 text-[#ff8fcb]',
   stop: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
+  controlled_stop: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
   town: 'border-violet-300/30 bg-violet-300/10 text-violet-100',
   caution: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
+  mandatory_trailer: 'border-violet-300/40 bg-violet-300/10 text-violet-100',
 }
 
 export default function RaceNavigator({

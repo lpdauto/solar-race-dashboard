@@ -1,12 +1,15 @@
 export type RiskLevel = 'low' | 'medium' | 'high' | 'severe'
 
 export type SegmentType =
+  | 'drive'
   | 'climb'
   | 'descent'
   | 'flat'
   | 'stop'
+  | 'controlled_stop'
   | 'town'
   | 'caution'
+  | 'mandatory_trailer'
 
 export type RouteSegment = {
   mileStart: number
@@ -16,6 +19,11 @@ export type RouteSegment = {
   risk: RiskLevel
   notes: string
   strategy: string
+  scoringMiles?: number
+  transportMiles?: number
+  startLocationName?: string
+  endLocationName?: string
+  routeCoordinates?: Array<{ lat: number; lng: number }>
 }
 
 export type RoutePoint = {
@@ -32,6 +40,9 @@ export type RaceDay = {
   start: string
   end: string
   distanceMiles: number
+  physicalDistanceMiles?: number
+  scoringDistanceMiles?: number
+  mandatoryTraileringMiles?: number
   highways: string[]
   riskLevel: RiskLevel
   terrainSummary: string
@@ -53,6 +64,9 @@ export const raceRoute: RaceDay[] = [
     start: 'Fort Worth, TX',
     end: 'Palestine, TX',
     distanceMiles: 153.6,
+    physicalDistanceMiles: 215.7,
+    scoringDistanceMiles: 153.6,
+    mandatoryTraileringMiles: 62.1,
     highways: ['TX 114', 'TX 51', 'TX 171', 'TX 22', 'US 287', 'US 79'],
     riskLevel: 'medium',
     terrainSummary:
@@ -138,6 +152,57 @@ export const raceRoute: RaceDay[] = [
         notes: 'End-of-day fatigue combines with traffic and town arrival procedures.',
         strategy: 'Preserve a final 10-mile battery buffer and run arrival checks before entering control.',
       },
+      {
+        mileStart: 25.5,
+        mileEnd: 69.9,
+        title: 'Mandatory trailering: Springtown to Godley',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section from the Springtown area toward Godley.',
+        strategy: 'Battery preserved while the solar car is transported; use the clock window for systems checks and solar charging if conditions allow.',
+        scoringMiles: 0,
+        transportMiles: 44.4,
+        startLocationName: 'Springtown area',
+        endLocationName: 'Godley area',
+        routeCoordinates: [
+          { lat: 32.97906, lng: -97.69099 },
+          { lat: 32.45655, lng: -97.54476 },
+        ],
+      },
+      {
+        mileStart: 109.4,
+        mileEnd: 120.5,
+        title: 'Mandatory trailering: US 287 connector',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section on the Day 1 eastern connector.',
+        strategy: 'Treat this as battery preservation and possible solar recovery time, not driven race mileage.',
+        scoringMiles: 0,
+        transportMiles: 11.1,
+        startLocationName: 'US 287 connector west',
+        endLocationName: 'US 287 connector east',
+        routeCoordinates: [
+          { lat: 32.0849, lng: -96.50292 },
+          { lat: 32.03541, lng: -96.37859 },
+        ],
+      },
+      {
+        mileStart: 146.9,
+        mileEnd: 153.6,
+        title: 'Mandatory trailering: Palestine arrival',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section into the Palestine control area.',
+        strategy: 'Arrive with battery preserved; do not count these miles as solar-car-driven scoring distance.',
+        scoringMiles: 0,
+        transportMiles: 6.7,
+        startLocationName: 'Palestine approach',
+        endLocationName: 'Palestine High School area',
+        routeCoordinates: [
+          { lat: 31.78889, lng: -95.67295 },
+          { lat: 31.73844, lng: -95.60602 },
+        ],
+      },
     ],
   },
   {
@@ -146,6 +211,9 @@ export const raceRoute: RaceDay[] = [
     start: 'Palestine, TX',
     end: 'Round Rock, TX',
     distanceMiles: 142.1,
+    physicalDistanceMiles: 155.1,
+    scoringDistanceMiles: 142.1,
+    mandatoryTraileringMiles: 13.0,
     highways: ['US 79'],
     riskLevel: 'medium',
     terrainSummary:
@@ -231,6 +299,40 @@ export const raceRoute: RaceDay[] = [
         notes: 'Urban traffic and navigation complexity can erase gains late in the day.',
         strategy: 'Switch to arrival mode early, prioritize safety spacing, and keep energy reserve intact.',
       },
+      {
+        mileStart: 0,
+        mileEnd: 7.5,
+        title: 'Mandatory trailering: Palestine rollout',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section leaving Palestine.',
+        strategy: 'Battery preserved while transported; use the time for checks and solar recovery when available.',
+        scoringMiles: 0,
+        transportMiles: 7.5,
+        startLocationName: 'Palestine High School area',
+        endLocationName: 'Palestine west approach',
+        routeCoordinates: [
+          { lat: 31.7386, lng: -95.60642 },
+          { lat: 31.70891, lng: -95.71269 },
+        ],
+      },
+      {
+        mileStart: 130.2,
+        mileEnd: 135.7,
+        title: 'Mandatory trailering: Hutto to Dell Diamond',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section approaching the Round Rock control area.',
+        strategy: 'Do not charge Wh/mile against the car for this section; treat it as battery-preservation time.',
+        scoringMiles: 0,
+        transportMiles: 5.5,
+        startLocationName: 'Hutto area',
+        endLocationName: 'Dell Diamond area',
+        routeCoordinates: [
+          { lat: 30.54378, lng: -97.5418 },
+          { lat: 30.52566, lng: -97.63113 },
+        ],
+      },
     ],
   },
   {
@@ -239,6 +341,9 @@ export const raceRoute: RaceDay[] = [
     start: 'Round Rock, TX',
     end: 'Fredericksburg, TX',
     distanceMiles: 66.7,
+    physicalDistanceMiles: 114.6,
+    scoringDistanceMiles: 66.7,
+    mandatoryTraileringMiles: 47.9,
     highways: ['TX 29', 'US 281', 'US 290'],
     riskLevel: 'high',
     terrainSummary:
@@ -323,6 +428,57 @@ export const raceRoute: RaceDay[] = [
         notes: 'Final terrain is still active, and arrival pressure can tempt overuse of battery.',
         strategy: 'Protect the last reserve and finish with smooth, deliberate pacing.',
       },
+      {
+        mileStart: 0,
+        mileEnd: 11.8,
+        title: 'Mandatory trailering: Dell Diamond to Liberty Hill',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section leaving the Round Rock control area.',
+        strategy: 'Battery preserved during transport; use this as a solar charging and systems-check opportunity.',
+        scoringMiles: 0,
+        transportMiles: 11.8,
+        startLocationName: 'Dell Diamond area',
+        endLocationName: 'Liberty Hill area',
+        routeCoordinates: [
+          { lat: 30.52562, lng: -97.63111 },
+          { lat: 30.63319, lng: -97.69384 },
+        ],
+      },
+      {
+        mileStart: 31.5,
+        mileEnd: 65.8,
+        title: 'Mandatory trailering: Burnet to Johnson City',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section through a Hill Country corridor.',
+        strategy: 'Preserve battery through this control section; model clock time separately from driven scoring miles.',
+        scoringMiles: 0,
+        transportMiles: 34.3,
+        startLocationName: 'Burnet area',
+        endLocationName: 'Johnson City area',
+        routeCoordinates: [
+          { lat: 30.73954, lng: -98.23524 },
+          { lat: 30.27864, lng: -98.41202 },
+        ],
+      },
+      {
+        mileStart: 64.9,
+        mileEnd: 66.7,
+        title: 'Mandatory trailering: Fredericksburg arrival',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section into Fredericksburg.',
+        strategy: 'Battery should remain preserved across this arrival transport window.',
+        scoringMiles: 0,
+        transportMiles: 1.8,
+        startLocationName: 'Fredericksburg approach',
+        endLocationName: 'Fredericksburg control area',
+        routeCoordinates: [
+          { lat: 30.25813, lng: -98.85304 },
+          { lat: 30.27635, lng: -98.87404 },
+        ],
+      },
     ],
   },
   {
@@ -331,6 +487,9 @@ export const raceRoute: RaceDay[] = [
     start: 'Fredericksburg, TX',
     end: 'San Angelo, TX',
     distanceMiles: 144.6,
+    physicalDistanceMiles: 144.6,
+    scoringDistanceMiles: 144.6,
+    mandatoryTraileringMiles: 0,
     highways: ['US 87', 'US 67'],
     riskLevel: 'severe',
     terrainSummary:
@@ -431,6 +590,9 @@ export const raceRoute: RaceDay[] = [
     start: 'San Angelo, TX',
     end: 'Fort Stockton, TX',
     distanceMiles: 112.8,
+    physicalDistanceMiles: 136.4,
+    scoringDistanceMiles: 112.8,
+    mandatoryTraileringMiles: 23.6,
     highways: ['US 67', 'US 385'],
     riskLevel: 'high',
     terrainSummary:
@@ -514,6 +676,23 @@ export const raceRoute: RaceDay[] = [
         risk: 'medium',
         notes: 'Final miles may trend favorable but still demand attention after a long exposed day.',
         strategy: 'Convert any downhill advantage into battery reserve instead of a late speed push.',
+      },
+      {
+        mileStart: 89.2,
+        mileEnd: 112.8,
+        title: 'Mandatory trailering: Fort Stockton approach',
+        type: 'mandatory_trailer',
+        risk: 'low',
+        notes: 'Official non-scoring transport section into the Fort Stockton finish area.',
+        strategy: 'Battery preserved for the finish transport window; count clock time but not driven scoring miles.',
+        scoringMiles: 0,
+        transportMiles: 23.6,
+        startLocationName: 'Fort Stockton approach westbound',
+        endLocationName: 'Fort Stockton finish',
+        routeCoordinates: [
+          { lat: 30.95868, lng: -102.58176 },
+          { lat: 30.90231, lng: -102.90306 },
+        ],
       },
     ],
   },

@@ -1,11 +1,13 @@
-﻿import Link from 'next/link'
+﻿'use client'
+
+import { useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import ConnectionStatusStrip from '@/components/ConnectionStatusStrip'
 import CourseMap from '@/components/CourseMap'
-import DataManagementPanel from '@/components/DataManagementPanel'
-import OfflineReadinessPanel from '@/components/OfflineReadinessPanel'
-import RaceDayChecklist from '@/components/RaceDayChecklist'
-import WeatherCachePanel from '@/components/WeatherCachePanel'
 import { raceRoute, type RiskLevel } from '@/data/raceRoute'
+import { useTelemetry } from '@/hooks/useTelemetry'
+import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
+import { calculatePublicRouteProgress } from '@/lib/publicRaceRoute'
 
 const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
@@ -15,6 +17,27 @@ const riskStyles: Record<RiskLevel, string> = {
 }
 
 export default function HomePage() {
+  const [courseMapExpanded, setCourseMapExpanded] = useState(false)
+  const telemetryController = useTelemetry()
+  const vehicleTelemetryLive =
+    telemetryController.effectiveStatus === 'connected' ||
+    telemetryController.effectiveStatus === 'simulated'
+  const liveGps = vehicleTelemetryLive
+    ? getLiveTelemetryGpsPosition(telemetryController.telemetry)
+    : null
+  const routeProgress = liveGps
+    ? calculatePublicRouteProgress({ lat: liveGps.lat, lng: liveGps.lng })
+    : null
+  const currentVehicleMapLocation = liveGps
+    ? {
+        ...liveGps,
+        label:
+          routeProgress?.confidence === 'off-route'
+            ? 'Live cloud GPS - off route / test location'
+            : 'Live cloud GPS',
+      }
+    : undefined
+
   return (
     <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -45,36 +68,22 @@ export default function HomePage() {
                 Interactive route navigation, terrain risk, and energy planning for Temple City&apos;s all-female solar car team.
               </p>
             </div>
-            <ConnectionStatusStrip />
+            <ConnectionStatusStrip
+              liveGps={liveGps}
+              telemetryStatus={telemetryController.effectiveStatus}
+              telemetryConnectionError={telemetryController.connectionError}
+              cloudHealth={telemetryController.cloudHealth}
+              vehiclePacketAgeSeconds={telemetryController.effectivePacketAgeSeconds}
+              telemetryConnected={vehicleTelemetryLive}
+            />
           </div>
         </header>
-
-        <section className="grid gap-3 rounded-lg border border-white/10 bg-slate-950/60 p-4 shadow-xl shadow-black/20 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryMetric label="Total race miles" value="619.8" />
-          <SummaryMetric label="Hardest terrain day" value="Day 3" />
-          <SummaryMetric label="Highest energy management risk" value="Day 4" />
-          <SummaryMetric label="Most wind-exposed day" value="Day 5" />
-        </section>
-
-        <section className="grid gap-3">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#ff8fcb]">
-              Full Route
-            </p>
-            <h2 className="mt-1 text-2xl font-black text-white">
-              Overall Course Map
-            </h2>
-          </div>
-          <CourseMap days={raceRoute} heightClass="h-[360px] md:h-[500px]" />
-        </section>
-
-        <WeatherCachePanel raceRoute={raceRoute} />
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {raceRoute.map((raceDay) => (
             <article
               key={raceDay.day}
-              className="flex min-h-[24rem] flex-col rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-[#ff3ea5]/40 hover:bg-white/[0.07]"
+              className="flex min-h-64 flex-col rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-[#ff3ea5]/40 hover:bg-white/[0.07]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -92,20 +101,16 @@ export default function HomePage() {
                 <div className="rounded-md border border-white/10 bg-black/20 p-3">
                   <dt className="text-slate-400">Miles</dt>
                   <dd className="mt-1 font-semibold text-white">
-                    {raceDay.distanceMiles}
+                    {raceDay.distanceMiles.toFixed(1)}
                   </dd>
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/20 p-3">
                   <dt className="text-slate-400">Date</dt>
                   <dd className="mt-1 font-semibold text-white">
-                    {raceDay.date}
+                    {raceDay.date.replace(', 2026', '')}
                   </dd>
                 </div>
               </dl>
-
-              <p className="mt-4 text-sm leading-6 text-slate-300">
-                {raceDay.terrainSummary}
-              </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {raceDay.highways.map((highway) => (
@@ -119,7 +124,7 @@ export default function HomePage() {
               </div>
 
               <Link
-                href={`/day/${raceDay.day}`}
+                href={`/day/${raceDay.day}/race-captain`}
                 className="mt-auto inline-flex h-11 items-center justify-center rounded-md bg-[#ff3ea5] px-4 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f]"
               >
                 View Day
@@ -128,42 +133,19 @@ export default function HomePage() {
           ))}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <CollapsibleTile
-            title="Race Day Setup"
-            summary="Tablet setup steps before departure"
-          >
-            <ul className="grid gap-3 text-sm leading-6 text-slate-300">
-              <SetupItem text="Open this dashboard on each tablet before the race." />
-              <SetupItem text="Let it finish caching before leaving reliable internet." />
-              <SetupItem text="Add to home screen if the browser offers installation." />
-              <SetupItem text="Keep the app open during driving." />
-              <SetupItem text="GPS works offline after page load." />
-              <SetupItem text="Elevation API/weather updates require internet, but fallback data remains available." />
-            </ul>
-          </CollapsibleTile>
-
-          <CollapsibleTile
-            title="Offline Readiness"
-            summary="PWA cache and install checks"
-          >
-            <OfflineReadinessPanel />
-          </CollapsibleTile>
-
-          <CollapsibleTile
-            title="Race-Day Checklist"
-            summary="Operational pre-drive checklist"
-          >
-            <RaceDayChecklist />
-          </CollapsibleTile>
-
-          <CollapsibleTile
-            title="Data Management"
-            summary="Import/export local settings"
-          >
-            <DataManagementPanel />
-          </CollapsibleTile>
-        </section>
+        <CollapsibleTile
+          title="Overall Course Map"
+          expanded={courseMapExpanded}
+          onToggle={() => setCourseMapExpanded((expanded) => !expanded)}
+        >
+          {courseMapExpanded ? (
+            <CourseMap
+              days={raceRoute}
+              currentLocation={currentVehicleMapLocation}
+              heightClass="h-[360px] md:h-[500px]"
+            />
+          ) : null}
+        </CollapsibleTile>
       </div>
     </main>
   )
@@ -171,45 +153,30 @@ export default function HomePage() {
 
 function CollapsibleTile({
   title,
-  summary,
+  expanded,
+  onToggle,
   children,
 }: {
   title: string
-  summary: string
-  children: React.ReactNode
+  expanded: boolean
+  onToggle: () => void
+  children: ReactNode
 }) {
   return (
-    <details className="group rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white">{title}</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-400">{summary}</p>
-        </div>
+    <section className="rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <h2 className="text-lg font-bold text-white">{title}</h2>
         <span className="rounded border border-[#ff3ea5]/30 bg-[#ff3ea5]/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-[#ff8fcb]">
-          Open
+          {expanded ? 'Collapse' : 'Expand'}
         </span>
-      </summary>
-      <div className="mt-4">{children}</div>
-    </details>
-  )
-}
-
-function SetupItem({ text }: { text: string }) {
-  return (
-    <li className="rounded-md border border-white/10 bg-black/20 p-3">
-      {text}
-    </li>
-  )
-}
-
-function SummaryMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-white/10 bg-white/[0.04] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-bold text-white">{value}</p>
-    </div>
+      </button>
+      {expanded ? <div className="mt-4">{children}</div> : null}
+    </section>
   )
 }
 
@@ -222,5 +189,7 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
     </span>
   )
 }
+
+
 
 

@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RX2 Dashboard Truth Audit</title>
+  <style>
+    @page {
+      size: letter landscape;
+      margin: 0.45in;
+    }
+
+    :root {
+      --ink: #111827;
+      --muted: #4b5563;
+      --line: #d1d5db;
+      --soft: #f3f4f6;
+      --pink: #c2186a;
+      --blue: #0369a1;
+      --green: #047857;
+      --yellow: #92400e;
+      --red: #b91c1c;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: white;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    h1, h2, h3, p {
+      margin: 0;
+    }
+
+    h1 {
+      color: var(--pink);
+      font-size: 24px;
+      letter-spacing: 0.03em;
+    }
+
+    h2 {
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid var(--pink);
+      font-size: 15px;
+      color: var(--ink);
+    }
+
+    h3 {
+      margin: 12px 0 6px;
+      font-size: 12px;
+      color: var(--blue);
+    }
+
+    .cover {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding: 14px 16px;
+      border: 2px solid var(--pink);
+      border-radius: 8px;
+      background: linear-gradient(135deg, #fff, #fdf2f8);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px;
+      background: #fff;
+      break-inside: avoid;
+    }
+
+    .card strong {
+      color: var(--pink);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      break-inside: auto;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 4px 5px;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      color: #1f2937;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    td {
+      font-size: 9px;
+    }
+
+    tr {
+      break-inside: avoid;
+    }
+
+    .trust-high {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .trust-medium {
+      color: var(--yellow);
+      font-weight: 800;
+    }
+
+    .trust-low {
+      color: var(--red);
+      font-weight: 800;
+    }
+
+    .chain {
+      display: grid;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .chain-row {
+      display: grid;
+      grid-template-columns: 190px 1fr 80px;
+      gap: 8px;
+      align-items: start;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      break-inside: avoid;
+    }
+
+    .metric-name {
+      font-weight: 800;
+      color: var(--pink);
+    }
+
+    .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 8.5px;
+    }
+
+    .section-break {
+      break-before: page;
+    }
+
+    ul {
+      margin: 6px 0 0 16px;
+      padding: 0;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <h1>RX2 Dashboard Truth Audit</h1>
+    <p class="subtitle">Phase 1A source-of-truth inventory for Race Captain and Strategy metrics</p>
+    <div class="meta">
+      <span class="pill">Read-only audit</span>
+      <span class="pill">No code changes</span>
+      <span class="pill">Private dashboard only</span>
+      <span class="pill">Generated for race testing review</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Executive Findings</h2>
+    <div class="grid">
+      <div class="card"><strong>Two active strategy chains:</strong><br>Race Captain top cards use <span class="mono">generatePredictiveStrategy()</span>; native energy command cards use <span class="mono">buildRacePrediction()</span> -> <span class="mono">planBatterySwap()</span> -> <span class="mono">buildDeterministicStrategyRecommendation()</span>.</div>
+      <div class="card"><strong>Most trust is Medium:</strong><br>Most displayed strategy numbers are forecasts using live telemetry plus route/config fallbacks. Direct telemetry fields are High only when ESP32/cloud packets are fresh.</div>
+      <div class="card"><strong>Stage 2 watch item:</strong><br>Solar recovery and stopped/trailering recovery now exist in the prediction chain, but similar labels in older panels can use different energy-model assumptions.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Metric Inventory</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Component</th>
+          <th>Data Source</th>
+          <th>Calculation Source</th>
+          <th>File</th>
+          <th>Function</th>
+          <th>Source Type</th>
+          <th>Trust</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Recommended Speed</td><td>Race Captain top cards</td><td>Predictive strategy</td><td>generatePredictiveStrategy -> recommendSpeed</td><td class="mono">components/DayCommandCenter.tsx; lib/strategyEngine.ts</td><td class="mono">recommendSpeed</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Recommended Speed</td><td>Native command card</td><td>Prediction + battery state</td><td>buildRacePrediction -> planBatterySwap -> buildDeterministicStrategyRecommendation</td><td class="mono">components/DayCommandCenter.tsx; lib/deterministicStrategyRecommendation.ts</td><td class="mono">buildDeterministicStrategyRecommendation</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Mission Status</td><td>Race Captain / Strategy banner</td><td>Predictive strategy</td><td>classifyMissionStatus(predictiveStrategy)</td><td class="mono">components/DayCommandCenter.tsx</td><td class="mono">classifyMissionStatus</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Race Health</td><td>Race Captain / Strategy banner</td><td>Predictive strategy + telemetry status</td><td>calculateRaceHealth -> calculateRaceHealthBreakdown</td><td class="mono">components/DayCommandCenter.tsx</td><td class="mono">calculateRaceHealth</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Current SOC</td><td>Race Captain top cards</td><td>telemetry.batterySocPercent</td><td>Direct render</td><td class="mono">components/DayCommandCenter.tsx</td><td>direct</td><td>Live Telemetry</td><td class="trust-high">High if fresh</td></tr>
+        <tr><td>Alerts</td><td>Race Captain</td><td>Route, weather, telemetry, strategy</td><td>raceCaptainAlerts array</td><td class="mono">components/DayCommandCenter.tsx</td><td>inline</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Next Critical Event</td><td>Race Captain</td><td>Route segments</td><td>nextImportantSegment lookup</td><td class="mono">components/DayCommandCenter.tsx</td><td>inline route lookup</td><td>Route Data</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Strategy Recommendation</td><td>Race Captain native</td><td>Prediction, swap, battery state</td><td>buildDeterministicStrategyRecommendation</td><td class="mono">lib/deterministicStrategyRecommendation.ts</td><td class="mono">buildDeterministicStrategyRecommendation</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Prediction Confidence</td><td>Prediction cards</td><td>Telemetry freshness, route, battery, schedule</td><td>confidenceLevel</td><td class="mono">lib/racePrediction.ts</td><td class="mono">confidenceLevel</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Projected Next Stop SOC</td><td>Prediction summary / Next Event</td><td>Prediction engine + schedule</td><td>projectedNextScheduleEventSocPercent ?? nextStop.socPercent</td><td class="mono">lib/racePrediction.ts; lib/raceSchedule.ts</td><td class="mono">buildRacePrediction</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Projected End-Day SOC</td><td>Prediction summary / Strategy</td><td>Prediction engine + schedule</td><td>forecastRaceScheduleEnergy fallback projectEnergy</td><td class="mono">lib/racePrediction.ts; lib/raceSchedule.ts</td><td class="mono">forecastRaceScheduleEnergy</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Predicted Wh/mi</td><td>Strategy prediction panel</td><td>Rolling history, live telemetry, config fallback</td><td>predictedWhPerMile; clamp 25-75</td><td class="mono">lib/racePrediction.ts</td><td class="mono">predictedWhPerMile</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Predicted MPPT</td><td>Strategy prediction panel</td><td>MPPT telemetry then config fallback</td><td>predictedMpptWatts</td><td class="mono">lib/racePrediction.ts</td><td class="mono">predictedMpptWatts</td><td>Live Telemetry / Constant</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Solar Recovery</td><td>Prediction summary</td><td>MPPT + schedule durations</td><td>forecastRaceScheduleEnergy</td><td class="mono">lib/raceSchedule.ts</td><td class="mono">forecastRaceScheduleEnergy</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Stopped Recovery</td><td>Strategy prediction panel</td><td>MPPT + non-driving events</td><td>applyNonDrivingEvent</td><td class="mono">lib/raceSchedule.ts</td><td class="mono">applyNonDrivingEvent</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Trailering Recovery</td><td>Strategy prediction panel</td><td>MPPT + trailer events</td><td>applyNonDrivingEvent</td><td class="mono">lib/raceSchedule.ts</td><td class="mono">applyNonDrivingEvent</td><td>Prediction Engine</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Net Day Energy</td><td>Strategy prediction panel</td><td>Schedule forecast</td><td>drive Wh - recovered Wh</td><td class="mono">lib/raceSchedule.ts</td><td class="mono">forecastRaceScheduleEnergy</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Swap Recommendation</td><td>Race Captain / Strategy</td><td>Battery state + prediction</td><td>planBatterySwap</td><td class="mono">lib/raceBatteryStrategy.ts</td><td class="mono">planBatterySwap</td><td>Swap Planner</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Battery Strategy</td><td>Strategy summary</td><td>Race battery state</td><td>raceBatteryState + planBatterySwap</td><td class="mono">components/DayCommandCenter.tsx; lib/raceBatteryStrategy.ts</td><td class="mono">BatteryStrategySummaryPanel</td><td>Swap Planner / Manual Input</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Trailering Recommendation</td><td>Race Captain / Strategy</td><td>Route lookahead + SOC + Wh/mi</td><td>analyzeRouteIntelligence -> estimateTraileringOption</td><td class="mono">lib/routeIntelligence.ts</td><td class="mono">estimateTraileringOption</td><td>Route Data / Prediction</td><td class="trust-low">Medium-Low</td></tr>
+        <tr><td>Current Wh/mi</td><td>Legacy Predictive Strategy panel</td><td>Telemetry or model fallback</td><td>getSafeWhPerMile inside generatePredictiveStrategy</td><td class="mono">components/PredictiveStrategyPanel.tsx; lib/strategyEngine.ts</td><td class="mono">getSafeWhPerMile</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Model Wh/mi</td><td>Legacy Predictive Strategy panel</td><td>Energy simulation</td><td>simulateDayEnergy -> getSafeWhPerMile</td><td class="mono">lib/energy.ts; lib/strategyEngine.ts</td><td class="mono">simulateDayEnergy</td><td>Simulator</td><td class="trust-low">Low-Medium</td></tr>
+        <tr><td>Efficiency Delta</td><td>Legacy Predictive Strategy panel</td><td>Current vs model Wh/mi</td><td>(current - model) / model</td><td class="mono">lib/strategyEngine.ts</td><td class="mono">generatePredictiveStrategy</td><td>Derived Calculation</td><td class="trust-medium">Medium</td></tr>
+        <tr><td>Thermal Risk</td><td>Legacy Predictive Strategy panel</td><td>Motor/controller telemetry</td><td>classifyThermalRisk</td><td class="mono">lib/strategyEngine.ts</td><td class="mono">classifyThermalRisk</td><td>Live Telemetry</td><td class="trust-high">High if fresh</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section-break">
+    <h2>Special Calculation Chains</h2>
+    <div class="chain">
+      <div class="chain-row"><div class="metric-name">Recommended Speed</div><div>Top cards: telemetry/route/car setup -> <span class="mono">simulateDayEnergy()</span> -> <span class="mono">generatePredictiveStrategy()</span> -> <span class="mono">recommendSpeed()</span>. Native cards: telemetry/history/route -> <span class="mono">buildRacePrediction()</span> -> <span class="mono">planBatterySwap()</span> -> <span class="mono">buildDeterministicStrategyRecommendation()</span>.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Race Health</div><div>Telemetry source/status + predictive strategy -> <span class="mono">calculateRaceHealthBreakdown()</span> -> score and label.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Mission Status</div><div>Predictive strategy -> swap debug next-opportunity SOC + trailering action + highest route risk -> <span class="mono">classifyMissionStatus()</span>.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Strategy Recommendation</div><div>Telemetry/history/route -> prediction -> swap planner -> battery state validation -> deterministic recommendation command, reason, speed, warnings.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Projected End-Day SOC</div><div>Telemetry battery energy or SOC estimate -> schedule events -> drive energy minus MPPT recovery -> <span class="mono">projectedEndDaySocPercent</span>.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Projected Next Stop SOC</div><div>Same prediction path, but projected to next schedule event or route stop rather than full day.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Predicted Wh/mi</div><div>Rolling recent Wh/mi -> live Wh/mi -> fallback 40 Wh/mi -> clamp 25-75 Wh/mi.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Solar Recovery</div><div>MPPT priority: charge power -> MPPT power -> solar power -> station fallback. Schedule applies recovery during driving, stops, and trailering.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Swap Recommendation</div><div>Active/spare pack SOC -> prediction SOC projections -> force swap 20%, plan swap 30%, spare advantage 10% -> action.</div><div class="trust-medium">Medium</div></div>
+      <div class="chain-row"><div class="metric-name">Trailering Recommendation</div><div>15-mile route lookahead + risk/type multipliers + current SOC + baseline Wh/mi -> projected driven/trailered SOC -> action.</div><div class="trust-low">Medium-Low</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Legacy Assumption Audit</h2>
+    <table>
+      <thead>
+        <tr><th>Pattern</th><th>File / Line</th><th>Active?</th><th>Classification</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>140</td><td class="mono">lib/deterministicStrategyRecommendation.test.ts:242</td><td>No runtime</td><td>Test SOC clamp fixture, not 140 Wh/mi.</td></tr>
+        <tr><td>140</td><td class="mono">lib/racePrediction.test.ts:186</td><td>No runtime</td><td>Test SOC clamp fixture, not 140 Wh/mi.</td></tr>
+        <tr><td>120</td><td class="mono">lib/raceCaptainEnergy.test.ts:108, 223</td><td>No runtime</td><td>Energy Wh fixture, not target Wh/mi.</td></tr>
+        <tr><td>120 cap</td><td class="mono">lib/telemetrySimulator.ts:117</td><td>Active</td><td>Current draw cap. Not legacy Wh/mi, but can create high simulated power.</td></tr>
+        <tr><td>24.8 mph</td><td class="mono">lib/esp32Telemetry.ts:67</td><td>Mock only</td><td>Mock packet speed, not strategy target.</td></tr>
+        <tr><td>24 Wh/mi</td><td class="mono">lib/telemetrySimulator.ts:147</td><td>Active</td><td>Descent efficiency. Above 20 floor, but optimistic.</td></tr>
+        <tr><td>Old thresholds 130/170/220</td><td>Repository search</td><td>Not found as active strategy bands</td><td>Remaining matches are route miles, gauge geometry, solar/current limits, or tests.</td></tr>
+        <tr><td>defaultRaceWhPerMile = 140</td><td>Repository search</td><td>Not found</td><td>Current config is 40.</td></tr>
+        <tr><td>defaultTargetSpeedMph = 24</td><td>Repository search</td><td>Not found</td><td>Current config is 35.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Suspicious or Inconsistent Metrics</h2>
+    <ul>
+      <li>Race Captain top cards and native command cards can show different recommended speeds because they use different strategy chains.</li>
+      <li>Race Health and Mission Status use the older predictive strategy swap advisor, while native Battery Strategy uses the newer race battery planner.</li>
+      <li>There are two active swap planners: <span class="mono">batterySwapAdvisor.ts</span> and <span class="mono">raceBatteryStrategy.ts</span>.</li>
+      <li>Solar recovery appears in several places but can be sourced from schedule forecast, integrated history, MPPT daily energy, or simulation depending on component.</li>
+      <li>Simulator climb current can still reach 120A, which may produce harsher simulated power than the new Wh/mi targets suggest.</li>
+      <li>Descent simulator efficiency is hardcoded at 24 Wh/mi, close to the lower realism floor.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Verify Before Race Testing</h2>
+    <ul>
+      <li>Pick one authoritative strategy chain for Race Captain decisions.</li>
+      <li>Confirm live ESP32/cloud telemetry includes reliable <span class="mono">batteryEnergyWh</span>; otherwise predictions estimate from SOC.</li>
+      <li>Validate MPPT priority and units: <span class="mono">mpptChargePowerWatts</span>, <span class="mono">mpptPowerWatts</span>, <span class="mono">solarPowerWatts</span>.</li>
+      <li>Compare Projected Next Stop SOC across prediction summary, next event, swap advisor, and debug panel.</li>
+      <li>Review schedule stop/trailer durations because they directly drive solar recovery and end-day SOC.</li>
+      <li>Recheck simulator current/power behavior after calibration, especially climb and descent cases.</li>
+    </ul>
+  </section>
+</body>
+</html>

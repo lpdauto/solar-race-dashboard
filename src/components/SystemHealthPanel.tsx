@@ -61,8 +61,8 @@ function summarizeHealth(telemetry: TelemetryData) {
   const drivetrainStatus =
     telemetry.batteryCurrent > 105
       ? 'Conserve energy'
-      : efficiencyWhPerMile > 140
-        ? 'Watch temperatures'
+      : efficiencyWhPerMile > 55
+        ? 'High consumption'
         : 'Stable'
   const chargingStatus =
     regenWatts > 300
@@ -75,8 +75,8 @@ function summarizeHealth(telemetry: TelemetryData) {
       ? 'Critical thermal load'
       : batteryReserve === 'Conserve energy'
         ? 'Conserve energy'
-        : efficiencyWhPerMile > 140
-          ? 'Watch temperatures'
+        : efficiencyWhPerMile > 55
+          ? 'High consumption'
           : solarPowerWatts > 1400 && telemetry.batterySocPercent > 50
             ? 'Excellent'
             : 'Stable'

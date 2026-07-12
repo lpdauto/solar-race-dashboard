@@ -127,10 +127,11 @@ export default function PredictiveStrategyPanel({
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
         <div>
           <h3 className="text-base font-bold text-white">
-            Predictive Strategy Engine
+            Legacy Strategy Debug
           </h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Compares live telemetry against the energy model and current route context.
+            Historical predictive strategy output for diagnostics. Visible Race
+            Captain decisions use the authoritative strategy state.
           </p>
         </div>
         <span

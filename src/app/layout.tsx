@@ -1,17 +1,12 @@
-﻿import type { Metadata, Viewport } from 'next'
-import OfflineStatusBanner from '@/components/OfflineStatusBanner'
-import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
+import type { Metadata, Viewport } from 'next'
+import AppNavigation from '@/components/AppNavigation'
+import ServiceWorkerCleanup from '@/components/ServiceWorkerCleanup'
+import { Suspense } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Solar Race Strategy Dashboard',
   description: 'Race navigation and energy strategy planner for the 2026 Cross-Texas Solar Car Challenge route.',
-  manifest: '/manifest.webmanifest',
-  appleWebApp: {
-    capable: true,
-    title: 'Solar Race',
-    statusBarStyle: 'black-translucent',
-  },
 }
 
 export const viewport: Viewport = {
@@ -29,8 +24,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ServiceWorkerRegister />
-        <OfflineStatusBanner />
+        <ServiceWorkerCleanup />
+        <Suspense fallback={null}>
+          <AppNavigation />
+        </Suspense>
         {children}
       </body>
     </html>
