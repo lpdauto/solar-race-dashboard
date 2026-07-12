@@ -1,9 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 const authCookieName = 'solar_race_auth'
+const raceTrackerFrameAncestorsPolicy =
+  "frame-ancestors 'self' https://www.racerxtemplecity.org https://racerxtemplecity.org;"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  if (isRaceTrackerPath(pathname)) {
+    return raceTrackerResponse()
+  }
 
   if (isPublicPath(pathname)) {
     return NextResponse.next()
@@ -27,6 +33,19 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+}
+
+function isRaceTrackerPath(pathname: string) {
+  return pathname === '/race-tracker' || pathname === '/race-tracker/'
+}
+
+function raceTrackerResponse() {
+  const response = NextResponse.next()
+
+  response.headers.delete('X-Frame-Options')
+  response.headers.set('Content-Security-Policy', raceTrackerFrameAncestorsPolicy)
+
+  return response
 }
 
 function isPublicPath(pathname: string) {
