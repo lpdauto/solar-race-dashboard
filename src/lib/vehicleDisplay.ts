@@ -5,6 +5,16 @@ export type VehicleDisplayData = {
   arrival: string
   status: string
   targetSpeedMph: number
+  gpsSource: 'phone' | 'esp32' | 'none'
+  gpsAgeMs: number | null
+  gpsStatus: string
+  gpsLat: number | null
+  gpsLng: number | null
+  gpsSpeedMph: number | null
+  gpsHeading: number | null
+  gpsElevationFt: number | null
+  gpsAccuracy: number | null
+  gpsProviderDeviceName: string | null
 }
 
 const defaultTargetSpeedMph = 35
@@ -52,7 +62,29 @@ export function buildVehicleDisplayData(payload: unknown): VehicleDisplayData {
       stringValue(packet.command) ??
       classifyDriverStatus({ speedMph, packPowerWatts, whPerMile }),
     targetSpeedMph: Math.round(targetSpeedMph),
+    gpsSource: gpsSource(packet.gpsSource, packet),
+    gpsAgeMs: finiteNumber(packet.gpsAgeMs) ?? null,
+    gpsStatus: stringValue(packet.gpsStatus) ?? 'offline',
+    gpsLat: finiteNumber(packet.gpsLat) ?? null,
+    gpsLng: finiteNumber(packet.gpsLng) ?? null,
+    gpsSpeedMph: finiteNumber(packet.gpsSpeedMph) ?? null,
+    gpsHeading: finiteNumber(packet.gpsHeading) ?? null,
+    gpsElevationFt: finiteNumber(packet.gpsElevationFt) ?? null,
+    gpsAccuracy: finiteNumber(packet.gpsAccuracy) ?? null,
+    gpsProviderDeviceName: stringValue(packet.gpsProviderDeviceName) ?? null,
   }
+}
+
+function gpsSource(
+  value: unknown,
+  packet: Record<string, unknown>
+): VehicleDisplayData['gpsSource'] {
+  if (value === 'phone' || value === 'esp32' || value === 'none') return value
+  if (finiteNumber(packet.gpsLat) !== undefined && finiteNumber(packet.gpsLng) !== undefined) {
+    return 'esp32'
+  }
+
+  return 'none'
 }
 
 function classifyDriverStatus({

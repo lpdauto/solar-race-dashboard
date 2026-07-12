@@ -16,6 +16,16 @@ describe('buildVehicleDisplayData', () => {
       arrival: '--:--',
       status: 'ON TARGET',
       targetSpeedMph: 35,
+      gpsSource: 'none',
+      gpsAgeMs: null,
+      gpsStatus: 'offline',
+      gpsLat: null,
+      gpsLng: null,
+      gpsSpeedMph: null,
+      gpsHeading: null,
+      gpsElevationFt: null,
+      gpsAccuracy: null,
+      gpsProviderDeviceName: null,
     })
   })
 
@@ -44,6 +54,39 @@ describe('buildVehicleDisplayData', () => {
       soc: 71,
       whPerMile: 70,
       status: 'SLOW DOWN',
+    })
+  })
+
+  it('includes fresh phone GPS fields without changing driver telemetry', () => {
+    expect(
+      buildVehicleDisplayData({
+        speedMph: 35,
+        packPowerWatts: 1400,
+        packSoc: 82,
+        gpsSource: 'phone',
+        gpsStatus: 'live',
+        gpsAgeMs: 1200,
+        gpsLat: 34.096981,
+        gpsLng: -118.05299,
+        gpsSpeedMph: 10,
+        gpsHeading: null,
+        gpsElevationFt: 203,
+        gpsAccuracy: 3.5,
+        gpsProviderDeviceName: 'Android GPS Device',
+      })
+    ).toMatchObject({
+      soc: 82,
+      whPerMile: 40,
+      gpsSource: 'phone',
+      gpsStatus: 'live',
+      gpsAgeMs: 1200,
+      gpsLat: 34.096981,
+      gpsLng: -118.05299,
+      gpsSpeedMph: 10,
+      gpsHeading: null,
+      gpsElevationFt: 203,
+      gpsAccuracy: 3.5,
+      gpsProviderDeviceName: 'Android GPS Device',
     })
   })
 })

@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import {
+  createRedisTelemetryClient,
   loadLatestTelemetry,
   logTelemetryApiError,
   telemetryErrorJson,
 } from '@/lib/redisTelemetry'
 import { buildVehicleDisplayData } from '@/lib/vehicleDisplay'
+import {
+  getGpsProviderStatus,
+  mergePhoneGpsIntoTelemetryPayload,
+} from '@/lib/vehicleGpsProvider'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +37,16 @@ export async function GET(request: Request) {
       )
     }
 
-    return noStoreJson(buildVehicleDisplayData(latest.payload))
+    const redis = createRedisTelemetryClient()
+    const gpsProviderStatus = await getGpsProviderStatus({ redis })
+    const payloadWithGps = mergePhoneGpsIntoTelemetryPayload({
+      payload: latest.payload,
+      phoneGps: gpsProviderStatus.latest,
+      gpsStatus: gpsProviderStatus.gpsStatus,
+      gpsAgeMs: gpsProviderStatus.gpsAgeMs,
+    })
+
+    return noStoreJson(buildVehicleDisplayData(payloadWithGps))
   } catch (error) {
     logTelemetryApiError('/api/vehicle/display', error, { node: 'vehicle' })
 

@@ -3,7 +3,14 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react'
 import CarSetupPanel from '@/components/CarSetupPanel'
 import CloudTelemetryStatusCard from '@/components/CloudTelemetryStatusCard'
 import CommandTile, { type CommandTileRisk } from '@/components/CommandTile'
@@ -76,6 +83,15 @@ import {
   type RaceEvent,
   type TraileringSession,
 } from '@/lib/raceEvents'
+import {
+  gpsErrorMessage,
+  phoneGpsRecordFromBrowserPosition,
+  phoneGpsUpdatePayload,
+  phoneGpsWatchOptions,
+  shouldStartPhoneGpsWatcher,
+  supportsPhoneGpsProvider,
+  type PhoneGpsClientRecord,
+} from '@/lib/phoneGpsClient'
 import {
   emptyPublicRaceCrew,
   loadPublicRaceCrew,
@@ -907,6 +923,7 @@ export default function DayCommandCenter({
             cloudHealth={telemetryController.cloudHealth}
             geolocation={geolocation}
             raceBatteryState={raceBatteryState}
+            appProfile={carSetup.appProfile}
           />
         ) : null}
 
@@ -3962,6 +3979,7 @@ function VehicleSystemsPanel({
   cloudHealth,
   geolocation,
   raceBatteryState,
+  appProfile,
 }: {
   telemetry: TelemetryData | null
   telemetryStatus: TelemetryConnectionStatus
@@ -3976,6 +3994,7 @@ function VehicleSystemsPanel({
   cloudHealth: CloudTelemetryHealth | null
   geolocation: ReturnType<typeof useGeolocation>
   raceBatteryState: RaceBatteryState
+  appProfile: CarSetup['appProfile']
 }) {
   const nodeStatus = getNodeStatus({
     telemetry,
@@ -4182,6 +4201,7 @@ function VehicleSystemsPanel({
             <StatusMetric label="Status message" value={gpsStatus.message} />
           </SystemMetricGrid>
         </SystemSubsection>
+        <PhoneGpsProviderPanel appProfile={appProfile} />
       </SystemAccordion>
     </section>
   )
@@ -4263,6 +4283,508 @@ export function getDisplayedGpsStatus({
         ? `${telemetry.gpsElevationFt.toFixed(0)} ft`
         : '--',
   }
+}
+
+type PhoneGpsStatus = 'live' | 'stale' | 'offline'
+type PhoneGpsActiveProvider = {
+  providerId: string
+  sessionId: string
+  deviceName: string
+  startedAt: string
+  lastUpdateAt: string | null
+}
+type PhoneGpsStatusResponse = {
+  activeProvider: PhoneGpsActiveProvider | null
+  latest: PhoneGpsClientRecord | null
+  gpsSource: 'phone' | 'esp32' | 'none'
+  gpsStatus: PhoneGpsStatus
+  gpsAgeMs: number | null
+}
+type PhoneGpsProviderMode =
+  | 'idle'
+  | 'starting'
+  | 'active'
+  | 'permission-denied'
+  | 'unsupported'
+  | 'error'
+
+const phoneGpsDeviceNameStorageKey = 'rx2-phone-gps-device-name'
+const phoneGpsProviderIdStorageKey = 'rx2-phone-gps-provider-id'
+const phoneGpsDefaultDeviceName = 'Android GPS Device'
+
+function PhoneGpsProviderPanel({
+  appProfile,
+}: {
+  appProfile: CarSetup['appProfile']
+}) {
+  const [deviceName, setDeviceName] = useState(phoneGpsDefaultDeviceName)
+  const [providerId, setProviderId] = useState('')
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [mode, setMode] = useState<PhoneGpsProviderMode>('idle')
+  const [status, setStatus] = useState<PhoneGpsStatusResponse | null>(null)
+  const [localReading, setLocalReading] = useState<PhoneGpsClientRecord | null>(null)
+  const [progressText, setProgressText] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+  const [uploadState, setUploadState] = useState<'idle' | 'ok' | 'failed'>('idle')
+  const [uploadMessage, setUploadMessage] = useState('--')
+  const watchIdRef = useRef<number | null>(null)
+  const pendingReadingRef = useRef<PhoneGpsClientRecord | null>(null)
+  const uploadTimerRef = useRef<number | null>(null)
+  const lastUploadAtRef = useRef(0)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  const sessionIdRef = useRef<string | null>(null)
+  const providerIdRef = useRef('')
+  const deviceNameRef = useRef(phoneGpsDefaultDeviceName)
+
+  useEffect(() => {
+    const storedDeviceName = window.localStorage.getItem(phoneGpsDeviceNameStorageKey)
+    const storedProviderId = window.localStorage.getItem(phoneGpsProviderIdStorageKey)
+    const nextProviderId = storedProviderId || crypto.randomUUID()
+
+    setDeviceName(storedDeviceName || phoneGpsDefaultDeviceName)
+    setProviderId(nextProviderId)
+    providerIdRef.current = nextProviderId
+    deviceNameRef.current = storedDeviceName || phoneGpsDefaultDeviceName
+    window.localStorage.setItem(phoneGpsProviderIdStorageKey, nextProviderId)
+  }, [])
+
+  useEffect(() => {
+    deviceNameRef.current = deviceName
+    if (deviceName.trim()) {
+      window.localStorage.setItem(phoneGpsDeviceNameStorageKey, deviceName.trim())
+    }
+  }, [deviceName])
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function pollStatus() {
+      try {
+        const response = await fetch('/api/vehicle/gps/status', {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (!response.ok) return
+
+        const nextStatus = (await response.json()) as PhoneGpsStatusResponse
+
+        if (cancelled) return
+
+        setStatus(nextStatus)
+      } catch {
+        // Keep local provider mode running through temporary dashboard read failures.
+      }
+    }
+
+    void pollStatus()
+    const intervalId = window.setInterval(() => {
+      void pollStatus()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearPhoneGpsWatch(watchIdRef)
+      clearPhoneGpsUploadTimer(uploadTimerRef)
+      uploadAbortRef.current?.abort()
+    }
+  }, [])
+
+  const thisDeviceIsActive =
+    Boolean(sessionId) &&
+    status?.activeProvider?.sessionId === sessionId
+  const anotherDeviceIsActive =
+    Boolean(status?.activeProvider) && !thisDeviceIsActive
+  const canTakeOver = appProfile === 'owner'
+  const displayReading = localReading ?? status?.latest ?? null
+  const statusLabel =
+    mode === 'starting'
+      ? 'STARTING'
+      : mode === 'permission-denied'
+        ? 'PERMISSION DENIED'
+        : mode === 'unsupported'
+          ? 'UNSUPPORTED'
+          : thisDeviceIsActive || mode === 'active'
+            ? 'ACTIVE'
+            : anotherDeviceIsActive
+              ? status?.gpsStatus === 'offline'
+                ? 'OFFLINE'
+                : 'ONLINE'
+              : 'OFFLINE'
+  const statusTone: DiagnosticTone =
+    statusLabel === 'ACTIVE' || statusLabel === 'ONLINE'
+      ? 'healthy'
+      : statusLabel === 'STARTING'
+        ? 'warning'
+        : statusLabel === 'OFFLINE'
+          ? 'neutral'
+          : 'danger'
+  const description =
+    mode === 'permission-denied'
+      ? 'Location permission was denied. In Android browser settings, enable Location for this site, then retry.'
+      : mode === 'unsupported'
+        ? 'This browser does not support navigator.geolocation.'
+        : anotherDeviceIsActive
+          ? `${status?.activeProvider?.deviceName ?? 'Another device'} is the active GPS provider.`
+          : thisDeviceIsActive || mode === 'active'
+            ? 'This device is broadcasting vehicle GPS.'
+            : 'No device is currently providing vehicle GPS.'
+
+  async function startProvider({ takeover = false }: { takeover?: boolean } = {}) {
+    if (mode === 'starting') return
+
+    if (!supportsPhoneGpsProvider(navigator)) {
+      setMode('unsupported')
+      setErrorMessage('This browser does not support location sharing.')
+      return
+    }
+
+    setMode('starting')
+    setProgressText('Requesting high-accuracy GPS position...')
+    setErrorMessage('')
+    setUploadState('idle')
+    setUploadMessage('--')
+
+    try {
+      const position = await requestInitialGpsPosition()
+      const nextSessionId = crypto.randomUUID()
+      const trimmedDeviceName = deviceName.trim() || phoneGpsDefaultDeviceName
+      const firstReading = phoneGpsRecordFromBrowserPosition({
+        position,
+        providerId: providerIdRef.current || providerId,
+        sessionId: nextSessionId,
+        deviceName: trimmedDeviceName,
+      })
+
+      setProgressText('Registering this device as the vehicle GPS provider...')
+
+      const response = await fetch('/api/vehicle/gps/provider/start', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...phoneGpsUpdatePayload(firstReading),
+          appProfile,
+          takeover,
+        }),
+      })
+      const body = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string'
+            ? body.error
+            : 'Unable to register GPS provider.'
+        )
+      }
+
+      setSessionId(nextSessionId)
+      sessionIdRef.current = nextSessionId
+      setLocalReading(firstReading)
+      setStatus(body as PhoneGpsStatusResponse)
+      setMode('active')
+      setProgressText('')
+      setUploadState('ok')
+      setUploadMessage('Initial GPS upload accepted.')
+      startPhoneGpsWatch()
+    } catch (error) {
+      const nextMessage = gpsErrorMessage(error)
+
+      setMode(nextMessage.permissionDenied ? 'permission-denied' : 'error')
+      setProgressText('')
+      setErrorMessage(nextMessage.message)
+    }
+  }
+
+  async function stopProvider() {
+    clearPhoneGpsWatch(watchIdRef)
+    clearPhoneGpsUploadTimer(uploadTimerRef)
+    uploadAbortRef.current?.abort()
+    uploadAbortRef.current = null
+
+    const activeSessionId = sessionIdRef.current
+
+    setMode('idle')
+    setSessionId(null)
+    setProgressText('')
+    setUploadState('idle')
+    setUploadMessage('--')
+
+    if (!activeSessionId) return
+
+    await fetch('/api/vehicle/gps/provider/stop', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        providerId: providerIdRef.current,
+        sessionId: activeSessionId,
+      }),
+    }).catch(() => undefined)
+  }
+
+  function startPhoneGpsWatch() {
+    if (
+      !supportsPhoneGpsProvider(navigator) ||
+      !shouldStartPhoneGpsWatcher(watchIdRef.current)
+    ) {
+      return
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const activeSessionId = sessionIdRef.current
+
+        if (!activeSessionId) return
+
+        const reading = phoneGpsRecordFromBrowserPosition({
+          position,
+          providerId: providerIdRef.current,
+          sessionId: activeSessionId,
+          deviceName: deviceNameRef.current,
+        })
+
+        setLocalReading(reading)
+        pendingReadingRef.current = reading
+        schedulePhoneGpsUpload()
+      },
+      (error) => {
+        setErrorMessage(gpsErrorMessage(error).message)
+        setUploadState('failed')
+        setUploadMessage('GPS position unavailable; watcher remains active.')
+      },
+      phoneGpsWatchOptions
+    )
+  }
+
+  function schedulePhoneGpsUpload() {
+    if (uploadTimerRef.current !== null) return
+
+    const elapsed = Date.now() - lastUploadAtRef.current
+    const delayMs = Math.max(0, 1000 - elapsed)
+
+    uploadTimerRef.current = window.setTimeout(() => {
+      uploadTimerRef.current = null
+      void uploadPendingGpsReading()
+    }, delayMs)
+  }
+
+  async function uploadPendingGpsReading() {
+    const reading = pendingReadingRef.current
+
+    if (!reading) return
+
+    pendingReadingRef.current = null
+    lastUploadAtRef.current = Date.now()
+    uploadAbortRef.current?.abort()
+
+    const abortController = new AbortController()
+    uploadAbortRef.current = abortController
+
+    try {
+      const response = await fetch('/api/vehicle/gps/update', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        signal: abortController.signal,
+        body: JSON.stringify(phoneGpsUpdatePayload(reading)),
+      })
+      const body = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string' ? body.error : 'GPS upload failed.'
+        )
+      }
+
+      setStatus(body as PhoneGpsStatusResponse)
+      setUploadState('ok')
+      setUploadMessage('Latest GPS upload accepted.')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+
+      setUploadState('failed')
+      setUploadMessage(
+        error instanceof Error ? error.message : 'GPS upload failed.'
+      )
+    } finally {
+      if (uploadAbortRef.current === abortController) {
+        uploadAbortRef.current = null
+      }
+
+      if (pendingReadingRef.current) {
+        schedulePhoneGpsUpload()
+      }
+    }
+  }
+
+  return (
+    <SystemSubsection title="Phone GPS Provider">
+      <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-100">
+              GPS Provider Mode
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              {description}
+            </p>
+          </div>
+          <ConnectionBadge value={statusLabel} tone={statusTone} />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <label className="grid gap-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Provider device name
+            </span>
+            <input
+              value={deviceName}
+              onChange={(event) => setDeviceName(event.target.value)}
+              disabled={mode === 'active' || mode === 'starting'}
+              className="h-10 rounded-md border border-white/10 bg-slate-950 px-3 text-sm font-semibold text-white outline-none transition focus:border-[#ff3ea5]/60 disabled:opacity-60"
+            />
+          </label>
+
+          {mode === 'active' || thisDeviceIsActive ? (
+            <button
+              type="button"
+              onClick={() => void stopProvider()}
+              className="h-10 rounded-md border border-red-400/30 bg-red-400/10 px-3 text-sm font-bold text-red-100 transition hover:bg-red-400/15"
+            >
+              Stop providing GPS
+            </button>
+          ) : anotherDeviceIsActive ? (
+            canTakeOver ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Take over GPS broadcasting from the current device?')) {
+                    void startProvider({ takeover: true })
+                  }
+                }}
+                disabled={mode === 'starting'}
+                className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f] disabled:opacity-60"
+              >
+                Take over GPS broadcasting
+              </button>
+            ) : null
+          ) : (
+            <button
+              type="button"
+              onClick={() => void startProvider()}
+              disabled={mode === 'starting'}
+              className="h-10 rounded-md bg-[#ff3ea5] px-3 text-sm font-bold text-slate-950 transition hover:bg-[#ff2f9f] disabled:opacity-60"
+            >
+              {mode === 'permission-denied' || mode === 'error'
+                ? 'Retry'
+                : 'Use this device as vehicle GPS'}
+            </button>
+          )}
+        </div>
+
+        {progressText ? (
+          <p className="rounded-md border border-yellow-300/25 bg-yellow-300/10 p-3 text-sm font-semibold text-yellow-100">
+            {progressText}
+          </p>
+        ) : null}
+        {errorMessage ? (
+          <p className="rounded-md border border-red-400/25 bg-red-400/10 p-3 text-sm font-semibold text-red-100">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        <SystemMetricGrid>
+          <StatusMetric label="Active provider" value={status?.activeProvider?.deviceName ?? '--'} />
+          <StatusMetric label="GPS accuracy" value={formatMeters(displayReading?.accuracyMeters)} />
+          <StatusMetric label="Latitude/longitude" value={formatPhoneGpsLatLon(displayReading)} />
+          <StatusMetric label="Speed" value={formatSpeed(displayReading?.speedMph ?? undefined)} />
+          <StatusMetric label="Heading" value={formatDegreesOrDash(displayReading?.headingDegrees)} />
+          <StatusMetric label="Altitude" value={formatFeet(displayReading?.altitudeFeet)} />
+          <StatusMetric label="Accepted upload age" value={formatAge(status?.gpsAgeMs)} />
+          <StatusMetric
+            label="Upload state"
+            value={
+              uploadState === 'ok'
+                ? 'SUCCESS'
+                : uploadState === 'failed'
+                  ? 'FAILED'
+                  : uploadMessage
+            }
+          />
+        </SystemMetricGrid>
+      </div>
+    </SystemSubsection>
+  )
+}
+
+function requestInitialGpsPosition() {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      reject,
+      phoneGpsWatchOptions
+    )
+  })
+}
+
+function clearPhoneGpsWatch(watchIdRef: MutableRefObject<number | null>) {
+  if (watchIdRef.current === null || !supportsPhoneGpsProvider(navigator)) return
+
+  navigator.geolocation.clearWatch(watchIdRef.current)
+  watchIdRef.current = null
+}
+
+function clearPhoneGpsUploadTimer(
+  uploadTimerRef: MutableRefObject<number | null>
+) {
+  if (uploadTimerRef.current === null) return
+
+  window.clearTimeout(uploadTimerRef.current)
+  uploadTimerRef.current = null
+}
+
+function formatPhoneGpsLatLon(reading: PhoneGpsClientRecord | null) {
+  return reading
+    ? `${reading.latitude.toFixed(6)}, ${reading.longitude.toFixed(6)}`
+    : '--'
+}
+
+function formatMeters(value?: number | null) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(1)} m`
+    : '--'
+}
+
+function formatFeet(value?: number | null) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(0)} ft`
+    : '--'
+}
+
+function formatDegreesOrDash(value?: number | null) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(0)} deg`
+    : '--'
 }
 
 function SystemAccordion({
