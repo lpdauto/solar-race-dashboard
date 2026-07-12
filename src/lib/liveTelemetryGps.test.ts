@@ -34,6 +34,35 @@ describe('getLiveTelemetryGpsPosition', () => {
       })
     ).toBeNull()
   })
+
+  it('returns null for null-island placeholder GPS coordinates', () => {
+    expect(
+      getLiveTelemetryGpsPosition({
+        gpsLat: 0,
+        gpsLng: 0,
+        gpsFix: true,
+      })
+    ).toBeNull()
+  })
+
+  it('returns null when telemetry reports invalid or stale GPS', () => {
+    expect(
+      getLiveTelemetryGpsPosition({
+        gpsLat: 31.738999,
+        gpsLng: -95.604293,
+        gpsFix: false,
+      })
+    ).toBeNull()
+
+    expect(
+      getLiveTelemetryGpsPosition({
+        gpsLat: 31.738999,
+        gpsLng: -95.604293,
+        gpsFix: true,
+        gpsAgeMs: 301_000,
+      })
+    ).toBeNull()
+  })
 })
 
 describe('hasValidGpsCoordinates', () => {

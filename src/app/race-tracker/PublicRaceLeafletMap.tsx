@@ -45,9 +45,15 @@ export default function PublicRaceLeafletMap({
       ? publicRaceCheckpoints[selectedCheckpointIndex]
       : null
   const currentPosition: LatLngTuple = [raceStatus.lat, raceStatus.lng]
+  const showCurrentPosition = shouldShowCurrentPosition(raceStatus)
   const bounds = useMemo(
-    () => L.latLngBounds([...routeCoordinates, currentPosition]),
-    [currentPosition]
+    () =>
+      L.latLngBounds(
+        showCurrentPosition
+          ? [...routeCoordinates, currentPosition]
+          : routeCoordinates
+      ),
+    [raceStatus.lat, raceStatus.lng, showCurrentPosition]
   )
   return (
     <div className="relative h-[240px] w-full min-[420px]:h-[300px] sm:h-[420px] md:h-[560px]">
@@ -93,24 +99,24 @@ export default function PublicRaceLeafletMap({
             title={checkpoint.name}
           />
         ))}
-        <Marker icon={rx2Icon} position={currentPosition}>
-          <Popup>
-            <div className="grid gap-1 text-sm">
-              <strong>Current RX2 Position</strong>
-              <span>
-                {raceStatus.lat.toFixed(6)}, {raceStatus.lng.toFixed(6)}
-              </span>
-              <span>
-                GPS:{' '}
-                {raceStatus.routeConfidence === 'off-route'
-                  ? 'off route / test location'
-                  : raceStatus.routeConfidence === 'live'
+        {showCurrentPosition ? (
+          <Marker icon={rx2Icon} position={currentPosition}>
+            <Popup>
+              <div className="grid gap-1 text-sm">
+                <strong>Current RX2 Position</strong>
+                <span>
+                  {raceStatus.lat.toFixed(6)}, {raceStatus.lng.toFixed(6)}
+                </span>
+                <span>
+                  GPS:{' '}
+                  {raceStatus.routeConfidence === 'live'
                     ? 'live'
                     : raceStatus.routeConfidence}
-              </span>
-            </div>
-          </Popup>
-        </Marker>
+                </span>
+              </div>
+            </Popup>
+          </Marker>
+        ) : null}
         <Marker icon={nextStopIcon} position={[nextStop.lat, nextStop.lng]}>
           <Popup>Next Stop: {nextStop.label}</Popup>
         </Marker>
@@ -136,6 +142,15 @@ export default function PublicRaceLeafletMap({
         />
       ) : null}
     </div>
+  )
+}
+
+function shouldShowCurrentPosition(raceStatus: PublicRaceStatus) {
+  return (
+    Number.isFinite(raceStatus.lat) &&
+    Number.isFinite(raceStatus.lng) &&
+    raceStatus.routeConfidence !== 'off-route' &&
+    raceStatus.routeConfidence !== 'unavailable'
   )
 }
 

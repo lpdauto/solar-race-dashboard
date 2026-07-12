@@ -107,7 +107,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.status).toBe('Waiting for GPS')
   })
 
-  it('shows California test GPS as off-route but keeps the live marker visible', () => {
+  it('shows California test GPS as off-route but keeps the public map on the route', () => {
     const status = getPublicRaceStatusFromTelemetry(
       {
         id: 'vehicle',
@@ -129,8 +129,36 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.dataSource).toBe('telemetry')
     expect(status.routeConfidence).toBe('off-route')
     expect(status.distanceFromRouteMeters).toBeGreaterThan(1_000)
-    expect(status.lat).toBe(34.096976)
-    expect(status.lng).toBe(-118.052991)
+    expect(status.lat).toBeGreaterThan(30)
+    expect(status.lat).toBeLessThan(34)
+    expect(status.lng).toBeGreaterThan(-103)
+    expect(status.lng).toBeLessThan(-95)
     expect(status.status).toBe('GPS off route / test location')
+  })
+
+  it('treats null-island telemetry coordinates as unavailable GPS', () => {
+    const status = getPublicRaceStatusFromTelemetry(
+      {
+        id: 'vehicle',
+        node: 'vehicle',
+        updated_at: '2026-06-09T18:29:55.000Z',
+        payload: {
+          speedMph: 0,
+          gpsFix: true,
+          gpsLat: 0,
+          gpsLng: 0,
+        },
+      },
+      new Date('2026-06-09T18:30:00Z')
+    )
+
+    expect(status.dataSource).toBe('telemetry')
+    expect(status.routeConfidence).toBe('unavailable')
+    expect(status.distanceFromRouteMeters).toBeNull()
+    expect(status.lat).toBeGreaterThan(30)
+    expect(status.lat).toBeLessThan(34)
+    expect(status.lng).toBeGreaterThan(-103)
+    expect(status.lng).toBeLessThan(-95)
+    expect(status.status).toBe('Waiting for GPS')
   })
 })

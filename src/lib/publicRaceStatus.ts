@@ -186,7 +186,7 @@ export function getPublicRaceStatusFromTelemetry(
         })
       : null
 
-  if (!progress) {
+  if (!liveGps || !progress) {
     return {
       ...getMockPublicRaceStatus(now),
       dataSource: 'telemetry',
@@ -202,17 +202,22 @@ export function getPublicRaceStatusFromTelemetry(
 
   const nextStop = nextStopForProgress(publicSccRoute, progress.routeProgressPct)
   const currentSegment = currentSegmentForProgress(progress.routeProgressPct)
+  const routeConfidence =
+    progress.confidence === 'off-route'
+      ? 'off-route'
+      : liveGps?.fix
+        ? 'live'
+        : progress.confidence
+  const mapPosition =
+    progress.confidence === 'off-route'
+      ? { lat: progress.lat, lng: progress.lng }
+      : { lat: liveGps.lat, lng: liveGps.lng }
 
   return {
     dataSource: 'telemetry',
     telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
     telemetryUpdatedAt: latestRow.updated_at,
-    routeConfidence:
-      progress.confidence === 'off-route'
-        ? 'off-route'
-        : liveGps?.fix
-          ? 'live'
-          : progress.confidence,
+    routeConfidence,
     distanceFromRouteMeters: Math.round(progress.distanceFromRouteMeters),
     speedMph: telemetry.speedMph,
     avgSpeedMph: telemetry.speedMph,
@@ -237,14 +242,10 @@ export function getPublicRaceStatusFromTelemetry(
     status: statusFromTelemetryAge(
       latestRow.updated_at,
       now,
-      progress.confidence === 'off-route'
-        ? 'off-route'
-        : liveGps?.fix
-          ? 'live'
-          : progress.confidence
+      routeConfidence
     ),
-    lat: liveGps?.lat ?? progress.lat,
-    lng: liveGps?.lng ?? progress.lng,
+    lat: mapPosition.lat,
+    lng: mapPosition.lng,
     routeProgressPct: progress.routeProgressPct,
     instagramUrl: 'https://www.instagram.com/',
     sponsors: publicRaceSponsors,
