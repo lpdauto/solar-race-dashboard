@@ -4423,7 +4423,9 @@ function PhoneGpsProviderPanel({
     status?.activeProvider?.sessionId === sessionId
   const anotherDeviceIsActive =
     Boolean(status?.activeProvider) && !thisDeviceIsActive
-  const canTakeOver = appProfile === 'owner'
+  const anotherProviderIsOffline =
+    anotherDeviceIsActive && status?.gpsStatus === 'offline'
+  const canTakeOver = appProfile === 'owner' || anotherProviderIsOffline
   const displayReading = localReading ?? status?.latest ?? null
   const statusLabel =
     mode === 'starting'
@@ -4453,7 +4455,9 @@ function PhoneGpsProviderPanel({
       : mode === 'unsupported'
         ? 'This browser does not support navigator.geolocation.'
         : anotherDeviceIsActive
-          ? `${status?.activeProvider?.deviceName ?? 'Another device'} is the active GPS provider.`
+          ? anotherProviderIsOffline
+            ? `${status?.activeProvider?.deviceName ?? 'Another device'} is the active GPS provider but is offline. Any device can take over.`
+            : `${status?.activeProvider?.deviceName ?? 'Another device'} is the active GPS provider.`
           : thisDeviceIsActive || mode === 'active'
             ? 'This device is broadcasting vehicle GPS.'
             : 'No device is currently providing vehicle GPS.'
@@ -4696,7 +4700,11 @@ function PhoneGpsProviderPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm('Take over GPS broadcasting from the current device?')) {
+                  const confirmMessage = anotherProviderIsOffline
+                    ? `${status?.activeProvider?.deviceName ?? 'The current device'} is offline. Take over GPS broadcasting with this device?`
+                    : 'Take over GPS broadcasting from the current device?'
+
+                  if (window.confirm(confirmMessage)) {
                     void startProvider({ takeover: true })
                   }
                 }}

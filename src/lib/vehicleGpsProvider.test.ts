@@ -148,6 +148,48 @@ describe('vehicle GPS provider', () => {
     })
   })
 
+  it('allows any device to take over once the active provider goes offline', async () => {
+    const redis = new MemoryRedis()
+    await startGpsProvider({
+      redis,
+      input: baseInput,
+      now: new Date('2026-07-11T12:00:00.000Z'),
+    })
+
+    const blockedWhileLive = await startGpsProvider({
+      redis,
+      input: {
+        ...baseInput,
+        providerId: 'device-2',
+        sessionId: 'session-2',
+        deviceName: 'Rescue Phone',
+      },
+      now: new Date('2026-07-11T12:00:05.000Z'),
+    })
+
+    expect(blockedWhileLive).toMatchObject({ ok: false, status: 409 })
+
+    const takeoverOnceOffline = await startGpsProvider({
+      redis,
+      input: {
+        ...baseInput,
+        providerId: 'device-2',
+        sessionId: 'session-2',
+        deviceName: 'Rescue Phone',
+      },
+      now: new Date('2026-07-11T12:00:31.000Z'),
+    })
+
+    expect(takeoverOnceOffline.ok).toBe(true)
+    if (!takeoverOnceOffline.ok) return
+
+    expect(takeoverOnceOffline.activeProvider).toMatchObject({
+      providerId: 'device-2',
+      sessionId: 'session-2',
+      deviceName: 'Rescue Phone',
+    })
+  })
+
   it('classifies live stale and offline thresholds', () => {
     expect(classifyPhoneGpsStatus(9_999)).toBe('live')
     expect(classifyPhoneGpsStatus(10_000)).toBe('stale')

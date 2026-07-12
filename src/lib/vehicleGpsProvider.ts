@@ -114,8 +114,12 @@ export async function startGpsProvider({
   const activeProvider = await redis.get<GpsProviderRecord>(gpsActiveProviderKey)
   const existingDifferentSession =
     activeProvider && activeProvider.sessionId !== normalized.provider.sessionId
+  const activeProviderIsOffline =
+    classifyPhoneGpsStatus(activeProviderAgeMs(activeProvider, now)) === 'offline'
 
-  if (existingDifferentSession && !(takeover && canTakeover)) {
+  // An offline provider never uploaded a fresh position and can't be stopped
+  // by its own (unreachable) device, so any device may take over immediately.
+  if (existingDifferentSession && !activeProviderIsOffline && !(takeover && canTakeover)) {
     return {
       ok: false,
       status: 409,
@@ -124,7 +128,12 @@ export async function startGpsProvider({
     }
   }
 
-  if (takeover && existingDifferentSession && !canTakeover) {
+  if (
+    existingDifferentSession &&
+    !activeProviderIsOffline &&
+    takeover &&
+    !canTakeover
+  ) {
     return {
       ok: false,
       status: 403,
@@ -297,6 +306,17 @@ export function classifyPhoneGpsStatus(ageMs: number | null): GpsProviderStatus 
   if (ageMs < phoneGpsOfflineThresholdMs) return 'stale'
 
   return 'offline'
+}
+
+function activeProviderAgeMs(
+  activeProvider: GpsProviderRecord | null,
+  now: Date
+): number | null {
+  if (!activeProvider?.lastUpdateAt) return null
+
+  const lastUpdate = Date.parse(activeProvider.lastUpdateAt)
+
+  return Number.isFinite(lastUpdate) ? Math.max(0, now.getTime() - lastUpdate) : null
 }
 
 export function mergePhoneGpsIntoTelemetryPayload({
