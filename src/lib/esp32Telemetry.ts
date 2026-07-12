@@ -67,6 +67,13 @@ export type Esp32TelemetryPacket = {
   packetRateHz?: number
   lastPacketAgeMs?: number
   lastCloudStatus?: number
+  firmwareVersion?: string
+  firmware?: string
+  version?: string
+  uptimeMs?: number
+  uptimeMillis?: number
+  uptimeSeconds?: number
+  uptime?: number
   mpptVoltage?: number
   mpptCurrent?: number
   mpptPowerWatts?: number
@@ -128,8 +135,13 @@ export function parseEsp32TelemetryPacket(
     ),
     gpsElevationFt: gpsElevationFeet(packet),
     gpsFix: gpsFixValue(packet),
+    gpsValid: booleanValue(packet.gpsValid),
+    gpsLocationValid: booleanValue(packet.gpsLocationValid ?? packet.locationValid),
     gpsAgeMs: finiteNumber(
       packet.gpsAgeMs ?? packet.lastGpsAgeMs ?? packet.gpsLastUpdateAgeMs
+    ),
+    gpsLastUpdateAgeMs: finiteNumber(
+      packet.gpsLastUpdateAgeMs ?? packet.gpsAgeMs ?? packet.lastGpsAgeMs
     ),
     gpsSatellites: finiteNumber(packet.gpsSatellites ?? packet.satellites),
     gpsSpeed: finiteNumber(packet.gpsSpeedMph ?? packet.speedMph),
@@ -164,6 +176,10 @@ export function parseEsp32TelemetryPacket(
     packetRateHz: finiteNumber(packet.packetRateHz),
     lastPacketAgeMs: finiteNumber(packet.lastPacketAgeMs),
     lastCloudStatus: finiteNumber(packet.lastCloudStatus),
+    firmwareVersion: stringValue(
+      packet.firmwareVersion ?? packet.firmware ?? packet.version
+    ),
+    uptimeMs: uptimeMilliseconds(packet),
     mpptVoltage: finiteNumber(packet.mpptVoltage),
     mpptCurrent: finiteNumber(packet.mpptCurrent),
     mpptPowerWatts: finiteNumber(packet.mpptPowerWatts),
@@ -285,6 +301,18 @@ function stringValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   return typeof value === 'boolean' ? value : undefined
+}
+
+function uptimeMilliseconds(packet: Esp32TelemetryPacket) {
+  const uptimeMs = finiteNumber(packet.uptimeMs ?? packet.uptimeMillis)
+
+  if (uptimeMs !== undefined) return uptimeMs
+
+  const uptimeSeconds = finiteNumber(packet.uptimeSeconds)
+
+  if (uptimeSeconds !== undefined) return uptimeSeconds * 1000
+
+  return finiteNumber(packet.uptime)
 }
 
 function normalizePacketSource(_value: unknown): NormalizedTelemetrySource {

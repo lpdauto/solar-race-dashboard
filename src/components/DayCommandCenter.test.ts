@@ -21,13 +21,14 @@ describe('strategy forecast net energy formatting', () => {
 })
 
 describe('vehicle systems GPS status', () => {
-  it('keeps cloud GPS unavailable when vehicle telemetry freshness is offline', () => {
+  it('shows cloud GPS lock from telemetry even when vehicle freshness is stale elsewhere', () => {
     const gps = getDisplayedGpsStatus({
       source: 'cloud',
       telemetry: {
         gpsLat: 34.096981,
         gpsLng: -118.05299,
-        gpsFix: false,
+        gpsValid: true,
+        gpsLocationValid: true,
         gpsAgeMs: 1000,
         gpsSatellites: 21,
         gpsHeading: 0,
@@ -37,44 +38,41 @@ describe('vehicle systems GPS status', () => {
       vehicleIsOnline: false,
     })
 
-    expect(gps.hasFix).toBe(false)
+    expect(gps.hasFix).toBe(true)
     expect(gps.latLon).toBe('34.096981, -118.052990')
-    expect(gps.statusLabel).toBe('Vehicle offline')
-    expect(gps.statusMessage).toBe(
-      'GPS unavailable because vehicle telemetry is offline.'
-    )
+    expect(gps.statusLabel).toBe('GPS LOCKED · 21 SATS')
+    expect(gps.statusMessage).toBe('Vehicle GPS lock is available.')
   })
 
-  it('allows cloud GPS only when vehicle telemetry is online', () => {
+  it('shows cloud GPS searching when gpsValid is false', () => {
     const gps = getDisplayedGpsStatus({
       source: 'cloud',
       telemetry: {
         gpsLat: 34.096981,
         gpsLng: -118.05299,
-        gpsFix: true,
+        gpsValid: false,
+        gpsLocationValid: false,
         gpsAgeMs: 1000,
+        gpsSatellites: 4,
       } as TelemetryData,
       geolocation: emptyGeolocation,
-      vehicleIsOnline: true,
     })
 
-    expect(gps.hasFix).toBe(true)
-    expect(gps.statusMessage).toBe('Vehicle GPS fix available.')
+    expect(gps.hasFix).toBe(false)
+    expect(gps.statusLabel).toBe('GPS SEARCHING')
+    expect(gps.statusMessage).toBe('Vehicle GPS is searching for a valid lock.')
   })
 
-  it('keeps GPS unavailable when vehicle telemetry is offline and coordinates are missing', () => {
+  it('shows no GPS data when vehicle GPS fields are missing', () => {
     const gps = getDisplayedGpsStatus({
       source: 'cloud',
       telemetry: {} as TelemetryData,
       geolocation: emptyGeolocation,
-      vehicleIsOnline: false,
     })
 
     expect(gps.hasFix).toBe(false)
-    expect(gps.statusLabel).toBe('Vehicle offline')
-    expect(gps.statusMessage).toBe(
-      'GPS unavailable because vehicle telemetry is offline.'
-    )
+    expect(gps.statusLabel).toBe('NO GPS DATA')
+    expect(gps.statusMessage).toBe('No vehicle GPS packet has been reported.')
   })
 })
 

@@ -17,7 +17,10 @@ export type TelemetryData = {
   gpsLng?: number
   gpsElevationFt?: number
   gpsFix?: boolean
+  gpsValid?: boolean
+  gpsLocationValid?: boolean
   gpsAgeMs?: number
+  gpsLastUpdateAgeMs?: number
   gpsSatellites?: number
   batteryPowerWatts?: number
   batteryTempC?: number
@@ -37,6 +40,8 @@ export type TelemetryData = {
   packetRateHz?: number
   lastPacketAgeMs?: number
   lastCloudStatus?: number
+  firmwareVersion?: string
+  uptimeMs?: number
   cloudConnectionStatus?: string
   cloudUpdatedAt?: string
   cloudNode?: TelemetryNodeId
@@ -110,7 +115,10 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     gpsLng: input.gpsLng,
     gpsElevationFt: input.gpsElevationFt,
     gpsFix: input.gpsFix,
+    gpsValid: input.gpsValid,
+    gpsLocationValid: input.gpsLocationValid,
     gpsAgeMs: input.gpsAgeMs,
+    gpsLastUpdateAgeMs: input.gpsLastUpdateAgeMs ?? input.gpsAgeMs,
     gpsSatellites: input.gpsSatellites,
     batteryVoltage: finiteNumber(input.batteryVoltage, 0),
     batteryCurrent: finiteNumber(input.batteryCurrent, 0),
@@ -137,6 +145,8 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     packetRateHz: input.packetRateHz,
     lastPacketAgeMs: input.lastPacketAgeMs,
     lastCloudStatus: input.lastCloudStatus,
+    firmwareVersion: input.firmwareVersion,
+    uptimeMs: input.uptimeMs,
     cloudConnectionStatus: input.cloudConnectionStatus,
     cloudUpdatedAt: input.cloudUpdatedAt,
     cloudNode: input.cloudNode,

@@ -28,6 +28,8 @@ describe('parseEsp32TelemetryPacket', () => {
       packetRateHz: 34,
       lastPacketAgeMs: 56,
       lastCloudStatus: 200,
+      firmwareVersion: 'rx2-1.4.0',
+      uptimeSeconds: 42,
     })
 
     expect(telemetry.source).toBe('esp32')
@@ -45,6 +47,8 @@ describe('parseEsp32TelemetryPacket', () => {
     expect(telemetry.lastCloudStatus).toBe(200)
     expect(telemetry.telemetryFresh).toBe(true)
     expect(telemetry.cloudConnectionStatus).toBe('connected')
+    expect(telemetry.firmwareVersion).toBe('rx2-1.4.0')
+    expect(telemetry.uptimeMs).toBe(42_000)
   })
 
   it('maps ESP32 GPS aliases into normalized telemetry', () => {
@@ -66,6 +70,8 @@ describe('parseEsp32TelemetryPacket', () => {
     })
 
     expect(telemetry.gpsFix).toBe(true)
+    expect(telemetry.gpsValid).toBe(true)
+    expect(telemetry.gpsLocationValid).toBe(true)
     expect(telemetry.gpsLat).toBe(34.096984)
     expect(telemetry.gpsLng).toBe(-118.053008)
     expect(telemetry.speedMph).toBe(12.4)
@@ -74,6 +80,7 @@ describe('parseEsp32TelemetryPacket', () => {
     expect(telemetry.gpsHeading).toBe(187.2)
     expect(telemetry.gpsSatellites).toBe(16)
     expect(telemetry.gpsAgeMs).toBe(276)
+    expect(telemetry.gpsLastUpdateAgeMs).toBe(276)
   })
 
   it('accepts alternate latitude longitude and fix field names', () => {

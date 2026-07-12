@@ -67,8 +67,8 @@ export function summarizeVehicleTelemetryStatus({
 }
 
 export function vehicleNodeStatusLabel(status: VehicleNodeStatus) {
-  if (status === 'online') return 'Vehicle Node Online'
-  if (status === 'stale') return 'Vehicle Node Stale'
+  if (status === 'online') return 'NODE ONLINE'
+  if (status === 'stale') return 'NODE STALE'
 
-  return 'Vehicle Node Offline'
+  return 'NODE OFFLINE'
 }

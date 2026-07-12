@@ -135,6 +135,7 @@ import type {
   TelemetryNodeId,
   TelemetryPacketStats,
   TelemetrySource,
+  VehicleNodeStatus,
 } from '@/types/telemetry'
 import { telemetryNodeOptions } from '@/types/telemetry'
 import type { WeatherRisk, WeatherStrategySummary } from '@/types/weather'
@@ -3588,19 +3589,296 @@ function formatAmps(value?: number) {
     : '--'
 }
 
-function classifyDataFreshness(ageSeconds?: number) {
-  const vehicleStatus = classifyVehicleNodeStatusFromAgeMs(
-    ageSeconds === undefined ? null : ageSeconds * 1000
+type DiagnosticTone = 'healthy' | 'warning' | 'danger' | 'neutral'
+type VehicleFreshnessSummary = {
+  label: string
+  tone: DiagnosticTone
+  vehicleStatus: VehicleNodeStatus
+}
+
+function diagnosticToneForNodeStatus(status: VehicleNodeStatus): DiagnosticTone {
+  if (status === 'online') return 'healthy'
+  if (status === 'stale') return 'warning'
+
+  return 'danger'
+}
+
+function getNodeStatus({
+  telemetry,
+  source,
+  cloudHealth,
+  lastPacketAt,
+  packetAgeSeconds,
+}: {
+  telemetry: TelemetryData | null
+  source: TelemetrySource
+  cloudHealth: CloudTelemetryHealth | null
+  lastPacketAt?: number
+  packetAgeSeconds?: number
+}) {
+  const heartbeatAgeMs = getVehicleHeartbeatAgeMs({
+    telemetry,
+    source,
+    cloudHealth,
+    lastPacketAt,
+    packetAgeSeconds,
+  })
+  const vehicleStatus = classifyVehicleNodeStatusFromAgeMs(heartbeatAgeMs)
+  const label =
+    vehicleStatus === 'online'
+      ? 'ONLINE'
+      : vehicleStatus === 'stale'
+        ? 'STALE'
+        : 'OFFLINE'
+
+  return {
+    vehicleStatus,
+    label,
+    badgeLabel: vehicleNodeStatusLabel(vehicleStatus),
+    tone: diagnosticToneForNodeStatus(vehicleStatus),
+    ageMs: heartbeatAgeMs,
+  }
+}
+
+function getVehicleHeartbeatAgeMs({
+  telemetry,
+  source,
+  cloudHealth,
+  lastPacketAt,
+  packetAgeSeconds,
+}: {
+  telemetry: TelemetryData | null
+  source: TelemetrySource
+  cloudHealth: CloudTelemetryHealth | null
+  lastPacketAt?: number
+  packetAgeSeconds?: number
+}) {
+  if (
+    source === 'cloud' &&
+    typeof cloudHealth?.latestVehiclePacketAgeMs === 'number' &&
+    Number.isFinite(cloudHealth.latestVehiclePacketAgeMs)
+  ) {
+    return Math.max(0, cloudHealth.latestVehiclePacketAgeMs)
+  }
+
+  if (
+    source === 'cloud' &&
+    typeof cloudHealth?.latestVehiclePacketAgeSeconds === 'number' &&
+    Number.isFinite(cloudHealth.latestVehiclePacketAgeSeconds)
+  ) {
+    return Math.max(0, cloudHealth.latestVehiclePacketAgeSeconds * 1000)
+  }
+
+  if (typeof packetAgeSeconds === 'number' && Number.isFinite(packetAgeSeconds)) {
+    return Math.max(0, packetAgeSeconds * 1000)
+  }
+
+  if (lastPacketAt) return Math.max(0, Date.now() - lastPacketAt)
+
+  if (telemetry?.cloudUpdatedAt) {
+    const cloudUpdatedAt = Date.parse(telemetry.cloudUpdatedAt)
+
+    if (Number.isFinite(cloudUpdatedAt)) return Math.max(0, Date.now() - cloudUpdatedAt)
+  }
+
+  return telemetry ? Math.max(0, Date.now() - telemetry.timestamp) : null
+}
+
+function getBleStatus(
+  telemetry: TelemetryData | null,
+  cloudPacketStatus: CloudTelemetryPacketStatus | null
+) {
+  const bleConnected = telemetry?.bleConnected
+  const telemetryFresh =
+    telemetry?.telemetryFresh ?? cloudPacketStatus?.telemetryFresh
+  const connectionStatus =
+    telemetry?.cloudConnectionStatus ?? cloudPacketStatus?.connectionStatus
+  const lastPacketAgeMs =
+    telemetry?.lastPacketAgeMs ?? cloudPacketStatus?.lastPacketAgeMs
+  const hasBleData =
+    bleConnected !== undefined ||
+    telemetryFresh !== undefined ||
+    connectionStatus !== undefined ||
+    lastPacketAgeMs !== undefined
+  const normalizedConnectionStatus = connectionStatus?.toLowerCase()
+  const packetIsStale =
+    typeof lastPacketAgeMs === 'number' &&
+    Number.isFinite(lastPacketAgeMs) &&
+    lastPacketAgeMs >= 5_000
+
+  if (!hasBleData) {
+    return {
+      label: 'DISCONNECTED',
+      badgeLabel: 'BLE OFFLINE',
+      tone: 'neutral' as const,
+      message: 'No FarDriver BLE packet has been reported.',
+      lastPacketAgeMs,
+      telemetryFresh,
+      connectionStatus,
+    }
+  }
+
+  if (
+    bleConnected === true &&
+    telemetryFresh !== false &&
+    !packetIsStale &&
+    normalizedConnectionStatus !== 'disconnected'
+  ) {
+    return {
+      label: 'CONNECTED',
+      badgeLabel: 'BLE CONNECTED',
+      tone: 'healthy' as const,
+      message: 'FarDriver BLE telemetry is connected and fresh.',
+      lastPacketAgeMs,
+      telemetryFresh,
+      connectionStatus,
+    }
+  }
+
+  if (
+    bleConnected === true &&
+    (telemetryFresh === false || packetIsStale || normalizedConnectionStatus === 'stale')
+  ) {
+    return {
+      label: 'STALE',
+      badgeLabel: 'BLE STALE',
+      tone: 'warning' as const,
+      message: 'FarDriver BLE is connected, but controller telemetry is stale.',
+      lastPacketAgeMs,
+      telemetryFresh,
+      connectionStatus,
+    }
+  }
+
+  if (normalizedConnectionStatus === 'connecting') {
+    return {
+      label: 'CONNECTING',
+      badgeLabel: 'BLE CONNECTING',
+      tone: 'warning' as const,
+      message: 'FarDriver BLE is attempting to connect.',
+      lastPacketAgeMs,
+      telemetryFresh,
+      connectionStatus,
+    }
+  }
+
+  return {
+    label: 'DISCONNECTED',
+    badgeLabel: 'BLE OFFLINE',
+    tone: 'warning' as const,
+    message: 'FarDriver BLE is disconnected; vehicle ESP32 heartbeat is evaluated separately.',
+    lastPacketAgeMs,
+    telemetryFresh,
+    connectionStatus,
+  }
+}
+
+function getGpsStatus(telemetry: TelemetryData | null) {
+  const gpsAgeMs = telemetry?.gpsLastUpdateAgeMs ?? telemetry?.gpsAgeMs
+  const coordinatesAreValid = hasValidGpsCoordinates(
+    telemetry?.gpsLat,
+    telemetry?.gpsLng
   )
+  const gpsValid =
+    telemetry?.gpsValid ?? telemetry?.gpsFix ?? (coordinatesAreValid ? true : undefined)
+  const gpsLocationValid =
+    telemetry?.gpsLocationValid ??
+    (coordinatesAreValid ? true : undefined)
+  const satellites = telemetry?.gpsSatellites
+  const hasGpsData =
+    telemetry !== null &&
+    (gpsValid !== undefined ||
+      telemetry.gpsLocationValid !== undefined ||
+      telemetry.gpsLat !== undefined ||
+      telemetry.gpsLng !== undefined ||
+      satellites !== undefined ||
+      gpsAgeMs !== undefined)
+  const isStale =
+    typeof gpsAgeMs === 'number' && Number.isFinite(gpsAgeMs)
+      ? gpsAgeMs >= 60_000
+      : false
+  const locked = gpsValid === true && gpsLocationValid !== false && !isStale
+  const satelliteLabel =
+    typeof satellites === 'number' && Number.isFinite(satellites)
+      ? `${satellites.toFixed(0)} SATS`
+      : 'SATS --'
 
-  if (vehicleStatus === 'online') {
-    return { label: 'online', tone: 'healthy' as const, vehicleStatus }
-  }
-  if (vehicleStatus === 'stale') {
-    return { label: 'stale', tone: 'warning' as const, vehicleStatus }
+  if (!hasGpsData) {
+    return {
+      label: 'NO GPS DATA',
+      badgeLabel: 'NO GPS DATA',
+      tone: 'neutral' as const,
+      hasFix: false,
+      ageMs: gpsAgeMs,
+      satellites,
+      satelliteLabel,
+      message: 'No vehicle GPS packet has been reported.',
+    }
   }
 
-  return { label: 'offline', tone: 'danger' as const, vehicleStatus }
+  if (isStale) {
+    return {
+      label: 'GPS STALE',
+      badgeLabel: 'GPS STALE',
+      tone: 'warning' as const,
+      hasFix: false,
+      ageMs: gpsAgeMs,
+      satellites,
+      satelliteLabel,
+      message: 'Vehicle GPS data is older than one minute.',
+    }
+  }
+
+  if (locked) {
+    return {
+      label: `GPS LOCKED · ${satelliteLabel}`,
+      badgeLabel: 'GPS LOCKED',
+      tone: 'healthy' as const,
+      hasFix: true,
+      ageMs: gpsAgeMs,
+      satellites,
+      satelliteLabel,
+      message: 'Vehicle GPS lock is available.',
+    }
+  }
+
+  return {
+    label: 'GPS SEARCHING',
+    badgeLabel: 'GPS SEARCHING',
+    tone: 'warning' as const,
+    hasFix: false,
+    ageMs: gpsAgeMs,
+    satellites,
+    satelliteLabel,
+    message: 'Vehicle GPS is searching for a valid lock.',
+  }
+}
+
+function getCloudStatus(nodeStatus: ReturnType<typeof getNodeStatus>) {
+  if (nodeStatus.vehicleStatus === 'online') {
+    return {
+      label: 'CONNECTED',
+      badgeLabel: 'CLOUD CONNECTED',
+      tone: 'healthy' as const,
+      message: 'Dashboard recently received vehicle telemetry.',
+    }
+  }
+
+  if (nodeStatus.vehicleStatus === 'stale') {
+    return {
+      label: 'STALE',
+      badgeLabel: 'CLOUD STALE',
+      tone: 'warning' as const,
+      message: 'Dashboard has vehicle telemetry, but the latest heartbeat is stale.',
+    }
+  }
+
+  return {
+    label: 'DISCONNECTED',
+    badgeLabel: 'CLOUD OFFLINE',
+    tone: 'danger' as const,
+    message: 'Dashboard has not received a recent vehicle heartbeat.',
+  }
 }
 
 function telemetrySourceDisplay(source: TelemetrySource) {
@@ -3629,12 +3907,33 @@ function formatSeconds(value?: number | null) {
   return `${Math.max(0, Math.round(value))}s`
 }
 
-function formatMilliseconds(value?: number | null) {
-  if (value === undefined || value === null || !Number.isFinite(value)) {
+function formatAge(valueMs?: number | null) {
+  if (valueMs === undefined || valueMs === null || !Number.isFinite(valueMs)) {
     return '--'
   }
 
-  return `${Math.max(0, Math.round(value))} ms`
+  const safeMs = Math.max(0, valueMs)
+
+  if (safeMs < 1000) return `${Math.round(safeMs)} ms`
+  if (safeMs < 60_000) return `${Math.round(safeMs / 1000)}s`
+
+  return `${Math.round(safeMs / 60_000)}m`
+}
+
+function formatUptime(valueMs?: number | null) {
+  if (valueMs === undefined || valueMs === null || !Number.isFinite(valueMs)) {
+    return '--'
+  }
+
+  const totalSeconds = Math.max(0, Math.floor(valueMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+
+  return `${seconds}s`
 }
 
 function formatTemperatureF(valueC?: number | null) {
@@ -3678,24 +3977,31 @@ function VehicleSystemsPanel({
   geolocation: ReturnType<typeof useGeolocation>
   raceBatteryState: RaceBatteryState
 }) {
-  const vehicleFreshness = classifyDataFreshness(
-    source === 'cloud' && cloudHealth
-      ? cloudHealth.latestVehiclePacketAgeSeconds ?? undefined
-      : packetAgeSeconds
-  )
+  const nodeStatus = getNodeStatus({
+    telemetry,
+    source,
+    cloudHealth,
+    lastPacketAt,
+    packetAgeSeconds,
+  })
+  const vehicleFreshness: VehicleFreshnessSummary = {
+    label: nodeStatus.label.toLowerCase(),
+    tone: nodeStatus.tone,
+    vehicleStatus: nodeStatus.vehicleStatus,
+  }
   const canTrustCloudPacket =
-    source === 'cloud' && vehicleFreshness.vehicleStatus !== 'offline'
+    source === 'cloud' && nodeStatus.vehicleStatus !== 'offline'
   const trustedCloudPacketStatus = canTrustCloudPacket ? cloudPacketStatus : null
+  const bleStatus = getBleStatus(telemetry, trustedCloudPacketStatus)
+  const gpsStatus = getGpsStatus(telemetry)
+  const cloudStatus = getCloudStatus(nodeStatus)
   const displayedGps = getDisplayedGpsStatus({
     source,
     telemetry,
     geolocation,
-    vehicleIsOnline: vehicleFreshness.vehicleStatus === 'online',
   })
-  const gpsAgeSeconds = displayedGps.ageSeconds
-  const gpsFreshness = classifyDataFreshness(gpsAgeSeconds)
   const displayedPacketRateHz =
-    vehicleFreshness.vehicleStatus === 'offline'
+    nodeStatus.vehicleStatus === 'offline'
       ? 0
       : trustedCloudPacketStatus?.packetRateHz !== undefined
         ? trustedCloudPacketStatus.packetRateHz
@@ -3704,9 +4010,7 @@ function VehicleSystemsPanel({
     source === 'cloud'
       ? trustedCloudPacketStatus?.source ?? telemetrySourceDisplay(source)
       : telemetrySourceDisplay(source)
-  const displayedVehicleNodeStatus = vehicleNodeStatusLabel(
-    vehicleFreshness.vehicleStatus
-  )
+  const displayedVehicleNodeStatus = nodeStatus.badgeLabel
   const displayedBackendStatus =
     cloudHealth?.cloudBackendStatus ??
     (source === 'cloud' || connectionStatus === 'connected'
@@ -3715,7 +4019,7 @@ function VehicleSystemsPanel({
   const displayedHealthEndpoint =
     cloudHealth?.healthEndpointStatus ?? (cloudHealth?.ok ? 'healthy' : 'error')
   const displayedTelemetryFresh =
-    vehicleFreshness.vehicleStatus === 'online' &&
+    nodeStatus.vehicleStatus === 'online' &&
     cloudHealth?.vehicleTelemetryFresh !== false &&
     trustedCloudPacketStatus?.telemetryFresh !== false
       ? 'true'
@@ -3728,15 +4032,22 @@ function VehicleSystemsPanel({
     source === 'cloud' && cloudHealth
       ? cloudHealth.latestVehiclePacketAgeSeconds ?? undefined
       : packetAgeSeconds
+  const displayedHeartbeatAgeMs =
+    nodeStatus.ageMs ??
+    (displayedPacketAgeSeconds === undefined ? null : displayedPacketAgeSeconds * 1000)
   const activeBatteryId = raceBatteryState.activePackId
   const batteryAIsActive = activeBatteryId === 'A'
   const batteryBIsActive = activeBatteryId === 'B'
 
   return (
     <section className="grid gap-4">
-      <SystemAccordion title="Vehicle" status={displayedVehicleNodeStatus} tone={vehicleFreshness.tone} defaultOpen>
+      <SystemAccordion title="Vehicle" status={displayedVehicleNodeStatus} tone={nodeStatus.tone} defaultOpen>
         <SystemSubsection title="Info">
           <SystemMetricGrid>
+            <ConnectionField label="Vehicle Node" value={nodeStatus.label} tone={nodeStatus.tone} />
+            <StatusMetric label="Last heartbeat age" value={formatAge(displayedHeartbeatAgeMs)} />
+            <StatusMetric label="Firmware" value={telemetry?.firmwareVersion ?? '--'} />
+            <StatusMetric label="Uptime" value={formatUptime(telemetry?.uptimeMs)} />
             <StatusMetric label="Speed" value={formatSpeed(telemetry?.speedMph)} />
             <StatusMetric label="SOC" value={formatPercent(telemetry?.batterySocPercent)} />
             <StatusMetric label="Wh/mi" value={formatWhPerMile(telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile)} />
@@ -3749,14 +4060,20 @@ function VehicleSystemsPanel({
         </SystemSubsection>
         <SystemSubsection title="Connection">
           <SystemMetricGrid>
-            <ConnectionField label="Vehicle ESP32 status" value={displayedVehicleNodeStatus} tone={vehicleFreshness.tone} />
-            <StatusMetric label="Last vehicle packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
-            <StatusMetric label="Vehicle packet age" value={formatSeconds(displayedPacketAgeSeconds)} />
+            <ConnectionField label="Vehicle ESP32 node" value={nodeStatus.label} tone={nodeStatus.tone} />
+            <ConnectionField label="WiFi / cloud received" value={cloudStatus.label} tone={cloudStatus.tone} />
+            <ConnectionField label="FarDriver BLE" value={bleStatus.label} tone={bleStatus.tone} />
+            <ConnectionField label="GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
+            <StatusMetric label="GPS satellites" value={gpsStatus.satelliteLabel} />
+            <StatusMetric label="Last vehicle heartbeat" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
+            <StatusMetric label="Heartbeat age" value={formatAge(displayedHeartbeatAgeMs)} />
             <StatusMetric label="Packet rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
-            <StatusMetric label="Telemetry fresh" value={displayedTelemetryFresh} />
+            <StatusMetric label="Vehicle telemetry fresh" value={displayedTelemetryFresh} />
             <StatusMetric label="Source" value={displayedSource} />
             <StatusMetric label="Node" value={cloudNode} />
-            <StatusMetric label="Status message" value={connectionError ?? cloudPacketStatus?.connectionStatus ?? '--'} />
+            <StatusMetric label="Last cloud HTTP status" value={telemetry?.lastCloudStatus !== undefined ? String(telemetry.lastCloudStatus) : '--'} />
+            <StatusMetric label="BLE packet age" value={formatAge(bleStatus.lastPacketAgeMs)} />
+            <StatusMetric label="Status message" value={connectionError ?? bleStatus.message ?? '--'} />
           </SystemMetricGrid>
         </SystemSubsection>
       </SystemAccordion>
@@ -3789,12 +4106,17 @@ function VehicleSystemsPanel({
 
       <SystemAccordion
         title="Cloud"
-        status={displayedBackendStatus === 'connected' ? 'Connected' : 'Backend unavailable'}
-        tone={displayedBackendStatus === 'connected' ? 'healthy' : 'danger'}
+        status={cloudStatus.badgeLabel}
+        tone={cloudStatus.tone}
         defaultOpen
       >
         <SystemSubsection title="Info">
           <SystemMetricGrid>
+            <ConnectionField
+              label="Dashboard vehicle telemetry"
+              value={cloudStatus.label}
+              tone={cloudStatus.tone}
+            />
             <ConnectionField
               label="Cloud backend status"
               value={displayedBackendStatus === 'connected' ? 'Connected' : 'Unavailable'}
@@ -3807,6 +4129,7 @@ function VehicleSystemsPanel({
             />
             <StatusMetric label="Latest cloud packet" value={formatTimestamp(cloudHealth?.latestVehicleUpdatedAt)} />
             <StatusMetric label="Latest updated time" value={formatTimestamp(cloudPacketStatus?.updatedAt)} />
+            <StatusMetric label="Cloud telemetry note" value={cloudStatus.message} />
           </SystemMetricGrid>
         </SystemSubsection>
         <SystemSubsection title="Connection">
@@ -3836,27 +4159,27 @@ function VehicleSystemsPanel({
 
       <SystemAccordion
         title="GPS"
-        status={displayedGps.hasFix ? 'Live fix' : displayedGps.statusLabel}
-        tone={displayedGps.hasFix ? gpsFreshness.tone : displayedGps.statusTone}
+        status={gpsStatus.badgeLabel}
+        tone={gpsStatus.tone}
       >
         <SystemSubsection title="Info">
           <SystemMetricGrid>
             <StatusMetric label="GPS provider" value={displayedGps.permission} />
-            <ConnectionField label="GPS fix status" value={displayedGps.hasFix ? 'available' : 'unavailable'} tone={displayedGps.hasFix ? gpsFreshness.tone : displayedGps.statusTone} />
+            <ConnectionField label="GPS fix status" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="Latitude/longitude" value={displayedGps.latLon} />
             <StatusMetric label="Satellites" value={displayedGps.satellites} />
             <StatusMetric label="Heading" value={displayedGps.heading} />
             <StatusMetric label="Altitude" value={displayedGps.altitude} />
-            <StatusMetric label="GPS age" value={displayedGps.age} />
+            <StatusMetric label="GPS age" value={formatAge(gpsStatus.ageMs)} />
           </SystemMetricGrid>
         </SystemSubsection>
         <SystemSubsection title="Connection">
           <SystemMetricGrid>
             <StatusMetric label="GPS source" value={displayedGps.permission} />
-            <ConnectionField label="Vehicle GPS dependency/status" value={displayedVehicleNodeStatus} tone={vehicleFreshness.tone} />
+            <ConnectionField label="Vehicle GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="Last GPS packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
-            <StatusMetric label="GPS packet age" value={displayedGps.age} />
-            <StatusMetric label="Status message" value={displayedGps.statusMessage} />
+            <StatusMetric label="GPS packet age" value={formatAge(gpsStatus.ageMs)} />
+            <StatusMetric label="Status message" value={gpsStatus.message} />
           </SystemMetricGrid>
         </SystemSubsection>
       </SystemAccordion>
@@ -3868,13 +4191,13 @@ export function getDisplayedGpsStatus({
   source,
   telemetry,
   geolocation,
-  vehicleIsOnline,
 }: {
   source: TelemetrySource
   telemetry: TelemetryData | null
   geolocation: ReturnType<typeof useGeolocation>
-  vehicleIsOnline: boolean
+  vehicleIsOnline?: boolean
 }) {
+  const gpsStatus = getGpsStatus(telemetry)
   const telemetryHasCoordinates = hasValidGpsCoordinates(
     telemetry?.gpsLat,
     telemetry?.gpsLng
@@ -3891,11 +4214,9 @@ export function getDisplayedGpsStatus({
     telemetryHasCoordinates ||
     (useTelemetryGps && telemetry?.gpsFix === true) ||
     (!useTelemetryGps &&
-      geolocation.latitude !== null &&
+    geolocation.latitude !== null &&
       geolocation.longitude !== null)
-  const hasFix = useTelemetryGps
-    ? vehicleIsOnline && rawHasFix
-    : rawHasFix
+  const hasFix = useTelemetryGps ? gpsStatus.hasFix : rawHasFix
   const telemetryGpsAgeSeconds =
     typeof telemetry?.gpsAgeMs === 'number' && Number.isFinite(telemetry.gpsAgeMs)
       ? Math.max(0, Math.round(telemetry.gpsAgeMs / 1000))
@@ -3923,16 +4244,14 @@ export function getDisplayedGpsStatus({
     permission,
     permissionTone: gpsPermissionTone(permission, geolocation.status),
     hasFix,
-    statusLabel: useTelemetryGps && !vehicleIsOnline ? 'Vehicle offline' : 'No fix',
-    statusTone: (useTelemetryGps && !vehicleIsOnline ? 'danger' : 'neutral') as
-      | 'danger'
-      | 'neutral',
+    statusLabel: gpsStatus.label,
+    statusTone: gpsStatus.tone,
     statusMessage:
-      useTelemetryGps && !vehicleIsOnline
-        ? 'GPS unavailable because vehicle telemetry is offline.'
+      useTelemetryGps
+        ? gpsStatus.message
         : hasFix
-          ? 'Vehicle GPS fix available.'
-            : 'Waiting for vehicle GPS fix.',
+          ? 'Browser GPS fix available.'
+          : 'Waiting for browser GPS fix.',
     ageSeconds,
     latLon,
     age: ageSeconds !== undefined ? `${ageSeconds}s` : '--',
@@ -4055,15 +4374,25 @@ function BatterySystemAccordion({
   isActive: boolean
   batteryState: RaceBatteryState
   telemetry: TelemetryData | null
-  vehicleFreshness: ReturnType<typeof classifyDataFreshness>
+  vehicleFreshness: VehicleFreshnessSummary
   source: string
   lastPacketAt?: string | number | null
   packetAgeSeconds?: number
   connectionError?: string
 }) {
   const pack = batteryState.packs[packId]
-  const status = isActive ? vehicleNodeStatusLabel(vehicleFreshness.vehicleStatus) : 'Not configured'
+  const status = isActive ? batteryNodeStatusLabel(vehicleFreshness.vehicleStatus) : 'Not configured'
   const tone = isActive ? vehicleFreshness.tone : 'neutral'
+  const packDataStatus =
+    isActive && vehicleFreshness.vehicleStatus === 'online'
+      ? 'PACK DATA LIVE'
+      : isActive && vehicleFreshness.vehicleStatus === 'stale'
+        ? 'PACK DATA STALE'
+        : isActive
+          ? 'NO PACK DATA'
+          : 'STANDALONE PACK DATA NOT CONFIGURED'
+  const bmsBleStatus = 'BMS BLE NOT CONFIGURED'
+  const bmsBleTone: DiagnosticTone = 'neutral'
 
   return (
     <SystemAccordion title={title} status={status} tone={tone}>
@@ -4074,21 +4403,30 @@ function BatterySystemAccordion({
           <StatusMetric label="Current" value={isActive ? formatAmps(telemetry?.batteryCurrent) : '--'} />
           <StatusMetric label="Power" value={isActive ? formatWatts(telemetry?.batteryPowerWatts) : '--'} />
           <StatusMetric label="Temp" value={isActive ? formatTemperatureF(telemetry?.batteryTempC) : '--'} />
-          <StatusMetric label="Health/status" value={isActive ? vehicleFreshness.label : 'Not configured'} />
+          <StatusMetric label="Pack data status" value={packDataStatus} />
         </SystemMetricGrid>
       </SystemSubsection>
       <SystemSubsection title="Connection">
         <SystemMetricGrid>
-          <ConnectionField label={`${title} ESP32 status`} value={status} tone={tone} />
-          <StatusMetric label="Last packet" value={isActive ? formatTimestamp(lastPacketAt) : '--'} />
-          <StatusMetric label="Packet age" value={isActive ? formatSeconds(packetAgeSeconds) : '--'} />
+          <ConnectionField label={`${title} node`} value={isActive ? vehicleFreshness.label.toUpperCase() : 'NOT CONFIGURED'} tone={tone} />
+          <ConnectionField label={`${title} BMS BLE`} value={bmsBleStatus} tone={bmsBleTone} />
+          <ConnectionField label={`${title} pack data`} value={packDataStatus} tone={tone} />
+          <StatusMetric label="Last node heartbeat" value={isActive ? formatTimestamp(lastPacketAt) : '--'} />
+          <StatusMetric label="Node heartbeat age" value={isActive ? formatSeconds(packetAgeSeconds) : '--'} />
           <StatusMetric label="Telemetry fresh" value={isActive && vehicleFreshness.vehicleStatus === 'online' ? 'true' : 'false'} />
           <StatusMetric label="Source" value={isActive ? source : 'Not configured'} />
-          <StatusMetric label="Status message" value={isActive ? connectionError ?? 'Using active vehicle pack telemetry' : 'Standalone BMS feed not configured'} />
+          <StatusMetric label="Status message" value={isActive ? connectionError ?? 'Using active vehicle pack telemetry until standalone battery node telemetry is configured.' : 'Standalone battery node and BMS feed not configured'} />
         </SystemMetricGrid>
       </SystemSubsection>
     </SystemAccordion>
   )
+}
+
+function batteryNodeStatusLabel(status: VehicleNodeStatus) {
+  if (status === 'online') return 'BATTERY NODE ONLINE'
+  if (status === 'stale') return 'BATTERY NODE STALE'
+
+  return 'BATTERY NODE OFFLINE'
 }
 
 function hasValidGpsCoordinates(
