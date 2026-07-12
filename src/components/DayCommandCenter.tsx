@@ -353,8 +353,8 @@ export default function DayCommandCenter({
           lng: vehicleLocation.longitude,
           label:
             vehicleLocation.status === 'online'
-              ? 'Vehicle GPS - Android phone'
-              : `Vehicle GPS - ${vehicleLocation.status}`,
+              ? 'Android phone GPS'
+              : `Android phone GPS - ${vehicleLocation.status}`,
           fix: vehicleLocation.status === 'online' || vehicleLocation.status === 'stale',
           ageMs: vehicleLocation.ageMs ?? undefined,
           heading: vehicleLocation.heading ?? undefined,
@@ -4081,7 +4081,7 @@ function VehicleSystemsPanel({
             <ConnectionField label="Vehicle ESP32 node" value={nodeStatus.label} tone={nodeStatus.tone} />
             <ConnectionField label="WiFi / cloud received" value={cloudStatus.label} tone={cloudStatus.tone} />
             <ConnectionField label="FarDriver BLE" value={bleStatus.label} tone={bleStatus.tone} />
-            <ConnectionField label="GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
+            <ConnectionField label="Android / phone GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="Last vehicle heartbeat" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
             <StatusMetric label="Heartbeat age" value={formatAge(displayedHeartbeatAgeMs)} />
             <StatusMetric label="Packet rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
@@ -4090,7 +4090,13 @@ function VehicleSystemsPanel({
             <StatusMetric label="Node" value={cloudNode} />
             <StatusMetric label="Last cloud HTTP status" value={telemetry?.lastCloudStatus !== undefined ? String(telemetry.lastCloudStatus) : '--'} />
             <StatusMetric label="BLE packet age" value={formatAge(bleStatus.lastPacketAgeMs)} />
-            <StatusMetric label="Status message" value={connectionError ?? bleStatus.message ?? '--'} />
+            <StatusMetric
+              label="Status message"
+              value={
+                connectionError ??
+                `${bleStatus.message ?? 'FarDriver BLE status is evaluated separately.'} Android GPS does not determine ESP32 node health.`
+              }
+            />
           </SystemMetricGrid>
         </SystemSubsection>
       </SystemAccordion>
@@ -4181,7 +4187,7 @@ function VehicleSystemsPanel({
         <SystemSubsection title="Info">
           <SystemMetricGrid>
             <StatusMetric label="Provider" value={displayedGps.provider} />
-            <ConnectionField label="GPS fix status" value={gpsStatus.label} tone={gpsStatus.tone} />
+            <ConnectionField label="Android GPS status" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="Latitude/longitude" value={displayedGps.latLon} />
             <StatusMetric label="Accuracy" value={displayedGps.accuracy} />
             <StatusMetric label="Speed" value={displayedGps.speed} />
@@ -4195,7 +4201,7 @@ function VehicleSystemsPanel({
         <SystemSubsection title="Connection">
           <SystemMetricGrid>
             <StatusMetric label="GPS source" value={displayedGps.source} />
-            <ConnectionField label="Vehicle GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
+            <ConnectionField label="Android GPS provider" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="GPS packet age" value={formatAge(gpsStatus.ageMs)} />
             <StatusMetric label="Status message" value={gpsStatus.message} />
           </SystemMetricGrid>
@@ -4216,7 +4222,7 @@ function getVehicleLocationGpsStatus(location: VehicleLocation) {
       tone: 'healthy' as const,
       hasFix: true,
       ageMs: location.ageMs,
-      message: 'Android vehicle GPS is fresh.',
+      message: 'Android phone GPS is fresh.',
     }
   }
 
@@ -4227,7 +4233,7 @@ function getVehicleLocationGpsStatus(location: VehicleLocation) {
       tone: 'warning' as const,
       hasFix: true,
       ageMs: location.ageMs,
-      message: 'Android vehicle GPS is stale; retaining the last accepted position.',
+      message: 'Android phone GPS is stale; retaining the last accepted position.',
     }
   }
 
@@ -4238,7 +4244,7 @@ function getVehicleLocationGpsStatus(location: VehicleLocation) {
       tone: 'warning' as const,
       hasFix: false,
       ageMs: location.ageMs,
-      message: 'Vehicle GPS provider is active but has not uploaded a valid position yet.',
+      message: 'Android phone GPS provider is active but has not uploaded a valid position yet.',
     }
   }
 
@@ -4249,7 +4255,7 @@ function getVehicleLocationGpsStatus(location: VehicleLocation) {
       tone: 'danger' as const,
       hasFix: false,
       ageMs: location.ageMs,
-      message: 'Vehicle GPS provider is offline; retaining the last accepted position.',
+      message: 'Android phone GPS provider is offline; retaining the last accepted position.',
     }
   }
 
@@ -4259,7 +4265,7 @@ function getVehicleLocationGpsStatus(location: VehicleLocation) {
     tone: 'neutral' as const,
     hasFix: false,
     ageMs: location.ageMs,
-    message: 'No Android vehicle GPS provider has uploaded a valid position.',
+    message: 'No Android phone GPS provider has uploaded a valid position.',
   }
 }
 
@@ -4733,12 +4739,12 @@ function PhoneGpsProviderPanel({
   }
 
   return (
-    <SystemSubsection title="Vehicle GPS Provider">
+    <SystemSubsection title="Android GPS Provider">
       <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-100">
-              Vehicle GPS Provider Mode
+              Android GPS Provider Mode
             </p>
             <p className="mt-1 text-sm leading-6 text-slate-400">
               {description}

@@ -91,7 +91,7 @@ export default function HomePage() {
           routeProgress?.confidence === 'off-route'
             ? 'Live cloud GPS - off route / test location'
             : vehicleLocation.source === 'phone'
-              ? `Vehicle GPS - Android phone (${vehicleLocation.status})`
+              ? `Android phone GPS (${vehicleLocation.status})`
               : 'Live cloud GPS',
       }
     : undefined

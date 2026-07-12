@@ -216,7 +216,7 @@ function vehicleGpsCard({
 
     if (vehicleLocation.status === 'online' && hasFix) {
       return {
-        name: 'Vehicle GPS',
+        name: 'Android GPS',
         status: 'Connected',
         helper: `${vehicleLocation.providerName}: ${vehicleLocation.latitude!.toFixed(5)}, ${vehicleLocation.longitude!.toFixed(5)}`,
         tone: 'green',
@@ -225,7 +225,7 @@ function vehicleGpsCard({
 
     if (vehicleLocation.status === 'stale' && hasFix) {
       return {
-        name: 'Vehicle GPS',
+        name: 'Android GPS',
         status: 'Stale',
         helper: `${vehicleLocation.providerName} stale: ${vehicleLocation.latitude!.toFixed(5)}, ${vehicleLocation.longitude!.toFixed(5)}`,
         tone: 'yellow',
@@ -234,7 +234,7 @@ function vehicleGpsCard({
 
     if (vehicleLocation.status === 'searching') {
       return {
-        name: 'Vehicle GPS',
+        name: 'Android GPS',
         status: 'Disconnected',
         helper: `${vehicleLocation.providerName} is active; waiting for a GPS fix`,
         tone: 'yellow',
@@ -242,7 +242,7 @@ function vehicleGpsCard({
     }
 
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Disconnected',
       helper: `${vehicleLocation.providerName} is offline`,
       tone: 'gray',
@@ -251,16 +251,16 @@ function vehicleGpsCard({
 
   if (telemetryStatus === 'error') {
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Error',
-      helper: 'GPS depends on vehicle ESP32 telemetry',
+      helper: 'Android GPS provider status is unavailable',
       tone: 'red',
     }
   }
 
   if (telemetryStatus === 'simulated') {
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Simulated',
       helper: liveGps
         ? `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`
@@ -271,25 +271,25 @@ function vehicleGpsCard({
 
   if (telemetryStatus === 'warning') {
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Stale',
-      helper: 'Vehicle telemetry stale; GPS is not live',
+      helper: 'Android GPS provider is not live',
       tone: 'yellow',
     }
   }
 
   if (!telemetryConnected && telemetryStatus !== 'connected') {
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Disconnected',
-      helper: 'GPS unavailable until vehicle ESP32 is connected',
+      helper: 'No active Android GPS provider',
       tone: 'gray',
     }
   }
 
   if (liveGps) {
     return {
-      name: 'Vehicle GPS',
+      name: 'Android GPS',
       status: 'Connected',
       helper: `${liveGps.lat.toFixed(5)}, ${liveGps.lng.toFixed(5)}`,
       tone: 'green',
@@ -297,9 +297,9 @@ function vehicleGpsCard({
   }
 
   return {
-    name: 'Vehicle GPS',
+    name: 'Android GPS',
     status: 'Disconnected',
-    helper: 'Waiting for vehicle GPS fix',
+    helper: 'Waiting for Android GPS provider',
     tone: 'gray',
   }
 }

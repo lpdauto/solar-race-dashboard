@@ -19,7 +19,7 @@ describe('strategy forecast net energy formatting', () => {
 })
 
 describe('vehicle systems GPS status', () => {
-  it('shows Android provider GPS as vehicle GPS', () => {
+  it('shows Android provider GPS as phone GPS', () => {
     const gps = getDisplayedGpsStatus({
       vehicleLocation: {
         latitude: 34.096981,
@@ -45,7 +45,7 @@ describe('vehicle systems GPS status', () => {
     expect(gps.heading).toBe('--')
     expect(gps.provider).toBe('Android GPS Device')
     expect(gps.statusLabel).toBe('GPS FIXED')
-    expect(gps.statusMessage).toBe('Android vehicle GPS is fresh.')
+    expect(gps.statusMessage).toBe('Android phone GPS is fresh.')
   })
 
   it('shows stale when Android provider coordinates are 10 to 30 seconds old', () => {
