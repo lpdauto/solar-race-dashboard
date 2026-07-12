@@ -52,16 +52,18 @@ export function createRedisTelemetryClient() {
 export async function storeTelemetryPacket({
   node,
   payload,
+  updatedAt,
 }: {
   node: TelemetryNodeId
   payload: unknown
+  updatedAt?: string
 }) {
   const redis = createRedisTelemetryClient()
   const latestRow: TelemetryLatestRow = {
     id: node,
     node,
     payload,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt ?? new Date().toISOString(),
   }
 
   await redis.set(latestKey(node), latestRow)

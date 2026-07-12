@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { mergeTelemetryPayloadForIngest } from '@/lib/telemetryIngest'
 import {
+  loadLatestTelemetry,
   logTelemetryApiError,
   normalizeTelemetryNode,
   storeTelemetryPacket,
@@ -39,9 +41,37 @@ export async function POST(request: Request) {
   const { node, payload } = normalizeTelemetryIngest(body)
 
   try {
-    await storeTelemetryPacket({ node, payload })
+    const receivedAt = new Date().toISOString()
+    const latest = await loadLatestTelemetry(node)
+    const merged = mergeTelemetryPayloadForIngest({
+      existingPayload: latest?.payload,
+      incomingPayload: payload,
+      receivedAt,
+    })
 
-    return NextResponse.json({ ok: true })
+    if (!merged.ok) {
+      console.warn('[telemetry-ingest]', merged.logDetails)
+
+      return NextResponse.json(merged.response, { status: merged.status })
+    }
+
+    await storeTelemetryPacket({
+      node,
+      payload: merged.payload,
+      updatedAt: receivedAt,
+    })
+
+    if (merged.source === 'android-gps') {
+      console.info('[telemetry-ingest]', {
+        source: merged.source,
+        node,
+        gpsUpdatedAt: receivedAt,
+        lat: merged.response.lat,
+        lng: merged.response.lng,
+      })
+    }
+
+    return NextResponse.json(merged.response)
   } catch (error) {
     logTelemetryApiError('/api/telemetry/ingest', error, { node })
 
