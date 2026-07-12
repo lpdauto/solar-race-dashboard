@@ -111,6 +111,16 @@ export const publicRaceSponsors: PublicSponsor[] = [
     sponsorUrl: '#',
   },
   { name: 'Thomas Hunsucker', sponsorUrl: '#' },
+  {
+    name: 'Temple City STEM',
+    logoUrl: '/race-images/sponsors/temple-city-logo-1536x943.png',
+    sponsorUrl: '#',
+  },
+  {
+    name: 'Wheelbuilder',
+    logoUrl: '/race-images/sponsors/wheelbuilder-logo.png',
+    sponsorUrl: 'https://wheelbuilder.com/',
+  },
 ]
 
 export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
