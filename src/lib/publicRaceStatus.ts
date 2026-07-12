@@ -8,6 +8,10 @@ import {
 } from '@/lib/publicRaceRoute'
 import type { TelemetryLatestRow } from '@/lib/redisTelemetry'
 import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
+import {
+  hasVehicleLocationCoordinates,
+  type VehicleLocation,
+} from '@/lib/vehicleLocation'
 
 export type PublicSponsor = {
   name: string
@@ -19,8 +23,9 @@ export type PublicRaceStatus = {
   dataSource: 'telemetry' | 'mock'
   telemetryAgeSeconds: number | null
   telemetryUpdatedAt: string | null
-  routeConfidence: PublicRouteProgress['confidence'] | 'live' | 'unavailable'
+  routeConfidence: PublicRouteProgress['confidence'] | 'live' | 'stale' | 'offline' | 'unavailable'
   distanceFromRouteMeters: number | null
+  vehicleLocation: VehicleLocation | null
   speedMph: number
   avgSpeedMph: number
   currentPlace: string
@@ -134,6 +139,7 @@ export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
     telemetryUpdatedAt: null,
     routeConfidence: 'unavailable',
     distanceFromRouteMeters: null,
+    vehicleLocation: null,
     speedMph: 28.4,
     avgSpeedMph: 26.9,
     currentPlace: '3rd',
@@ -168,7 +174,8 @@ export function getMockPublicRaceStatus(now = new Date()): PublicRaceStatus {
 
 export function getPublicRaceStatusFromTelemetry(
   latestRow: TelemetryLatestRow | null | undefined,
-  now = new Date()
+  now = new Date(),
+  vehicleLocation?: VehicleLocation | null
 ): PublicRaceStatus {
   if (!latestRow) {
     return getMockPublicRaceStatus(now)
@@ -177,7 +184,20 @@ export function getPublicRaceStatusFromTelemetry(
   const telemetry = parseEsp32TelemetryPacket(
     (latestRow.payload ?? {}) as Parameters<typeof parseEsp32TelemetryPacket>[0]
   )
-  const liveGps = getLiveTelemetryGpsPosition(telemetry)
+  const canonicalGps =
+    vehicleLocation &&
+    vehicleLocation.source === 'phone' &&
+    hasVehicleLocationCoordinates(vehicleLocation) &&
+    typeof vehicleLocation.latitude === 'number' &&
+    typeof vehicleLocation.longitude === 'number'
+      ? {
+          lat: vehicleLocation.latitude,
+          lng: vehicleLocation.longitude,
+          fix: vehicleLocation.status === 'online' || vehicleLocation.status === 'stale',
+          ageMs: vehicleLocation.ageMs ?? undefined,
+        }
+      : null
+  const liveGps = canonicalGps ?? getLiveTelemetryGpsPosition(telemetry)
   const progress =
     liveGps
       ? calculatePublicRouteProgress({
@@ -193,6 +213,7 @@ export function getPublicRaceStatusFromTelemetry(
       telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
       telemetryUpdatedAt: latestRow.updated_at,
       routeConfidence: 'unavailable',
+      vehicleLocation: vehicleLocation ?? null,
       speedMph: telemetry.speedMph,
       status: statusFromTelemetryAge(latestRow.updated_at, now),
       currentTime: formatPublicTime(now),
@@ -205,8 +226,12 @@ export function getPublicRaceStatusFromTelemetry(
   const routeConfidence =
     progress.confidence === 'off-route'
       ? 'off-route'
-      : liveGps?.fix
-        ? 'live'
+      : canonicalGps && vehicleLocation?.status === 'offline'
+        ? 'offline'
+        : canonicalGps && vehicleLocation?.status === 'stale'
+          ? 'stale'
+          : liveGps?.fix
+            ? 'live'
         : progress.confidence
   const mapPosition =
     progress.confidence === 'off-route'
@@ -218,9 +243,10 @@ export function getPublicRaceStatusFromTelemetry(
     telemetryAgeSeconds: ageSeconds(latestRow.updated_at, now),
     telemetryUpdatedAt: latestRow.updated_at,
     routeConfidence,
+    vehicleLocation: vehicleLocation ?? null,
     distanceFromRouteMeters: Math.round(progress.distanceFromRouteMeters),
-    speedMph: telemetry.speedMph,
-    avgSpeedMph: telemetry.speedMph,
+    speedMph: vehicleLocation?.speedMph ?? telemetry.speedMph,
+    avgSpeedMph: vehicleLocation?.speedMph ?? telemetry.speedMph,
     currentPlace: 'TBD',
     placeTotal: 22,
     standingsSourceUrl: 'https://www.solarcarchallenge.org/',
@@ -289,6 +315,8 @@ function statusFromTelemetryAge(
   if (age !== null && age > 60) return 'Telemetry delayed'
   if (confidence === 'unavailable') return 'Waiting for GPS'
   if (confidence === 'off-route') return 'GPS off route / test location'
+  if (confidence === 'stale') return 'GPS stale'
+  if (confidence === 'offline') return 'GPS offline'
   if (confidence === 'live') return 'Live GPS'
   if (confidence === 'low') return 'GPS approximate'
   return 'Live on course'

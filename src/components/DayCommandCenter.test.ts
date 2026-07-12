@@ -3,8 +3,6 @@ import {
   formatForecastNetEnergy,
   getDisplayedGpsStatus,
 } from '@/components/DayCommandCenter'
-import type { GeolocationState } from '@/hooks/useGeolocation'
-import type { TelemetryData } from '@/types/telemetry'
 
 describe('strategy forecast net energy formatting', () => {
   it('labels negative net energy as a displayed surplus', () => {
@@ -21,70 +19,87 @@ describe('strategy forecast net energy formatting', () => {
 })
 
 describe('vehicle systems GPS status', () => {
-  it('shows cloud GPS lock from telemetry even when vehicle freshness is stale elsewhere', () => {
+  it('shows Android provider GPS as vehicle GPS', () => {
     const gps = getDisplayedGpsStatus({
-      source: 'cloud',
-      telemetry: {
-        gpsLat: 34.096981,
-        gpsLng: -118.05299,
-        gpsValid: true,
-        gpsLocationValid: true,
-        gpsAgeMs: 1000,
-        gpsSatellites: 21,
-        gpsHeading: 0,
-        gpsElevationFt: 224,
-      } as TelemetryData,
-      geolocation: emptyGeolocation,
-      vehicleIsOnline: false,
+      vehicleLocation: {
+        latitude: 34.096981,
+        longitude: -118.05299,
+        speedMps: 4.47,
+        speedMph: 10,
+        heading: null,
+        altitudeMeters: 68.3,
+        altitudeFeet: 224,
+        accuracyMeters: 3.5,
+        altitudeAccuracyMeters: null,
+        clientTimestamp: Date.parse('2026-07-11T12:00:00.000Z'),
+        serverTimestamp: Date.parse('2026-07-11T12:00:01.000Z'),
+        ageMs: 1000,
+        status: 'online',
+        providerName: 'Android GPS Device',
+        source: 'phone',
+      },
     })
 
     expect(gps.hasFix).toBe(true)
     expect(gps.latLon).toBe('34.096981, -118.052990')
-    expect(gps.statusLabel).toBe('GPS LOCKED · 21 SATS')
-    expect(gps.statusMessage).toBe('Vehicle GPS lock is available.')
+    expect(gps.heading).toBe('--')
+    expect(gps.provider).toBe('Android GPS Device')
+    expect(gps.statusLabel).toBe('GPS FIXED')
+    expect(gps.statusMessage).toBe('Android vehicle GPS is fresh.')
   })
 
-  it('shows cloud GPS searching when gpsValid is false', () => {
+  it('shows stale when Android provider coordinates are 10 to 30 seconds old', () => {
     const gps = getDisplayedGpsStatus({
-      source: 'cloud',
-      telemetry: {
-        gpsLat: 34.096981,
-        gpsLng: -118.05299,
-        gpsValid: false,
-        gpsLocationValid: false,
-        gpsAgeMs: 1000,
-        gpsSatellites: 4,
-      } as TelemetryData,
-      geolocation: emptyGeolocation,
+      vehicleLocation: {
+        latitude: 34.096981,
+        longitude: -118.05299,
+        speedMps: null,
+        speedMph: null,
+        heading: 182,
+        altitudeMeters: null,
+        altitudeFeet: null,
+        accuracyMeters: null,
+        altitudeAccuracyMeters: null,
+        clientTimestamp: null,
+        serverTimestamp: null,
+        ageMs: 15_000,
+        status: 'stale',
+        providerName: 'Android GPS Device',
+        source: 'phone',
+      },
+    })
+
+    expect(gps.hasFix).toBe(true)
+    expect(gps.statusLabel).toBe('GPS STALE')
+    expect(gps.heading).toBe('182°')
+    expect(gps.speed).toBe('--')
+  })
+
+  it('shows dashes when Android GPS values are unavailable', () => {
+    const gps = getDisplayedGpsStatus({
+      vehicleLocation: {
+        latitude: null,
+        longitude: null,
+        speedMps: null,
+        speedMph: null,
+        heading: null,
+        altitudeMeters: null,
+        altitudeFeet: null,
+        accuracyMeters: null,
+        altitudeAccuracyMeters: null,
+        clientTimestamp: null,
+        serverTimestamp: null,
+        ageMs: null,
+        status: 'offline',
+        providerName: null,
+        source: 'none',
+      },
     })
 
     expect(gps.hasFix).toBe(false)
-    expect(gps.statusLabel).toBe('GPS SEARCHING')
-    expect(gps.statusMessage).toBe('Vehicle GPS is searching for a valid lock.')
-  })
-
-  it('shows no GPS data when vehicle GPS fields are missing', () => {
-    const gps = getDisplayedGpsStatus({
-      source: 'cloud',
-      telemetry: {} as TelemetryData,
-      geolocation: emptyGeolocation,
-    })
-
-    expect(gps.hasFix).toBe(false)
-    expect(gps.statusLabel).toBe('NO GPS DATA')
-    expect(gps.statusMessage).toBe('No vehicle GPS packet has been reported.')
+    expect(gps.statusLabel).toBe('NO GPS PROVIDER')
+    expect(gps.latLon).toBe('--')
+    expect(gps.heading).toBe('--')
+    expect(gps.altitude).toBe('--')
   })
 })
-
-const emptyGeolocation: GeolocationState = {
-  latitude: null,
-  longitude: null,
-  accuracyMeters: null,
-  speedMps: null,
-  headingDegrees: null,
-  timestamp: null,
-  status: 'idle',
-  errorMessage: null,
-  startWatching: () => undefined,
-  stopWatching: () => undefined,
-}

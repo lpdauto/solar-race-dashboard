@@ -8,6 +8,20 @@ type TestTelemetrySample = {
   timestamp: number
   gpsLat?: number | null
   gpsLng?: number | null
+  gpsLatitude?: number | null
+  gpsLongitude?: number | null
+  gpsSpeedMps?: number | null
+  gpsSpeedMph?: number | null
+  gpsHeading?: number | null
+  gpsAltitudeMeters?: number | null
+  gpsAltitudeFeet?: number | null
+  gpsAccuracyMeters?: number | null
+  gpsClientTimestamp?: number | null
+  gpsServerTimestamp?: number | null
+  gpsAgeMs?: number | null
+  gpsStatus?: string | null
+  gpsProviderName?: string | null
+  gpsSource?: string | null
   speedMph?: number | null
   distanceMiles?: number | null
   batterySocPercent?: number | null
@@ -286,10 +300,26 @@ export default function TestModeClient() {
 }
 
 function createSample(telemetry: TelemetryData | null): TestTelemetrySample {
+  const location = telemetry?.location
+
   return {
     timestamp: Date.now(),
-    gpsLat: nullableNumber(telemetry?.gpsLat),
-    gpsLng: nullableNumber(telemetry?.gpsLng),
+    gpsLat: nullableNumber(location?.latitude ?? telemetry?.gpsLat),
+    gpsLng: nullableNumber(location?.longitude ?? telemetry?.gpsLng),
+    gpsLatitude: nullableNumber(location?.latitude ?? telemetry?.gpsLat),
+    gpsLongitude: nullableNumber(location?.longitude ?? telemetry?.gpsLng),
+    gpsSpeedMps: nullableNumber(location?.speedMps ?? telemetry?.gpsSpeed),
+    gpsSpeedMph: nullableNumber(location?.speedMph ?? telemetry?.speedMph),
+    gpsHeading: nullableNumber(location?.heading ?? telemetry?.gpsHeading),
+    gpsAltitudeMeters: nullableNumber(location?.altitudeMeters),
+    gpsAltitudeFeet: nullableNumber(location?.altitudeFeet ?? telemetry?.gpsElevationFt),
+    gpsAccuracyMeters: nullableNumber(location?.accuracyMeters ?? telemetry?.gpsAccuracy),
+    gpsClientTimestamp: nullableNumber(location?.clientTimestamp),
+    gpsServerTimestamp: nullableNumber(location?.serverTimestamp),
+    gpsAgeMs: nullableNumber(location?.ageMs ?? telemetry?.gpsAgeMs),
+    gpsStatus: location?.status ?? null,
+    gpsProviderName: location?.providerName ?? null,
+    gpsSource: location?.source ?? null,
     speedMph: nullableNumber(telemetry?.speedMph),
     distanceMiles: nullableNumber(telemetry?.distanceMiles ?? telemetry?.odometerMiles),
     batterySocPercent: nullableNumber(telemetry?.batterySocPercent),
@@ -408,6 +438,20 @@ function downloadSessionCsv(session: TestSession) {
     'timestamp',
     'gpsLat',
     'gpsLng',
+    'gpsLatitude',
+    'gpsLongitude',
+    'gpsSpeedMps',
+    'gpsSpeedMph',
+    'gpsHeading',
+    'gpsAltitudeMeters',
+    'gpsAltitudeFeet',
+    'gpsAccuracyMeters',
+    'gpsClientTimestamp',
+    'gpsServerTimestamp',
+    'gpsAgeMs',
+    'gpsStatus',
+    'gpsProviderName',
+    'gpsSource',
     'speedMph',
     'distanceMiles',
     'batterySocPercent',

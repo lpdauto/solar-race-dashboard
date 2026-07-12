@@ -1,3 +1,8 @@
+import {
+  emptyVehicleLocation,
+  type VehicleLocation,
+} from '@/lib/vehicleLocation'
+
 export type VehicleDisplayData = {
   soc: number | null
   whPerMile: number | null
@@ -5,7 +10,10 @@ export type VehicleDisplayData = {
   arrival: string
   status: string
   targetSpeedMph: number
-  gpsSource: 'phone' | 'esp32' | 'none'
+  vehicle: {
+    location: VehicleLocation
+  }
+  gpsSource: 'phone' | 'none'
   gpsAgeMs: number | null
   gpsStatus: string
   gpsLat: number | null
@@ -19,7 +27,10 @@ export type VehicleDisplayData = {
 
 const defaultTargetSpeedMph = 35
 
-export function buildVehicleDisplayData(payload: unknown): VehicleDisplayData {
+export function buildVehicleDisplayData(
+  payload: unknown,
+  location: VehicleLocation = emptyVehicleLocation
+): VehicleDisplayData {
   const packet = isJsonObject(payload) ? payload : {}
   const speedMph = finiteNumber(packet.speedMph)
   const packPowerWatts =
@@ -62,29 +73,20 @@ export function buildVehicleDisplayData(payload: unknown): VehicleDisplayData {
       stringValue(packet.command) ??
       classifyDriverStatus({ speedMph, packPowerWatts, whPerMile }),
     targetSpeedMph: Math.round(targetSpeedMph),
-    gpsSource: gpsSource(packet.gpsSource, packet),
-    gpsAgeMs: finiteNumber(packet.gpsAgeMs) ?? null,
-    gpsStatus: stringValue(packet.gpsStatus) ?? 'offline',
-    gpsLat: finiteNumber(packet.gpsLat) ?? null,
-    gpsLng: finiteNumber(packet.gpsLng) ?? null,
-    gpsSpeedMph: finiteNumber(packet.gpsSpeedMph) ?? null,
-    gpsHeading: finiteNumber(packet.gpsHeading) ?? null,
-    gpsElevationFt: finiteNumber(packet.gpsElevationFt) ?? null,
-    gpsAccuracy: finiteNumber(packet.gpsAccuracy) ?? null,
-    gpsProviderDeviceName: stringValue(packet.gpsProviderDeviceName) ?? null,
+    vehicle: {
+      location,
+    },
+    gpsSource: location.source,
+    gpsAgeMs: location.ageMs,
+    gpsStatus: location.status,
+    gpsLat: location.latitude,
+    gpsLng: location.longitude,
+    gpsSpeedMph: location.speedMph,
+    gpsHeading: location.heading,
+    gpsElevationFt: location.altitudeFeet,
+    gpsAccuracy: location.accuracyMeters,
+    gpsProviderDeviceName: location.providerName,
   }
-}
-
-function gpsSource(
-  value: unknown,
-  packet: Record<string, unknown>
-): VehicleDisplayData['gpsSource'] {
-  if (value === 'phone' || value === 'esp32' || value === 'none') return value
-  if (finiteNumber(packet.gpsLat) !== undefined && finiteNumber(packet.gpsLng) !== undefined) {
-    return 'esp32'
-  }
-
-  return 'none'
 }
 
 function classifyDriverStatus({

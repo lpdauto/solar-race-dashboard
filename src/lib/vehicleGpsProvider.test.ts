@@ -212,7 +212,8 @@ describe('vehicle GPS provider', () => {
 
     expect(status.activeProvider).toEqual(provider)
     expect(status.gpsStatus).toBe('offline')
-    expect(status.gpsSource).toBe('none')
+    expect(status.gpsSource).toBe('phone')
+    expect(status.latest?.latitude).toBe(34.096981)
   })
 
   it('merges fresh phone GPS over ESP32 GPS without overwriting non-GPS telemetry', () => {
@@ -242,6 +243,50 @@ describe('vehicle GPS provider', () => {
       gpsSource: 'phone',
       gpsStatus: 'live',
       gpsAgeMs: 1000,
+    })
+  })
+
+  it('removes ESP32 GPS fallback when no Android provider record is accepted', () => {
+    const merged = mergePhoneGpsIntoTelemetryPayload({
+      payload: {
+        speedMph: 35,
+        gpsLat: 0,
+        gpsLng: 0,
+        gpsValid: false,
+      },
+      phoneGps: null,
+      gpsStatus: 'offline',
+      gpsAgeMs: null,
+    })
+
+    expect(merged).toMatchObject({
+      speedMph: 35,
+      gpsSource: 'none',
+      gpsStatus: 'offline',
+      gpsAgeMs: null,
+      gpsValid: false,
+      gpsLocationValid: false,
+      gpsFix: false,
+    })
+    expect(merged).not.toMatchObject({ gpsLat: 0, gpsLng: 0 })
+  })
+
+  it('rejects malformed speed heading accuracy and timestamps', async () => {
+    const redis = new MemoryRedis()
+    const result = await startGpsProvider({
+      redis,
+      input: {
+        ...baseInput,
+        speedMps: -1,
+        headingDegrees: 360,
+        accuracyMeters: -5,
+        browserTimestamp: Date.parse('2099-01-01T00:00:00.000Z'),
+      },
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
     })
   })
 })

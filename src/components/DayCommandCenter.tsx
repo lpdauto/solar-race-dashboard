@@ -142,6 +142,12 @@ import {
   classifyVehicleNodeStatusFromAgeMs,
   vehicleNodeStatusLabel,
 } from '@/lib/vehicleTelemetryStatus'
+import {
+  applyVehicleLocationToTelemetry,
+  hasVehicleLocationCoordinates,
+  normalizeVehicleLocationFromGpsProviderStatus,
+  type VehicleLocation,
+} from '@/lib/vehicleLocation'
 import type {
   CloudTelemetryHealth,
   CloudTelemetryPacketStatus,
@@ -310,18 +316,62 @@ export default function DayCommandCenter({
     currentMile,
     currentSegment,
   })
-  const liveGpsPosition = getLiveTelemetryGpsPosition(
-    telemetryController.telemetry
+  const [gpsProviderStatus, setGpsProviderStatus] =
+    useState<PhoneGpsStatusResponse | null>(null)
+  const vehicleLocation = useMemo(
+    () => normalizeVehicleLocationFromGpsProviderStatus(gpsProviderStatus),
+    [gpsProviderStatus]
   )
-  const currentVehicleMapLocation = liveGpsPosition
-    ? {
-        ...liveGpsPosition,
-        label:
-          telemetryController.source === 'cloud'
-            ? 'Live cloud GPS'
-            : 'Live telemetry GPS',
+  const telemetryWithVehicleLocation = useMemo(
+    () =>
+      applyVehicleLocationToTelemetry(
+        telemetryController.telemetry,
+        vehicleLocation
+      ),
+    [telemetryController.telemetry, vehicleLocation]
+  )
+  const liveGpsPosition = getLiveTelemetryGpsPosition(
+    telemetryWithVehicleLocation
+  )
+  const currentVehicleMapLocation: {
+    lat: number
+    lng: number
+    label?: string
+    fix?: boolean
+    ageMs?: number
+    satellites?: number
+    heading?: number
+    elevationFt?: number
+  } | undefined = (() => {
+    if (
+      vehicleLocation.source === 'phone' &&
+      typeof vehicleLocation.latitude === 'number' &&
+      typeof vehicleLocation.longitude === 'number'
+    ) {
+      return {
+          lat: vehicleLocation.latitude,
+          lng: vehicleLocation.longitude,
+          label:
+            vehicleLocation.status === 'online'
+              ? 'Vehicle GPS - Android phone'
+              : `Vehicle GPS - ${vehicleLocation.status}`,
+          fix: vehicleLocation.status === 'online' || vehicleLocation.status === 'stale',
+          ageMs: vehicleLocation.ageMs ?? undefined,
+          heading: vehicleLocation.heading ?? undefined,
+          elevationFt: vehicleLocation.altitudeFeet ?? undefined,
+        }
       }
-    : undefined
+
+    return liveGpsPosition
+      ? {
+          ...liveGpsPosition,
+          label:
+            telemetryController.source === 'cloud'
+              ? 'Live cloud GPS'
+              : 'Live telemetry GPS',
+        }
+      : undefined
+  })()
   const geolocation = useGeolocation()
   const queryView = searchParams.get('view')
   const queryNode = searchParams.get('node')
@@ -332,6 +382,37 @@ export default function DayCommandCenter({
     raceDay.routePoints
   )
   const weather = useRouteWeather(raceDay.day, raceDay.routePoints)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function pollGpsProviderStatus() {
+      try {
+        const response = await fetch('/api/vehicle/gps/status', {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (!response.ok) return
+
+        const nextStatus = (await response.json()) as PhoneGpsStatusResponse
+
+        if (!cancelled) {
+          setGpsProviderStatus(nextStatus)
+        }
+      } catch {
+        // Keep the last known vehicle location through temporary API read failures.
+      }
+    }
+
+    void pollGpsProviderStatus()
+    const intervalId = window.setInterval(pollGpsProviderStatus, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
   const traileringSessions = useMemo(
     () => buildTraileringSessions(raceEvents),
     [raceEvents]
@@ -370,7 +451,7 @@ export default function DayCommandCenter({
         currentMile,
         currentSegment,
         energySimulation,
-        telemetry: telemetryController.telemetry,
+        telemetry: telemetryWithVehicleLocation,
         telemetrySource: telemetryController.source,
         startingSocPercent: 100,
         spareBatterySocPercent: carSetup.spareBatterySocPercent,
@@ -383,7 +464,7 @@ export default function DayCommandCenter({
       energySimulation,
       raceDay,
       activeTraileringSession,
-      telemetryController.telemetry,
+      telemetryWithVehicleLocation,
       telemetryController.source,
     ]
   )
@@ -393,7 +474,7 @@ export default function DayCommandCenter({
         raceDay,
         currentMile,
         currentSegment,
-        telemetry: telemetryController.telemetry,
+        telemetry: telemetryWithVehicleLocation,
         telemetryHistory: telemetryController.telemetryHistory,
         telemetryTimestampMs: telemetryController.effectiveLastPacketAt,
         telemetryAgeSeconds: telemetryController.effectivePacketAgeSeconds,
@@ -414,7 +495,7 @@ export default function DayCommandCenter({
       telemetryController.effectivePacketAgeSeconds,
       telemetryController.effectiveStatus,
       telemetryController.source,
-      telemetryController.telemetry,
+      telemetryWithVehicleLocation,
       telemetryController.telemetryHistory,
     ]
   )
@@ -457,10 +538,10 @@ export default function DayCommandCenter({
     nextWarning,
     nextImportantSegment,
     telemetryStatus: telemetryController.effectiveStatus,
-    telemetrySpeed: telemetryController.telemetry?.speedMph,
-    telemetryControllerTemp: telemetryController.telemetry?.controllerTempC,
-    telemetryMotorTemp: telemetryController.telemetry?.motorTempC,
-    telemetrySoc: telemetryController.telemetry?.batterySocPercent,
+    telemetrySpeed: telemetryWithVehicleLocation?.speedMph,
+    telemetryControllerTemp: telemetryWithVehicleLocation?.controllerTempC,
+    telemetryMotorTemp: telemetryWithVehicleLocation?.motorTempC,
+    telemetrySoc: telemetryWithVehicleLocation?.batterySocPercent,
     energySimulation,
     authoritativeStrategy,
     weatherRisk: weather.strategySummary.weatherRisk,
@@ -578,30 +659,30 @@ export default function DayCommandCenter({
   }, [raceDay.day])
 
   useEffect(() => {
-    if (!telemetryController.telemetry) return
+    if (!telemetryWithVehicleLocation) return
 
     setRaceBatteryState((currentState) =>
       updateRaceBatteryStateFromTelemetry({
         state: currentState,
-        telemetry: telemetryController.telemetry as TelemetryData,
+        telemetry: telemetryWithVehicleLocation as TelemetryData,
         timestampMs: telemetryEnergyTimestamp(
-          telemetryController.telemetry as TelemetryData,
+          telemetryWithVehicleLocation as TelemetryData,
           telemetryController.effectiveLastPacketAt
         ),
       })
     )
-  }, [telemetryController.effectiveLastPacketAt, telemetryController.telemetry])
+  }, [telemetryController.effectiveLastPacketAt, telemetryWithVehicleLocation])
 
   useEffect(() => {
-    if (!telemetryController.telemetry) return
+    if (!telemetryWithVehicleLocation) return
 
     const snapshot = createRaceSnapshot({
-      telemetry: telemetryController.telemetry,
+      telemetry: telemetryWithVehicleLocation,
       telemetrySource: telemetryController.source,
       currentDay: raceDay.day,
       currentMile,
       strategyState: authoritativeStrategy,
-      warningsCount: countTelemetryWarnings(telemetryController.telemetry),
+      warningsCount: countTelemetryWarnings(telemetryWithVehicleLocation),
     })
 
     setSnapshots((currentSnapshots) =>
@@ -612,7 +693,7 @@ export default function DayCommandCenter({
     currentMile,
     raceDay.day,
     telemetryController.source,
-    telemetryController.telemetry,
+    telemetryWithVehicleLocation,
   ])
 
   function handleSetActiveBatteryPack(packId: BatteryPackId) {
@@ -785,7 +866,7 @@ export default function DayCommandCenter({
               raceDay={raceDay}
               currentMile={currentMile}
               distanceRemaining={distanceRemaining}
-              telemetry={telemetryController.telemetry}
+              telemetry={telemetryWithVehicleLocation}
               telemetryAgeSeconds={telemetryController.effectivePacketAgeSeconds}
               telemetryHistory={telemetryController.telemetryHistory}
               raceBatteryState={raceBatteryState}
@@ -805,7 +886,7 @@ export default function DayCommandCenter({
               raceDay={raceDay}
               currentMile={currentMile}
               distanceRemaining={distanceRemaining}
-              telemetry={telemetryController.telemetry}
+              telemetry={telemetryWithVehicleLocation}
               telemetryAgeSeconds={telemetryController.effectivePacketAgeSeconds}
               telemetryHistory={telemetryController.telemetryHistory}
               raceBatteryState={raceBatteryState}
@@ -822,7 +903,7 @@ export default function DayCommandCenter({
                   dayNumber={raceDay.day}
                   routePoints={raceDay.routePoints}
                   currentMile={currentMile}
-                  currentRaceSpeedMph={telemetryController.telemetry?.speedMph}
+                  currentRaceSpeedMph={telemetryWithVehicleLocation?.speedMph}
                 />
               }
             />
@@ -834,7 +915,7 @@ export default function DayCommandCenter({
                 missionStatus={missionStatus}
                 raceHealth={raceHealth}
                 strategy={predictiveStrategy}
-                telemetry={telemetryController.telemetry}
+                telemetry={telemetryWithVehicleLocation}
                 telemetrySource={telemetryController.source}
                 telemetryStatus={telemetryController.effectiveStatus}
                 connectionStatus={telemetryController.effectiveConnectionStatus}
@@ -895,14 +976,14 @@ export default function DayCommandCenter({
                 currentSegment={currentSegment ?? null}
                 nextEvent={nextImportantSegment}
                 distanceRemaining={distanceRemaining}
-                currentSpeedMph={telemetryController.telemetry?.speedMph}
+                currentSpeedMph={vehicleLocation.speedMph ?? telemetryWithVehicleLocation?.speedMph}
               />
             </div>
             <WeatherWindPanel
               dayNumber={raceDay.day}
               routePoints={raceDay.routePoints}
               currentMile={currentMile}
-              currentRaceSpeedMph={telemetryController.telemetry?.speedMph}
+              currentRaceSpeedMph={vehicleLocation.speedMph ?? telemetryWithVehicleLocation?.speedMph}
               mode="facts"
             />
           </>
@@ -910,7 +991,7 @@ export default function DayCommandCenter({
 
         {prototypeRole === 'vehicle-systems' ? (
           <VehicleSystemsPanel
-            telemetry={telemetryController.telemetry}
+            telemetry={telemetryWithVehicleLocation}
             telemetryStatus={telemetryController.effectiveStatus}
             connectionStatus={telemetryController.effectiveConnectionStatus}
             connectionError={telemetryController.connectionError}
@@ -922,6 +1003,7 @@ export default function DayCommandCenter({
             cloudNode={telemetryController.cloudNode}
             cloudHealth={telemetryController.cloudHealth}
             geolocation={geolocation}
+            vehicleLocation={vehicleLocation}
             raceBatteryState={raceBatteryState}
             appProfile={carSetup.appProfile}
           />
@@ -1059,7 +1141,7 @@ export default function DayCommandCenter({
           </div>
 
           <aside className="grid content-start gap-4">
-            <VehicleCard telemetry={telemetryController.telemetry} />
+            <VehicleCard telemetry={telemetryWithVehicleLocation} />
             <EnvironmentCard
               weatherRisk={weather.strategySummary.weatherRisk}
               weatherSource={weather.sourceSummary}
@@ -1153,7 +1235,7 @@ export default function DayCommandCenter({
               missionStatus={missionStatus}
               raceHealth={raceHealth}
               strategy={predictiveStrategy}
-              telemetry={telemetryController.telemetry}
+              telemetry={telemetryWithVehicleLocation}
               telemetrySource={telemetryController.source}
               telemetryStatus={telemetryController.effectiveStatus}
               connectionStatus={telemetryController.effectiveConnectionStatus}
@@ -3790,87 +3872,6 @@ function getBleStatus(
   }
 }
 
-function getGpsStatus(telemetry: TelemetryData | null) {
-  const gpsAgeMs = telemetry?.gpsLastUpdateAgeMs ?? telemetry?.gpsAgeMs
-  const coordinatesAreValid = hasValidGpsCoordinates(
-    telemetry?.gpsLat,
-    telemetry?.gpsLng
-  )
-  const gpsValid =
-    telemetry?.gpsValid ?? telemetry?.gpsFix ?? (coordinatesAreValid ? true : undefined)
-  const gpsLocationValid =
-    telemetry?.gpsLocationValid ??
-    (coordinatesAreValid ? true : undefined)
-  const satellites = telemetry?.gpsSatellites
-  const hasGpsData =
-    telemetry !== null &&
-    (gpsValid !== undefined ||
-      telemetry.gpsLocationValid !== undefined ||
-      telemetry.gpsLat !== undefined ||
-      telemetry.gpsLng !== undefined ||
-      satellites !== undefined ||
-      gpsAgeMs !== undefined)
-  const isStale =
-    typeof gpsAgeMs === 'number' && Number.isFinite(gpsAgeMs)
-      ? gpsAgeMs >= 60_000
-      : false
-  const locked = gpsValid === true && gpsLocationValid !== false && !isStale
-  const satelliteLabel =
-    typeof satellites === 'number' && Number.isFinite(satellites)
-      ? `${satellites.toFixed(0)} SATS`
-      : 'SATS --'
-
-  if (!hasGpsData) {
-    return {
-      label: 'NO GPS DATA',
-      badgeLabel: 'NO GPS DATA',
-      tone: 'neutral' as const,
-      hasFix: false,
-      ageMs: gpsAgeMs,
-      satellites,
-      satelliteLabel,
-      message: 'No vehicle GPS packet has been reported.',
-    }
-  }
-
-  if (isStale) {
-    return {
-      label: 'GPS STALE',
-      badgeLabel: 'GPS STALE',
-      tone: 'warning' as const,
-      hasFix: false,
-      ageMs: gpsAgeMs,
-      satellites,
-      satelliteLabel,
-      message: 'Vehicle GPS data is older than one minute.',
-    }
-  }
-
-  if (locked) {
-    return {
-      label: `GPS LOCKED · ${satelliteLabel}`,
-      badgeLabel: 'GPS LOCKED',
-      tone: 'healthy' as const,
-      hasFix: true,
-      ageMs: gpsAgeMs,
-      satellites,
-      satelliteLabel,
-      message: 'Vehicle GPS lock is available.',
-    }
-  }
-
-  return {
-    label: 'GPS SEARCHING',
-    badgeLabel: 'GPS SEARCHING',
-    tone: 'warning' as const,
-    hasFix: false,
-    ageMs: gpsAgeMs,
-    satellites,
-    satelliteLabel,
-    message: 'Vehicle GPS is searching for a valid lock.',
-  }
-}
-
 function getCloudStatus(nodeStatus: ReturnType<typeof getNodeStatus>) {
   if (nodeStatus.vehicleStatus === 'online') {
     return {
@@ -3932,7 +3933,7 @@ function formatAge(valueMs?: number | null) {
   const safeMs = Math.max(0, valueMs)
 
   if (safeMs < 1000) return `${Math.round(safeMs)} ms`
-  if (safeMs < 60_000) return `${Math.round(safeMs / 1000)}s`
+  if (safeMs < 60_000) return `${(safeMs / 1000).toFixed(1)}s`
 
   return `${Math.round(safeMs / 60_000)}m`
 }
@@ -3978,6 +3979,7 @@ function VehicleSystemsPanel({
   cloudNode,
   cloudHealth,
   geolocation,
+  vehicleLocation,
   raceBatteryState,
   appProfile,
 }: {
@@ -3993,6 +3995,7 @@ function VehicleSystemsPanel({
   cloudNode: TelemetryNodeId
   cloudHealth: CloudTelemetryHealth | null
   geolocation: ReturnType<typeof useGeolocation>
+  vehicleLocation: VehicleLocation
   raceBatteryState: RaceBatteryState
   appProfile: CarSetup['appProfile']
 }) {
@@ -4012,13 +4015,9 @@ function VehicleSystemsPanel({
     source === 'cloud' && nodeStatus.vehicleStatus !== 'offline'
   const trustedCloudPacketStatus = canTrustCloudPacket ? cloudPacketStatus : null
   const bleStatus = getBleStatus(telemetry, trustedCloudPacketStatus)
-  const gpsStatus = getGpsStatus(telemetry)
+  const gpsStatus = getVehicleLocationGpsStatus(vehicleLocation)
   const cloudStatus = getCloudStatus(nodeStatus)
-  const displayedGps = getDisplayedGpsStatus({
-    source,
-    telemetry,
-    geolocation,
-  })
+  const displayedGps = getDisplayedGpsStatus({ vehicleLocation })
   const displayedPacketRateHz =
     nodeStatus.vehicleStatus === 'offline'
       ? 0
@@ -4083,7 +4082,6 @@ function VehicleSystemsPanel({
             <ConnectionField label="WiFi / cloud received" value={cloudStatus.label} tone={cloudStatus.tone} />
             <ConnectionField label="FarDriver BLE" value={bleStatus.label} tone={bleStatus.tone} />
             <ConnectionField label="GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
-            <StatusMetric label="GPS satellites" value={gpsStatus.satelliteLabel} />
             <StatusMetric label="Last vehicle heartbeat" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
             <StatusMetric label="Heartbeat age" value={formatAge(displayedHeartbeatAgeMs)} />
             <StatusMetric label="Packet rate" value={`${displayedPacketRateHz.toFixed(2)} Hz`} />
@@ -4183,20 +4181,22 @@ function VehicleSystemsPanel({
       >
         <SystemSubsection title="Info">
           <SystemMetricGrid>
-            <StatusMetric label="GPS provider" value={displayedGps.permission} />
+            <StatusMetric label="Provider" value={displayedGps.provider} />
             <ConnectionField label="GPS fix status" value={gpsStatus.label} tone={gpsStatus.tone} />
             <StatusMetric label="Latitude/longitude" value={displayedGps.latLon} />
-            <StatusMetric label="Satellites" value={displayedGps.satellites} />
+            <StatusMetric label="Accuracy" value={displayedGps.accuracy} />
+            <StatusMetric label="Speed" value={displayedGps.speed} />
             <StatusMetric label="Heading" value={displayedGps.heading} />
             <StatusMetric label="Altitude" value={displayedGps.altitude} />
             <StatusMetric label="GPS age" value={formatAge(gpsStatus.ageMs)} />
+            <StatusMetric label="Last update" value={formatTimestamp(vehicleLocation.serverTimestamp)} />
+            <StatusMetric label="Upload state" value={displayedGps.uploadState} />
           </SystemMetricGrid>
         </SystemSubsection>
         <SystemSubsection title="Connection">
           <SystemMetricGrid>
-            <StatusMetric label="GPS source" value={displayedGps.permission} />
+            <StatusMetric label="GPS source" value={displayedGps.source} />
             <ConnectionField label="Vehicle GPS" value={gpsStatus.label} tone={gpsStatus.tone} />
-            <StatusMetric label="Last GPS packet" value={formatTimestamp(lastCloudUpdateAt ?? lastPacketAt)} />
             <StatusMetric label="GPS packet age" value={formatAge(gpsStatus.ageMs)} />
             <StatusMetric label="Status message" value={gpsStatus.message} />
           </SystemMetricGrid>
@@ -4207,81 +4207,99 @@ function VehicleSystemsPanel({
   )
 }
 
-export function getDisplayedGpsStatus({
-  source,
-  telemetry,
-  geolocation,
-}: {
-  source: TelemetrySource
-  telemetry: TelemetryData | null
-  geolocation: ReturnType<typeof useGeolocation>
-  vehicleIsOnline?: boolean
-}) {
-  const gpsStatus = getGpsStatus(telemetry)
-  const telemetryHasCoordinates = hasValidGpsCoordinates(
-    telemetry?.gpsLat,
-    telemetry?.gpsLng
-  )
-  const useTelemetryGps =
-    source === 'cloud' ||
-    source === 'esp32' ||
-    source === 'mock-esp32' ||
-    source === 'simulator'
-  const latitude = useTelemetryGps ? telemetry?.gpsLat : geolocation.latitude
-  const longitude = useTelemetryGps ? telemetry?.gpsLng : geolocation.longitude
-  const hasCoordinates = hasValidGpsCoordinates(latitude, longitude)
-  const rawHasFix =
-    telemetryHasCoordinates ||
-    (useTelemetryGps && telemetry?.gpsFix === true) ||
-    (!useTelemetryGps &&
-    geolocation.latitude !== null &&
-      geolocation.longitude !== null)
-  const hasFix = useTelemetryGps ? gpsStatus.hasFix : rawHasFix
-  const telemetryGpsAgeSeconds =
-    typeof telemetry?.gpsAgeMs === 'number' && Number.isFinite(telemetry.gpsAgeMs)
-      ? Math.max(0, Math.round(telemetry.gpsAgeMs / 1000))
-      : undefined
-  const browserGpsAgeSeconds = geolocation.timestamp
-    ? Math.max(0, Math.round((Date.now() - geolocation.timestamp) / 1000))
-    : undefined
-  const ageSeconds = useTelemetryGps
-    ? telemetryGpsAgeSeconds
-    : browserGpsAgeSeconds
-  const permission = useTelemetryGps
-    ? source === 'cloud'
-      ? 'cloud'
-      : 'not required'
-    : geolocation.status
+function getVehicleLocationGpsStatus(location: VehicleLocation) {
+  const hasCoordinates = hasVehicleLocationCoordinates(location)
 
-  const latLon =
-    hasCoordinates &&
-    typeof latitude === 'number' &&
-    typeof longitude === 'number'
-      ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-      : '--'
+  if (location.status === 'online' && hasCoordinates) {
+    return {
+      label: 'GPS FIXED',
+      badgeLabel: 'ONLINE',
+      tone: 'healthy' as const,
+      hasFix: true,
+      ageMs: location.ageMs,
+      message: 'Android vehicle GPS is fresh.',
+    }
+  }
+
+  if (location.status === 'stale' && hasCoordinates) {
+    return {
+      label: 'GPS STALE',
+      badgeLabel: 'STALE',
+      tone: 'warning' as const,
+      hasFix: true,
+      ageMs: location.ageMs,
+      message: 'Android vehicle GPS is stale; retaining the last accepted position.',
+    }
+  }
+
+  if (location.status === 'searching') {
+    return {
+      label: 'GPS STARTING',
+      badgeLabel: 'STARTING',
+      tone: 'warning' as const,
+      hasFix: false,
+      ageMs: location.ageMs,
+      message: 'Vehicle GPS provider is active but has not uploaded a valid position yet.',
+    }
+  }
+
+  if (hasCoordinates) {
+    return {
+      label: 'GPS OFFLINE',
+      badgeLabel: 'OFFLINE',
+      tone: 'danger' as const,
+      hasFix: false,
+      ageMs: location.ageMs,
+      message: 'Vehicle GPS provider is offline; retaining the last accepted position.',
+    }
+  }
 
   return {
-    permission,
-    permissionTone: gpsPermissionTone(permission, geolocation.status),
-    hasFix,
-    statusLabel: gpsStatus.label,
-    statusTone: gpsStatus.tone,
-    statusMessage:
-      useTelemetryGps
-        ? gpsStatus.message
-        : hasFix
-          ? 'Browser GPS fix available.'
-          : 'Waiting for browser GPS fix.',
-    ageSeconds,
-    latLon,
-    age: ageSeconds !== undefined ? `${ageSeconds}s` : '--',
-    satellites: formatOptionalNumber(telemetry?.gpsSatellites, 0),
-    heading: formatDegrees(telemetry?.gpsHeading),
-    altitude:
-      typeof telemetry?.gpsElevationFt === 'number' &&
-      Number.isFinite(telemetry.gpsElevationFt)
-        ? `${telemetry.gpsElevationFt.toFixed(0)} ft`
-        : '--',
+    label: 'NO GPS PROVIDER',
+    badgeLabel: 'OFFLINE',
+    tone: 'neutral' as const,
+    hasFix: false,
+    ageMs: location.ageMs,
+    message: 'No Android vehicle GPS provider has uploaded a valid position.',
+  }
+}
+
+export function getDisplayedGpsStatus({
+  vehicleLocation,
+}: {
+  vehicleLocation: VehicleLocation
+}) {
+  const hasCoordinates = hasVehicleLocationCoordinates(vehicleLocation)
+
+  return {
+    provider: vehicleLocation.providerName ?? '--',
+    source: vehicleLocation.source,
+    hasFix:
+      hasCoordinates &&
+      (vehicleLocation.status === 'online' || vehicleLocation.status === 'stale'),
+    statusLabel: getVehicleLocationGpsStatus(vehicleLocation).label,
+    statusTone: getVehicleLocationGpsStatus(vehicleLocation).tone,
+    statusMessage: getVehicleLocationGpsStatus(vehicleLocation).message,
+    ageSeconds:
+      vehicleLocation.ageMs === null
+        ? undefined
+        : Math.max(0, Math.round(vehicleLocation.ageMs / 1000)),
+    latLon: hasCoordinates
+      ? `${vehicleLocation.latitude!.toFixed(6)}, ${vehicleLocation.longitude!.toFixed(6)}`
+      : '--',
+    age: formatAge(vehicleLocation.ageMs),
+    accuracy: formatMeters(vehicleLocation.accuracyMeters),
+    speed: formatSpeed(vehicleLocation.speedMph ?? undefined),
+    heading: formatDegreesOrDash(vehicleLocation.heading),
+    altitude: formatFeet(vehicleLocation.altitudeFeet),
+    uploadState:
+      vehicleLocation.status === 'online'
+        ? 'SUCCESS'
+        : vehicleLocation.status === 'stale'
+          ? 'STALE'
+          : vehicleLocation.status === 'searching'
+            ? 'STARTING'
+            : 'OFFLINE',
   }
 }
 
@@ -4638,12 +4656,12 @@ function PhoneGpsProviderPanel({
   }
 
   return (
-    <SystemSubsection title="Phone GPS Provider">
+    <SystemSubsection title="Vehicle GPS Provider">
       <div className="grid gap-3 rounded-md border border-white/10 bg-black/20 p-3">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-100">
-              GPS Provider Mode
+              Vehicle GPS Provider Mode
             </p>
             <p className="mt-1 text-sm leading-6 text-slate-400">
               {description}
@@ -4783,7 +4801,7 @@ function formatFeet(value?: number | null) {
 
 function formatDegreesOrDash(value?: number | null) {
   return typeof value === 'number' && Number.isFinite(value)
-    ? `${value.toFixed(0)} deg`
+    ? `${value.toFixed(0)}°`
     : '--'
 }
 
@@ -4949,47 +4967,6 @@ function batteryNodeStatusLabel(status: VehicleNodeStatus) {
   if (status === 'stale') return 'BATTERY NODE STALE'
 
   return 'BATTERY NODE OFFLINE'
-}
-
-function hasValidGpsCoordinates(
-  latitude: number | null | undefined,
-  longitude: number | null | undefined
-) {
-  return (
-    typeof latitude === 'number' &&
-    Number.isFinite(latitude) &&
-    latitude >= -90 &&
-    latitude <= 90 &&
-    typeof longitude === 'number' &&
-    Number.isFinite(longitude) &&
-    longitude >= -180 &&
-    longitude <= 180
-  )
-}
-
-function gpsPermissionTone(
-  permission: string,
-  browserStatus: ReturnType<typeof useGeolocation>['status']
-): 'healthy' | 'warning' | 'danger' | 'neutral' {
-  if (permission === 'cloud' || permission === 'not required') return 'healthy'
-  if (browserStatus === 'watching') return 'healthy'
-  if (browserStatus === 'error' || browserStatus === 'permission-denied') {
-    return 'danger'
-  }
-
-  return 'neutral'
-}
-
-function formatOptionalNumber(value: number | undefined, digits = 1) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toFixed(digits)
-    : '--'
-}
-
-function formatDegrees(value: number | undefined) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? `${value.toFixed(0)} deg`
-    : '--'
 }
 
 function ConnectionField({

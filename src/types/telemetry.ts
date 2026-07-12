@@ -6,6 +6,7 @@ export type NormalizedTelemetrySource =
 export type TelemetryData = {
   timestamp: number
   source: NormalizedTelemetrySource
+  location?: import('@/lib/vehicleLocation').VehicleLocation
   odometerMiles?: number
   distanceMiles?: number
   speedMph: number

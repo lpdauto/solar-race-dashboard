@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import ConnectionStatusStrip from '@/components/ConnectionStatusStrip'
 import CourseMap from '@/components/CourseMap'
@@ -8,6 +8,10 @@ import { raceRoute, type RiskLevel } from '@/data/raceRoute'
 import { useTelemetry } from '@/hooks/useTelemetry'
 import { getLiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
 import { calculatePublicRouteProgress } from '@/lib/publicRaceRoute'
+import {
+  normalizeVehicleLocationFromGpsProviderStatus,
+  type VehicleLocationGpsProviderStatus,
+} from '@/lib/vehicleLocation'
 
 const riskStyles: Record<RiskLevel, string> = {
   low: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
@@ -19,12 +23,64 @@ const riskStyles: Record<RiskLevel, string> = {
 export default function HomePage() {
   const [courseMapExpanded, setCourseMapExpanded] = useState(false)
   const telemetryController = useTelemetry()
+  const [gpsProviderStatus, setGpsProviderStatus] =
+    useState<VehicleLocationGpsProviderStatus | null>(null)
+  const vehicleLocation = useMemo(
+    () => normalizeVehicleLocationFromGpsProviderStatus(gpsProviderStatus),
+    [gpsProviderStatus]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function pollGpsProviderStatus() {
+      try {
+        const response = await fetch('/api/vehicle/gps/status', {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (!response.ok) return
+
+        const nextStatus =
+          (await response.json()) as VehicleLocationGpsProviderStatus
+
+        if (!cancelled) {
+          setGpsProviderStatus(nextStatus)
+        }
+      } catch {
+        // Keep the last known vehicle location through temporary API read failures.
+      }
+    }
+
+    void pollGpsProviderStatus()
+    const intervalId = window.setInterval(pollGpsProviderStatus, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
   const vehicleTelemetryLive =
     telemetryController.effectiveStatus === 'connected' ||
     telemetryController.effectiveStatus === 'simulated'
-  const liveGps = vehicleTelemetryLive
+  const telemetryLiveGps = vehicleTelemetryLive
     ? getLiveTelemetryGpsPosition(telemetryController.telemetry)
     : null
+  const liveGps =
+    vehicleLocation.source === 'phone' &&
+    typeof vehicleLocation.latitude === 'number' &&
+    typeof vehicleLocation.longitude === 'number'
+      ? {
+          lat: vehicleLocation.latitude,
+          lng: vehicleLocation.longitude,
+          fix: vehicleLocation.status === 'online' || vehicleLocation.status === 'stale',
+          ageMs: vehicleLocation.ageMs ?? undefined,
+          heading: vehicleLocation.heading ?? undefined,
+          elevationFt: vehicleLocation.altitudeFeet ?? undefined,
+        }
+      : telemetryLiveGps
   const routeProgress = liveGps
     ? calculatePublicRouteProgress({ lat: liveGps.lat, lng: liveGps.lng })
     : null
@@ -34,7 +90,9 @@ export default function HomePage() {
         label:
           routeProgress?.confidence === 'off-route'
             ? 'Live cloud GPS - off route / test location'
-            : 'Live cloud GPS',
+            : vehicleLocation.source === 'phone'
+              ? `Vehicle GPS - Android phone (${vehicleLocation.status})`
+              : 'Live cloud GPS',
       }
     : undefined
 
@@ -70,6 +128,7 @@ export default function HomePage() {
             </div>
             <ConnectionStatusStrip
               liveGps={liveGps}
+              vehicleLocation={vehicleLocation}
               telemetryStatus={telemetryController.effectiveStatus}
               telemetryConnectionError={telemetryController.connectionError}
               cloudHealth={telemetryController.cloudHealth}

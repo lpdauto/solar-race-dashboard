@@ -1,6 +1,7 @@
 'use client'
 
 import type { LiveTelemetryGpsPosition } from '@/lib/liveTelemetryGps'
+import { hasVehicleLocationCoordinates, type VehicleLocation } from '@/lib/vehicleLocation'
 import type {
   CloudTelemetryHealth,
   TelemetryConnectionStatus,
@@ -32,6 +33,7 @@ const toneStyles: Record<StatusTone, string> = {
 
 export default function ConnectionStatusStrip({
   liveGps,
+  vehicleLocation,
   telemetryConnected = false,
   telemetryStatus = 'disconnected',
   telemetryConnectionError,
@@ -39,6 +41,7 @@ export default function ConnectionStatusStrip({
   vehiclePacketAgeSeconds,
 }: {
   liveGps?: LiveTelemetryGpsPosition | null
+  vehicleLocation?: VehicleLocation | null
   telemetryConnected?: boolean
   telemetryStatus?: TelemetryConnectionStatus
   telemetryConnectionError?: string
@@ -53,7 +56,7 @@ export default function ConnectionStatusStrip({
       vehiclePacketAgeSeconds,
       telemetryConnectionError,
     }),
-    vehicleGpsCard({ liveGps, telemetryStatus, telemetryConnected }),
+    vehicleGpsCard({ vehicleLocation, liveGps, telemetryStatus, telemetryConnected }),
     batteryTelemetryCard('Battery A Telemetry', 'battery-a', cloudHealth),
     batteryTelemetryCard('Battery B Telemetry', 'battery-b', cloudHealth),
   ]
@@ -196,14 +199,56 @@ function vehicleTelemetryCard({
 }
 
 function vehicleGpsCard({
+  vehicleLocation,
   liveGps,
   telemetryStatus,
   telemetryConnected,
 }: {
+  vehicleLocation?: VehicleLocation | null
   liveGps?: LiveTelemetryGpsPosition | null
   telemetryStatus: TelemetryConnectionStatus
   telemetryConnected: boolean
 }): ConnectionItem {
+  // Android phone GPS is the default vehicle GPS source whenever a device has
+  // registered as the active provider, regardless of ESP32 telemetry state.
+  if (vehicleLocation?.providerName) {
+    const hasFix = hasVehicleLocationCoordinates(vehicleLocation)
+
+    if (vehicleLocation.status === 'online' && hasFix) {
+      return {
+        name: 'Vehicle GPS',
+        status: 'Connected',
+        helper: `${vehicleLocation.providerName}: ${vehicleLocation.latitude!.toFixed(5)}, ${vehicleLocation.longitude!.toFixed(5)}`,
+        tone: 'green',
+      }
+    }
+
+    if (vehicleLocation.status === 'stale' && hasFix) {
+      return {
+        name: 'Vehicle GPS',
+        status: 'Stale',
+        helper: `${vehicleLocation.providerName} stale: ${vehicleLocation.latitude!.toFixed(5)}, ${vehicleLocation.longitude!.toFixed(5)}`,
+        tone: 'yellow',
+      }
+    }
+
+    if (vehicleLocation.status === 'searching') {
+      return {
+        name: 'Vehicle GPS',
+        status: 'Disconnected',
+        helper: `${vehicleLocation.providerName} is active; waiting for a GPS fix`,
+        tone: 'yellow',
+      }
+    }
+
+    return {
+      name: 'Vehicle GPS',
+      status: 'Disconnected',
+      helper: `${vehicleLocation.providerName} is offline`,
+      tone: 'gray',
+    }
+  }
+
   if (telemetryStatus === 'error') {
     return {
       name: 'Vehicle GPS',

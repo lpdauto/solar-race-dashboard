@@ -1,10 +1,11 @@
 export const gpsActiveProviderKey = 'gps:active-provider'
 export const gpsLatestKey = 'gps:latest'
+export const vehicleLocationKey = 'vehicle:location'
 export const phoneGpsLiveThresholdMs = 10_000
 export const phoneGpsOfflineThresholdMs = 30_000
 
 export type GpsProviderStatus = 'live' | 'stale' | 'offline'
-export type GpsSource = 'phone' | 'esp32' | 'none'
+export type GpsSource = 'phone' | 'none'
 
 export type GpsProviderRecord = {
   providerId: string
@@ -149,6 +150,7 @@ export async function startGpsProvider({
 
   await redis.set(gpsActiveProviderKey, provider)
   await redis.set(gpsLatestKey, latest)
+  await redis.set(vehicleLocationKey, latest)
 
   return {
     ok: true,
@@ -206,6 +208,7 @@ export async function updateGpsProvider({
 
   await redis.set(gpsActiveProviderKey, provider)
   await redis.set(gpsLatestKey, latest)
+  await redis.set(vehicleLocationKey, latest)
 
   return {
     ok: true,
@@ -282,7 +285,7 @@ export async function getGpsProviderStatus({
   return {
     activeProvider,
     latest: validLatest,
-    gpsSource: validLatest && gpsStatus !== 'offline' ? 'phone' : 'none',
+    gpsSource: validLatest ? 'phone' : 'none',
     gpsStatus: validLatest ? gpsStatus : 'offline',
     gpsAgeMs: validLatest ? gpsAgeMs : null,
   }
@@ -309,12 +312,17 @@ export function mergePhoneGpsIntoTelemetryPayload({
 }) {
   const packet = isJsonObject(payload) ? payload : {}
 
-  if (!phoneGps || gpsStatus === 'offline') {
+  if (!phoneGps) {
     return {
       ...packet,
-      gpsSource: hasEsp32Gps(packet) ? 'esp32' : 'none',
-      gpsStatus: hasEsp32Gps(packet) ? 'esp32' : 'offline',
-      gpsAgeMs: finiteNumber(packet.gpsAgeMs) ?? null,
+      gpsLat: undefined,
+      gpsLng: undefined,
+      gpsValid: false,
+      gpsLocationValid: false,
+      gpsFix: false,
+      gpsSource: 'none',
+      gpsStatus: 'offline',
+      gpsAgeMs: null,
     }
   }
 
@@ -322,9 +330,9 @@ export function mergePhoneGpsIntoTelemetryPayload({
     ...packet,
     gpsLat: phoneGps.latitude,
     gpsLng: phoneGps.longitude,
-    gpsValid: true,
-    gpsLocationValid: true,
-    gpsFix: true,
+    gpsValid: gpsStatus === 'live',
+    gpsLocationValid: gpsStatus === 'live' || gpsStatus === 'stale',
+    gpsFix: gpsStatus === 'live' || gpsStatus === 'stale',
     gpsSpeed: phoneGps.speedMps,
     gpsSpeedMph: phoneGps.speedMph,
     gpsHeading: phoneGps.headingDegrees,
@@ -390,6 +398,25 @@ export function normalizePhoneGpsProviderInput(input: PhoneGpsProviderInput):
     }
   }
 
+  if (
+    browserTimestamp < Date.parse('2020-01-01T00:00:00.000Z') ||
+    browserTimestamp > Date.now() + 5 * 60_000
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'browserTimestamp is outside the accepted range.',
+    }
+  }
+
+  const speedMps = nullableNonNegativeNumber(input.speedMps)
+  const headingDegrees = nullableHeading(input.headingDegrees)
+  const altitudeMeters = nullableFiniteNumber(input.altitudeMeters)
+  const accuracyMeters = nullableNonNegativeNumber(input.accuracyMeters)
+  const altitudeAccuracyMeters = nullableNonNegativeNumber(
+    input.altitudeAccuracyMeters
+  )
+
   return {
     ok: true,
     provider: {
@@ -400,11 +427,11 @@ export function normalizePhoneGpsProviderInput(input: PhoneGpsProviderInput):
     position: {
       latitude,
       longitude,
-      speedMps: nullableFiniteNumber(input.speedMps),
-      headingDegrees: nullableFiniteNumber(input.headingDegrees),
-      altitudeMeters: nullableFiniteNumber(input.altitudeMeters),
-      accuracyMeters: nullableFiniteNumber(input.accuracyMeters),
-      altitudeAccuracyMeters: nullableFiniteNumber(input.altitudeAccuracyMeters),
+      speedMps,
+      headingDegrees,
+      altitudeMeters,
+      accuracyMeters,
+      altitudeAccuracyMeters,
       browserTimestamp,
     },
   }
@@ -419,7 +446,7 @@ function buildPhoneGpsRecord({
   position: Required<PhoneGpsPositionInput>
   serverReceivedAt: string
 }): PhoneGpsRecord {
-  const speedMps = nullableFiniteNumber(position.speedMps)
+  const speedMps = nullableNonNegativeNumber(position.speedMps)
   const altitudeMeters = nullableFiniteNumber(position.altitudeMeters)
 
   return {
@@ -430,22 +457,15 @@ function buildPhoneGpsRecord({
     longitude: position.longitude as number,
     speedMps,
     speedMph: speedMps === null ? null : speedMps * 2.236936,
-    headingDegrees: nullableFiniteNumber(position.headingDegrees),
+    headingDegrees: nullableHeading(position.headingDegrees),
     altitudeMeters,
     altitudeFeet: altitudeMeters === null ? null : altitudeMeters * 3.28084,
-    accuracyMeters: nullableFiniteNumber(position.accuracyMeters),
-    altitudeAccuracyMeters: nullableFiniteNumber(position.altitudeAccuracyMeters),
+    accuracyMeters: nullableNonNegativeNumber(position.accuracyMeters),
+    altitudeAccuracyMeters: nullableNonNegativeNumber(position.altitudeAccuracyMeters),
     browserTimestamp: position.browserTimestamp as number,
     clientTimestamp: new Date(position.browserTimestamp as number).toISOString(),
     serverReceivedAt,
   }
-}
-
-function hasEsp32Gps(packet: Record<string, unknown>) {
-  return (
-    finiteNumber(packet.gpsLat) !== undefined &&
-    finiteNumber(packet.gpsLng) !== undefined
-  )
 }
 
 function finiteNumber(value: unknown) {
@@ -454,6 +474,20 @@ function finiteNumber(value: unknown) {
 
 function nullableFiniteNumber(value: unknown): number | null {
   return value === null || value === undefined ? null : finiteNumber(value) ?? null
+}
+
+function nullableNonNegativeNumber(value: unknown): number | null {
+  const numberValue = nullableFiniteNumber(value)
+
+  return numberValue === null || numberValue < 0 ? null : numberValue
+}
+
+function nullableHeading(value: unknown): number | null {
+  const numberValue = nullableFiniteNumber(value)
+
+  return numberValue === null || numberValue < 0 || numberValue >= 360
+    ? null
+    : numberValue
 }
 
 function nonEmptyString(value: unknown) {

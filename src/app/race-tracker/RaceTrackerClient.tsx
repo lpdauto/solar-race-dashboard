@@ -38,6 +38,7 @@ const mockFallback: PublicRaceStatus = {
   telemetryUpdatedAt: null,
   routeConfidence: 'unavailable',
   distanceFromRouteMeters: null,
+  vehicleLocation: null,
   speedMph: 28.4,
   avgSpeedMph: 26.9,
   currentPlace: '3rd',

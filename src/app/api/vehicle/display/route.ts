@@ -6,6 +6,7 @@ import {
   telemetryErrorJson,
 } from '@/lib/redisTelemetry'
 import { buildVehicleDisplayData } from '@/lib/vehicleDisplay'
+import { normalizeVehicleLocationFromGpsProviderStatus } from '@/lib/vehicleLocation'
 import {
   getGpsProviderStatus,
   mergePhoneGpsIntoTelemetryPayload,
@@ -39,6 +40,8 @@ export async function GET(request: Request) {
 
     const redis = createRedisTelemetryClient()
     const gpsProviderStatus = await getGpsProviderStatus({ redis })
+    const vehicleLocation =
+      normalizeVehicleLocationFromGpsProviderStatus(gpsProviderStatus)
     const payloadWithGps = mergePhoneGpsIntoTelemetryPayload({
       payload: latest.payload,
       phoneGps: gpsProviderStatus.latest,
@@ -46,7 +49,7 @@ export async function GET(request: Request) {
       gpsAgeMs: gpsProviderStatus.gpsAgeMs,
     })
 
-    return noStoreJson(buildVehicleDisplayData(payloadWithGps))
+    return noStoreJson(buildVehicleDisplayData(payloadWithGps, vehicleLocation))
   } catch (error) {
     logTelemetryApiError('/api/vehicle/display', error, { node: 'vehicle' })
 

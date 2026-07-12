@@ -36,6 +36,7 @@ describe('getMockPublicRaceStatus', () => {
         'telemetryUpdatedAt',
         'totalDays',
         'totalMiles',
+        'vehicleLocation',
         'weatherCondition',
         'weatherLocation',
         'weatherTempF',
@@ -160,5 +161,46 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.lng).toBeGreaterThan(-103)
     expect(status.lng).toBeLessThan(-95)
     expect(status.status).toBe('Waiting for GPS')
+  })
+
+  it('uses canonical Android vehicle location instead of ESP32 GPS fields', () => {
+    const status = getPublicRaceStatusFromTelemetry(
+      {
+        id: 'vehicle',
+        node: 'vehicle',
+        updated_at: '2026-06-09T18:29:55.000Z',
+        payload: {
+          speedMph: 0,
+          gpsValid: false,
+          gpsLocationValid: false,
+          gpsLat: 0,
+          gpsLng: 0,
+        },
+      },
+      new Date('2026-06-09T18:30:00Z'),
+      {
+        latitude: 31.738999,
+        longitude: -95.604293,
+        speedMps: 4.47,
+        speedMph: 10,
+        heading: null,
+        altitudeMeters: 70,
+        altitudeFeet: 230,
+        accuracyMeters: 3,
+        altitudeAccuracyMeters: null,
+        clientTimestamp: Date.parse('2026-06-09T18:29:54.000Z'),
+        serverTimestamp: Date.parse('2026-06-09T18:29:55.000Z'),
+        ageMs: 5000,
+        status: 'online',
+        providerName: 'Android GPS Device',
+        source: 'phone',
+      }
+    )
+
+    expect(status.routeConfidence).toBe('live')
+    expect(status.lat).toBe(31.738999)
+    expect(status.lng).toBe(-95.604293)
+    expect(status.speedMph).toBe(10)
+    expect(status.vehicleLocation?.providerName).toBe('Android GPS Device')
   })
 })
