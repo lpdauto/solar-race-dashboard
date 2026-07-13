@@ -174,6 +174,11 @@ describe('GET /api/telemetry/health', () => {
         updated_at: '2026-07-12T15:20:00.000Z',
         ageSeconds: 90,
       },
+      {
+        node: 'gps',
+        updated_at: '2026-07-12T15:21:29.000Z',
+        ageSeconds: 1,
+      },
     ])
   })
 
@@ -217,6 +222,57 @@ describe('GET /api/telemetry/health', () => {
         node: 'vehicle',
         updated_at: null,
         ageSeconds: null,
+      },
+      {
+        node: 'gps',
+        updated_at: '2026-07-12T15:21:29.000Z',
+        ageSeconds: 1,
+      },
+    ])
+  })
+
+  it('marks the GPS node from fresh Android FarDriver telemetry', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-13T21:22:02.000Z'))
+    mockedLoadLatestTelemetry.mockResolvedValueOnce({
+      id: 'vehicle',
+      node: 'vehicle',
+      updated_at: '2026-07-13T21:22:01.000Z',
+      payload: {
+        source: 'android-fardriver',
+        gpsSource: 'android-fardriver',
+        gpsUpdatedAt: '2026-07-13T21:22:01.000Z',
+        lat: 34.119136,
+        lng: -117.987497,
+      },
+    })
+    mockedLoadTelemetryNodeStatuses.mockResolvedValueOnce([
+      {
+        node: 'vehicle',
+        updated_at: '2026-07-13T21:22:01.000Z',
+        ageSeconds: 1,
+      },
+      {
+        node: 'gps',
+        updated_at: '2026-07-13T21:19:00.000Z',
+        ageSeconds: 182,
+      },
+    ])
+
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.nodes).toEqual([
+      {
+        node: 'vehicle',
+        updated_at: null,
+        ageSeconds: null,
+      },
+      {
+        node: 'gps',
+        updated_at: '2026-07-13T21:22:01.000Z',
+        ageSeconds: 1,
       },
     ])
   })

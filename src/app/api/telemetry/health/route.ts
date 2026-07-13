@@ -21,6 +21,10 @@ export async function GET() {
       latestVehicleRow,
       latestVehicle?.updated_at ?? null
     )
+    const latestGpsUpdatedAt = getAndroidGpsUpdatedAt(latestVehicleRow)
+    const latestGpsAgeSeconds = getVehiclePacketAgeSeconds({
+      updatedAt: latestGpsUpdatedAt,
+    })
     const latestVehiclePacketAgeSeconds = getVehiclePacketAgeSeconds({
       updatedAt: latestVehicleUpdatedAt,
       fallbackAgeSeconds: latestVehicleRow ? null : latestVehicle?.ageSeconds,
@@ -32,6 +36,8 @@ export async function GET() {
       nodes,
       updatedAt: latestVehicleUpdatedAt,
       ageSeconds: latestVehiclePacketAgeSeconds,
+      gpsUpdatedAt: latestGpsUpdatedAt,
+      gpsAgeSeconds: latestGpsAgeSeconds,
     })
 
     return noStoreJson({
@@ -122,13 +128,32 @@ function normalizeVehicleNodeStatus({
   nodes,
   updatedAt,
   ageSeconds,
+  gpsUpdatedAt,
+  gpsAgeSeconds,
 }: {
   nodes: TelemetryNodeStatus[]
   updatedAt: string | null
   ageSeconds: number | null
+  gpsUpdatedAt: string | null
+  gpsAgeSeconds: number | null
 }) {
   let foundVehicle = false
+  let foundGps = false
   const normalizedNodes = nodes.map((node) => {
+    if (node.node === 'gps') {
+      foundGps = true
+
+      if (gpsUpdatedAt) {
+        return {
+          ...node,
+          updated_at: gpsUpdatedAt,
+          ageSeconds: gpsAgeSeconds,
+        }
+      }
+
+      return node
+    }
+
     if (node.node !== 'vehicle') return node
 
     foundVehicle = true
@@ -148,14 +173,32 @@ function normalizeVehicleNodeStatus({
     })
   }
 
+  if (!foundGps && gpsUpdatedAt) {
+    normalizedNodes.push({
+      node: 'gps',
+      updated_at: gpsUpdatedAt,
+      ageSeconds: gpsAgeSeconds,
+    })
+  }
+
   return normalizedNodes
+}
+
+function getAndroidGpsUpdatedAt(latestVehicleRow: TelemetryLatestRow | null) {
+  if (!latestVehicleRow) return null
+
+  const payload = objectValue(latestVehicleRow.payload)
+
+  if (!isAndroidGpsPayload(payload)) return null
+
+  return validTimestampString(payload.gpsUpdatedAt)
 }
 
 function isAndroidGpsRefresh(
   latestVehicleRow: TelemetryLatestRow,
   payload: Record<string, unknown>
 ) {
-  if (payload.gpsSource !== 'android-gps') return false
+  if (!isAndroidGpsPayload(payload)) return false
 
   const rowUpdatedAt = Date.parse(latestVehicleRow.updated_at)
   const gpsUpdatedAt = Date.parse(String(payload.gpsUpdatedAt ?? ''))
@@ -165,6 +208,17 @@ function isAndroidGpsRefresh(
     Number.isFinite(gpsUpdatedAt) &&
     Math.abs(rowUpdatedAt - gpsUpdatedAt) < 5_000
   )
+}
+
+function isAndroidGpsPayload(payload: Record<string, unknown>) {
+  const source =
+    typeof payload.gpsSource === 'string' && payload.gpsSource.trim()
+      ? payload.gpsSource.trim()
+      : typeof payload.source === 'string' && payload.source.trim()
+        ? payload.source.trim()
+        : null
+
+  return source === 'android-gps' || source === 'android-fardriver'
 }
 
 function validTimestampString(value: unknown) {

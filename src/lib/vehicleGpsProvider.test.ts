@@ -317,6 +317,44 @@ describe('vehicle GPS provider', () => {
     })
   })
 
+  it('uses Android FarDriver telemetry ingest GPS as the phone GPS source', async () => {
+    const redis = new MemoryRedis()
+
+    await redis.set('latest:vehicle', {
+      payload: {
+        source: 'android-fardriver',
+        gpsSource: 'android-fardriver',
+        deviceId: 'rx2-driver-android',
+        lat: 34.119136,
+        lng: -117.987497,
+        speedMph: 0.2,
+        gpsAccuracyM: 4.1,
+        gpsTimestamp: '2026-07-13T21:22:00.000Z',
+        gpsUpdatedAt: '2026-07-13T21:22:01.000Z',
+      },
+      updated_at: '2026-07-13T21:22:01.000Z',
+    })
+
+    const status = await getGpsProviderStatus({
+      redis,
+      now: new Date('2026-07-13T21:22:02.000Z'),
+    })
+
+    expect(status.gpsStatus).toBe('live')
+    expect(status.gpsSource).toBe('phone')
+    expect(status.activeProvider).toMatchObject({
+      providerId: 'rx2-driver-android',
+      deviceName: 'Android GPS Device',
+    })
+    expect(status.latest).toMatchObject({
+      latitude: 34.119136,
+      longitude: -117.987497,
+      speedMph: 0.2,
+      accuracyMeters: 4.1,
+      serverReceivedAt: '2026-07-13T21:22:01.000Z',
+    })
+  })
+
   it('keeps newer legacy GPS provider data over older Android telemetry ingest GPS', async () => {
     const redis = new MemoryRedis()
     const provider: GpsProviderRecord = {

@@ -552,7 +552,7 @@ function phoneGpsFromAndroidTelemetryPayload(payload: unknown): {
   provider: GpsProviderRecord
   latest: PhoneGpsRecord
 } | null {
-  if (!isJsonObject(payload) || payload.gpsSource !== 'android-gps') {
+  if (!isJsonObject(payload) || !isAndroidTelemetryGpsSource(payload)) {
     return null
   }
 
@@ -573,7 +573,10 @@ function phoneGpsFromAndroidTelemetryPayload(payload: unknown): {
     return null
   }
 
-  const deviceId = nonEmptyString(payload.gpsDeviceId) ?? 'android-gps'
+  const deviceId =
+    nonEmptyString(payload.gpsDeviceId) ??
+    nonEmptyString(payload.deviceId) ??
+    'android-gps'
   const speedMph = nullableNonNegativeNumber(payload.speedMph ?? payload.speed)
   const altitudeMeters = nullableFiniteNumber(payload.altitudeMeters)
   const gpsTimestampMs = timestampMs(payload.gpsTimestamp) ?? Date.parse(serverReceivedAt)
@@ -598,13 +601,21 @@ function phoneGpsFromAndroidTelemetryPayload(payload: unknown): {
       headingDegrees: nullableHeading(payload.heading),
       altitudeMeters,
       altitudeFeet: altitudeMeters === null ? null : altitudeMeters * 3.28084,
-      accuracyMeters: nullableNonNegativeNumber(payload.accuracyMeters),
+      accuracyMeters: nullableNonNegativeNumber(
+        payload.accuracyMeters ?? payload.gpsAccuracyM
+      ),
       altitudeAccuracyMeters: null,
       browserTimestamp: gpsTimestampMs,
       clientTimestamp: new Date(gpsTimestampMs).toISOString(),
       serverReceivedAt,
     },
   }
+}
+
+function isAndroidTelemetryGpsSource(payload: Record<string, unknown>) {
+  const source = nonEmptyString(payload.gpsSource) ?? nonEmptyString(payload.source)
+
+  return source === 'android-gps' || source === 'android-fardriver'
 }
 
 function timestampMs(value: unknown) {
