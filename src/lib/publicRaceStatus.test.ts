@@ -115,7 +115,7 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.status).toBe('Waiting for GPS')
   })
 
-  it('shows California test GPS as off-route but keeps the public map on the route', () => {
+  it('shows California test GPS as off-route while keeping the marker at the live GPS coordinate', () => {
     const status = getPublicRaceStatusFromTelemetry(
       {
         id: 'vehicle',
@@ -137,10 +137,8 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.dataSource).toBe('telemetry')
     expect(status.routeConfidence).toBe('off-route')
     expect(status.distanceFromRouteMeters).toBeGreaterThan(1_000)
-    expect(status.lat).toBeGreaterThan(30)
-    expect(status.lat).toBeLessThan(34)
-    expect(status.lng).toBeGreaterThan(-103)
-    expect(status.lng).toBeLessThan(-95)
+    expect(status.lat).toBe(34.096976)
+    expect(status.lng).toBe(-118.052991)
     expect(status.status).toBe('GPS off route / test location')
   })
 
@@ -209,6 +207,56 @@ describe('getPublicRaceStatusFromTelemetry', () => {
     expect(status.lng).toBe(-95.604293)
     expect(status.speedMph).toBe(10)
     expect(status.vehicleLocation?.providerName).toBe('Android GPS Device')
+  })
+
+  it('carries Android FarDriver vehicle location through the live tracker when off route', () => {
+    const status = getPublicRaceStatusFromTelemetry(
+      {
+        id: 'vehicle',
+        node: 'vehicle',
+        updated_at: '2026-07-20T18:29:55.000Z',
+        payload: {
+          source: 'android-fardriver',
+          gpsSource: 'android-fardriver',
+          speedMph: 0,
+          gpsValid: true,
+          gpsLocationValid: true,
+          lat: 34.119136,
+          lng: -117.987497,
+          gpsLat: 34.119136,
+          gpsLng: -117.987497,
+        },
+      },
+      new Date('2026-07-20T18:30:00Z'),
+      {
+        latitude: 34.119136,
+        longitude: -117.987497,
+        speedMps: 0.089,
+        speedMph: 0.2,
+        heading: 122,
+        altitudeMeters: 88.7,
+        altitudeFeet: 291.01,
+        accuracyMeters: 16,
+        altitudeAccuracyMeters: null,
+        clientTimestamp: Date.parse('2026-07-20T18:29:54.000Z'),
+        serverTimestamp: Date.parse('2026-07-20T18:29:55.000Z'),
+        ageMs: 5000,
+        status: 'online',
+        providerName: 'Android GPS Device',
+        source: 'phone',
+      }
+    )
+
+    expect(status.routeConfidence).toBe('off-route')
+    expect(status.lat).toBe(34.119136)
+    expect(status.lng).toBe(-117.987497)
+    expect(status.speedMph).toBe(0.2)
+    expect(status.vehicleLocation).toMatchObject({
+      providerName: 'Android GPS Device',
+      source: 'phone',
+      latitude: 34.119136,
+      longitude: -117.987497,
+    })
   })
 
   it('updates the public day label from the official race calendar', () => {

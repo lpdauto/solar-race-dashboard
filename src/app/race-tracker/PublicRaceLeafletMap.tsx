@@ -149,7 +149,6 @@ function shouldShowCurrentPosition(raceStatus: PublicRaceStatus) {
   return (
     Number.isFinite(raceStatus.lat) &&
     Number.isFinite(raceStatus.lng) &&
-    raceStatus.routeConfidence !== 'off-route' &&
     raceStatus.routeConfidence !== 'unavailable'
   )
 }

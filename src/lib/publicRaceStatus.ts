@@ -248,10 +248,7 @@ export function getPublicRaceStatusFromTelemetry(
           : liveGps?.fix
             ? 'live'
         : progress.confidence
-  const mapPosition =
-    progress.confidence === 'off-route'
-      ? { lat: progress.lat, lng: progress.lng }
-      : { lat: liveGps.lat, lng: liveGps.lng }
+  const mapPosition = { lat: liveGps.lat, lng: liveGps.lng }
 
   return {
     dataSource: 'telemetry',
