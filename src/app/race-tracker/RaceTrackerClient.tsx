@@ -190,30 +190,30 @@ export default function RaceTrackerClient() {
   const passenger = findTeamMemberById(currentCrew.passengerId)
   const visibleJournal = visiblePublicJournalPosts(journalPosts).slice(0, 4)
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#080808] px-3 py-3 text-white sm:px-5 sm:py-4 lg:px-8">
-      <div className="mx-auto grid max-w-[1540px] grid-cols-1 gap-3 xl:grid-cols-[150px_minmax(0,1fr)_150px] xl:gap-4 2xl:grid-cols-[180px_minmax(0,1fr)_180px]">
+    <main className="race-tracker-page min-h-screen w-full min-w-0 max-w-full overflow-x-hidden bg-[#080808] px-3 py-3 text-white sm:px-4 sm:py-4 lg:px-8">
+      <div className="mx-auto grid w-full min-w-0 max-w-full grid-cols-1 gap-3 xl:max-w-[1540px] xl:grid-cols-[150px_minmax(0,1fr)_150px] xl:gap-4 2xl:grid-cols-[180px_minmax(0,1fr)_180px]">
         <SponsorRail
           sponsors={leftSponsors}
           crewCard={<PublicCrewCard label="Driver" member={driver} />}
         />
 
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:gap-4">
-        <header className="flex flex-col gap-3 rounded-lg border border-[#ff3ea5]/25 bg-[#101010] p-3 shadow-2xl shadow-black/25 sm:flex-row sm:items-end sm:justify-between sm:p-4">
-          <div>
+        <div className="mx-auto flex w-full min-w-0 max-w-full flex-col gap-3 sm:gap-4 xl:max-w-5xl">
+        <header className="flex w-full min-w-0 max-w-full flex-col gap-3 rounded-lg border border-[#ff3ea5]/25 bg-[#101010] p-3 shadow-2xl shadow-black/25 sm:flex-row sm:items-end sm:justify-between sm:p-4">
+          <div className="min-w-0 max-w-full">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#ff8fcb] sm:text-xs">
               Public Race Feed
             </p>
-            <h1 className="mt-1 text-[1.7rem] font-black leading-none tracking-tight text-white sm:mt-2 sm:text-4xl">
+            <h1 className="mt-1 max-w-full break-words text-[1.7rem] font-black leading-tight tracking-tight text-white sm:mt-2 sm:text-4xl sm:leading-none">
               RX2 Live Race Tracker
             </h1>
-            <p className="mt-1 text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:text-base">
+            <p className="mt-1 max-w-full break-words text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:text-base">
               Solar Car Challenge 2026 · {raceStatus.currentDayLabel} · Fort
               Worth → Fort Stockton
             </p>
           </div>
-          <div className="grid w-full grid-cols-1 gap-1.5 text-xs font-bold min-[440px]:grid-cols-3 sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:text-sm">
+          <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-1.5 text-xs font-bold min-[440px]:grid-cols-3 sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:text-sm">
             <span
-              className={`rounded-md border px-2.5 py-2 text-center sm:px-3 ${
+              className={`min-w-0 break-words rounded-md border px-2.5 py-2 text-center sm:px-3 ${
                 fetchState === 'live'
                   ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100'
                   : fetchState === 'loading'
@@ -229,27 +229,27 @@ export default function RaceTrackerClient() {
                 ? 'Loading feed'
                 : 'Using last update'}
             </span>
-            <span className="rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-2 text-center text-sky-100 sm:px-3">
+            <span className="min-w-0 break-words rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-2 text-center text-sky-100 sm:px-3">
               {raceStatus.dataSource === 'telemetry'
                 ? telemetryFreshnessLabel(raceStatus.telemetryAgeSeconds)
                 : 'Telemetry standby'}
             </span>
-            <span className="rounded-md border border-white/10 bg-black/30 px-2.5 py-2 text-center text-slate-300 sm:px-3">
+            <span className="min-w-0 break-words rounded-md border border-white/10 bg-black/30 px-2.5 py-2 text-center text-slate-300 sm:px-3">
               Updated {lastUpdated}
             </span>
           </div>
         </header>
 
-        <section className="overflow-hidden rounded-lg border border-white/10 bg-[#101010] shadow-2xl shadow-black/25">
+        <section className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-[#101010] shadow-2xl shadow-black/25">
           <PublicRaceLeafletMap raceStatus={raceStatus} />
         </section>
 
-        <section className="grid gap-2 xl:hidden min-[430px]:grid-cols-2">
+        <section className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2 xl:hidden min-[430px]:grid-cols-2">
           <PublicCrewCard label="Driver" member={driver} compact />
           <PublicCrewCard label="Passenger" member={passenger} compact />
         </section>
 
-        <section className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <section className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <MetricTile label="Current Speed" value={`${raceStatus.speedMph.toFixed(1)} mph`} accent="hot" />
           <MetricTile label="Average Speed" value={`${raceStatus.avgSpeedMph.toFixed(1)} mph`} accent="rose" />
           <MetricTile
@@ -273,7 +273,7 @@ export default function RaceTrackerClient() {
           />
         </section>
 
-        <section className="rounded-lg border border-white/10 bg-[#101010] p-3 shadow-xl shadow-black/20 sm:p-4">
+        <section className="w-full min-w-0 max-w-full rounded-lg border border-white/10 bg-[#101010] p-3 shadow-xl shadow-black/20 sm:p-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
@@ -287,7 +287,7 @@ export default function RaceTrackerClient() {
               ETA {raceStatus.eta}
             </p>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:mt-4 sm:gap-3 lg:grid-cols-6">
+          <div className="mt-3 grid w-full min-w-0 max-w-full grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:mt-4 sm:gap-3 lg:grid-cols-6">
             <StatusField label="Current day" value={raceStatus.currentDayLabel} />
             <StatusField label="Current segment" value={raceStatus.currentSegment} />
             <StatusField label="Next stop" value={raceStatus.nextStop} />
@@ -349,13 +349,13 @@ function routeConfidenceLabel(
 
 function FuelTheCrewWidget() {
   return (
-    <section className="rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-3 shadow-xl shadow-black/20 sm:p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+    <section className="w-full min-w-0 max-w-full rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-3 shadow-xl shadow-black/20 sm:p-4">
+      <div className="flex w-full min-w-0 max-w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 max-w-full">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
             Support the Road Crew
           </p>
-          <h2 className="mt-1 text-xl font-black text-white sm:text-2xl">Fuel the Crew</h2>
+          <h2 className="mt-1 break-words text-xl font-black text-white sm:text-2xl">Fuel the Crew</h2>
           <p className="mt-1 text-sm font-bold leading-5 text-slate-300 sm:mt-2 sm:leading-6">
             Help keep the students fed, hydrated, and smiling between stops.
           </p>
@@ -364,12 +364,12 @@ function FuelTheCrewWidget() {
           href={supportUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex w-full items-center justify-center rounded-md border border-[#ff8fcb]/50 bg-[#ff3ea5]/10 p-2 transition hover:-translate-y-0.5 hover:bg-[#ff3ea5]/20 sm:w-auto"
+          className="inline-flex w-full min-w-0 max-w-full items-center justify-center rounded-md border border-[#ff8fcb]/50 bg-[#ff3ea5]/10 p-2 transition hover:-translate-y-0.5 hover:bg-[#ff3ea5]/20 sm:w-auto"
         >
           <img
             src="/race-images/support/buy-me-a-coffee-button.png"
             alt="Buy me a coffee"
-            className="h-12 w-auto"
+            className="h-12 w-auto max-w-full"
           />
         </a>
       </div>
@@ -379,26 +379,26 @@ function FuelTheCrewWidget() {
 
 function LatestTeamJournal({ posts }: { posts: PublicJournalPost[] }) {
   return (
-    <section className="rounded-lg border border-white/10 bg-[#101010] p-4 shadow-xl shadow-black/20">
-      <div>
+    <section className="w-full min-w-0 max-w-full rounded-lg border border-white/10 bg-[#101010] p-4 shadow-xl shadow-black/20">
+      <div className="min-w-0 max-w-full">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-[#ff8fcb]">
           Latest Team Journal
         </p>
-        <h2 className="mt-1 text-2xl font-black text-white">
+        <h2 className="mt-1 break-words text-2xl font-black text-white">
           Notes from the route
         </h2>
       </div>
 
       {posts.length > 0 ? (
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 grid min-w-0 gap-3">
           {posts.map((post) => (
             <article
               key={post.id}
-              className="rounded-md border border-white/10 bg-black/25 p-4"
+              className="min-w-0 rounded-md border border-white/10 bg-black/25 p-4"
             >
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-white">{post.title}</h3>
+                <div className="min-w-0">
+                  <h3 className="break-words text-lg font-black text-white">{post.title}</h3>
                   <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-slate-500">
                     Day {post.day} - {post.city}
                   </p>
@@ -407,14 +407,14 @@ function LatestTeamJournal({ posts }: { posts: PublicJournalPost[] }) {
                   {formatJournalTime(post.publishAt)}
                 </p>
               </div>
-              <p className="mt-3 text-sm font-bold leading-6 text-slate-300">
+              <p className="mt-3 break-words text-sm font-bold leading-6 text-slate-300">
                 {post.message}
               </p>
             </article>
           ))}
         </div>
       ) : (
-        <p className="mt-4 rounded-md border border-white/10 bg-black/25 p-4 text-sm font-bold leading-6 text-slate-300">
+        <p className="mt-4 min-w-0 rounded-md border border-white/10 bg-black/25 p-4 text-sm font-bold leading-6 text-slate-300">
           Coming soon.
         </p>
       )}
@@ -444,8 +444,8 @@ function SponsorRail({
   crewCard?: ReactNode
 }) {
   return (
-    <aside className="hidden xl:flex">
-      <div className="sticky top-4 flex w-full flex-col gap-3">
+    <aside className="hidden min-w-0 xl:flex">
+      <div className="sticky top-4 flex w-full min-w-0 flex-col gap-3">
         {sponsors.map((sponsor) => (
           <SponsorLogo key={sponsor.name} sponsor={sponsor} />
         ))}
@@ -465,18 +465,18 @@ function PublicCrewCard({
   compact?: boolean
 }) {
   return (
-    <section className="rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-2.5 shadow-xl shadow-black/20 sm:p-3">
+    <section className="w-full min-w-0 max-w-full rounded-lg border border-[#ff3ea5]/35 bg-[#140711] p-2.5 shadow-xl shadow-black/20 sm:p-3">
       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#ff8fcb] sm:text-xs">
         Current {label}
       </p>
       <div
-        className={`mt-2 gap-3 sm:mt-3 ${
-          compact ? 'flex items-center sm:grid' : 'grid'
+        className={`mt-2 min-w-0 gap-3 sm:mt-3 ${
+          compact ? 'grid grid-cols-[5rem_minmax(0,1fr)] items-center min-[360px]:grid-cols-[6rem_minmax(0,1fr)] sm:grid-cols-1 sm:items-start' : 'grid'
         }`}
       >
         <div
           className={`relative shrink-0 overflow-hidden rounded-md border border-[#ff8fcb]/35 bg-black ${
-            compact ? 'h-24 w-24 sm:h-auto sm:w-full sm:aspect-square' : 'aspect-square w-full'
+            compact ? 'h-20 w-20 min-[360px]:h-24 min-[360px]:w-24 sm:h-auto sm:w-full sm:aspect-square' : 'aspect-square w-full'
           }`}
         >
           {member?.imageSrc ? (
@@ -493,11 +493,11 @@ function PublicCrewCard({
             </div>
           )}
         </div>
-        <div className="min-w-0">
-          <p className="text-lg font-black leading-tight text-white sm:text-xl xl:text-lg 2xl:text-xl">
+        <div className="min-w-0 max-w-full">
+          <p className="break-words text-lg font-black leading-tight text-white sm:text-xl xl:text-lg 2xl:text-xl">
             {member?.name ?? 'Unassigned'}
           </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-300 sm:mt-2 sm:text-sm">
+          <p className="mt-1 break-words text-xs font-bold leading-5 text-slate-300 sm:mt-2 sm:text-sm">
             {member?.role ?? 'Set in Operations'}
           </p>
         </div>
@@ -512,7 +512,7 @@ function SponsorGrid({
   sponsors: Array<{ name: string; logoUrl?: string; sponsorUrl?: string }>
 }) {
   return (
-    <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:hidden">
+    <section className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:grid-cols-3 sm:gap-3 xl:hidden">
       {sponsors.map((sponsor) => (
         <SponsorLogo key={sponsor.name} sponsor={sponsor} />
       ))}
@@ -529,21 +529,21 @@ function SponsorLogo({
   const content = (
     <>
       {sponsor.logoUrl ? (
-        <span className="flex w-full flex-col items-center gap-2">
+        <span className="flex w-full min-w-0 max-w-full flex-col items-center gap-2">
           <img
             src={sponsor.logoUrl}
             alt={`${sponsor.name} logo`}
             loading="lazy"
-            className="max-h-10 w-full object-contain sm:max-h-14"
+            className="h-auto max-h-10 w-full max-w-full object-contain sm:max-h-14"
           />
           {showNameWithLogo ? (
-            <span className="text-center text-[11px] font-black text-slate-950 sm:text-xs">
+            <span className="max-w-full break-words text-center text-[11px] font-black text-slate-950 sm:text-xs">
               {sponsor.name}
             </span>
           ) : null}
         </span>
       ) : (
-        <span className="text-center text-xs font-black leading-4 text-slate-950 sm:text-sm">
+        <span className="max-w-full break-words text-center text-xs font-black leading-4 text-slate-950 sm:text-sm">
           {sponsor.name}
         </span>
       )}
@@ -557,7 +557,7 @@ function SponsorLogo({
         target="_blank"
         rel="noreferrer"
         title={sponsor.name}
-        className="flex min-h-16 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
+        className="flex min-h-16 min-w-0 max-w-full items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
       >
         {content}
       </a>
@@ -567,7 +567,7 @@ function SponsorLogo({
   return (
     <div
       title={sponsor.name}
-      className="flex min-h-16 items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
+      className="flex min-h-16 min-w-0 max-w-full items-center justify-center rounded-lg border border-[#ff3ea5]/20 bg-white p-2 shadow-xl shadow-black/20 sm:min-h-20 sm:p-3"
     >
       {content}
     </div>
@@ -595,20 +595,20 @@ function MetricTile({
   }[accent]
 
   return (
-    <div className="rounded-lg border border-[#ff3ea5]/25 bg-[#120a10] p-3 shadow-xl shadow-black/20 sm:p-4">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#d58aad] sm:text-xs sm:tracking-[0.16em]">
+    <div className="min-w-0 max-w-full rounded-lg border border-[#ff3ea5]/25 bg-[#120a10] p-3 shadow-xl shadow-black/20 sm:p-4">
+      <p className="break-words text-[10px] font-black uppercase tracking-[0.14em] text-[#d58aad] sm:text-xs sm:tracking-[0.16em]">
         {label}
       </p>
-      <p className={`mt-1.5 text-[1.45rem] font-black leading-tight sm:mt-3 sm:text-2xl ${colorClass}`}>{value}</p>
-      {detail ? <p className="mt-1 text-xs font-bold leading-5 text-[#caa0b6] sm:text-sm">{detail}</p> : null}
+      <p className={`mt-1.5 break-words text-[1.45rem] font-black leading-tight sm:mt-3 sm:text-2xl ${colorClass}`}>{value}</p>
+      {detail ? <p className="mt-1 break-words text-xs font-bold leading-5 text-[#caa0b6] sm:text-sm">{detail}</p> : null}
     </div>
   )
 }
 
 function StatusField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-white/10 bg-black/30 p-2.5 sm:p-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
+    <div className="min-w-0 max-w-full rounded-md border border-white/10 bg-black/30 p-2.5 sm:p-3">
+      <p className="break-words text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
         {label}
       </p>
       <p className="mt-1.5 break-words text-base font-black leading-6 text-white sm:mt-2 sm:text-base">{value}</p>

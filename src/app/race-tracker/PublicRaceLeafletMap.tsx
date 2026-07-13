@@ -56,10 +56,10 @@ export default function PublicRaceLeafletMap({
     [raceStatus.lat, raceStatus.lng, showCurrentPosition]
   )
   return (
-    <div className="relative h-[240px] w-full min-[420px]:h-[300px] sm:h-[420px] md:h-[560px]">
+    <div className="relative h-[300px] w-full min-w-0 max-w-full overflow-hidden min-[420px]:h-[320px] sm:h-[420px] md:h-[560px]">
       <MapContainer
         bounds={bounds}
-        className="h-full w-full"
+        className="h-full w-full max-w-full"
         maxZoom={13}
         minZoom={5}
         scrollWheelZoom={false}
@@ -212,8 +212,8 @@ function CheckpointDrawer({
   onNext: () => void
 }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-[1000] max-h-[82%] overflow-y-auto rounded-t-lg border border-white/10 bg-[#101010] shadow-2xl shadow-black/50 md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[360px] md:rounded-lg">
-      <div className="relative aspect-[16/9] overflow-hidden rounded-t-lg bg-black/40">
+    <aside className="absolute inset-x-0 bottom-0 z-[1000] max-h-[82%] max-w-full overflow-y-auto rounded-t-lg border border-white/10 bg-[#101010] shadow-2xl shadow-black/50 md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[360px] md:rounded-lg">
+      <div className="relative aspect-[16/9] w-full min-w-0 max-w-full overflow-hidden rounded-t-lg bg-black/40">
         {checkpoint.image.src ? (
           <Image
             src={checkpoint.image.src}
@@ -237,8 +237,8 @@ function CheckpointDrawer({
         </button>
       </div>
 
-      <div className="space-y-4 p-4">
-        <div>
+      <div className="min-w-0 space-y-4 p-4">
+        <div className="min-w-0">
           <div className="flex flex-wrap gap-2">
             <span className="rounded-md border border-[#ff3ea5]/35 bg-[#ff3ea5]/10 px-2.5 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#ff8fcb]">
               Day {checkpoint.day}
@@ -247,15 +247,15 @@ function CheckpointDrawer({
               {checkpoint.type}
             </span>
           </div>
-          <h2 className="mt-3 text-2xl font-black text-white">
+          <h2 className="mt-3 break-words text-2xl font-black text-white">
             {checkpoint.name}
           </h2>
-          <p className="mt-1 text-sm font-bold text-slate-400">
+          <p className="mt-1 break-words text-sm font-bold text-slate-400">
             {checkpoint.city}
           </p>
         </div>
 
-        <p className="text-sm leading-6 text-slate-200">
+        <p className="break-words text-sm leading-6 text-slate-200">
           {checkpoint.shortDescription}
         </p>
 
@@ -263,7 +263,7 @@ function CheckpointDrawer({
           <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff8fcb]">
             Why This Stop Matters
           </p>
-          <p className="mt-2 text-sm leading-6 text-slate-200">
+          <p className="mt-2 break-words text-sm leading-6 text-slate-200">
             {checkpoint.whyItMatters}
           </p>
         </section>

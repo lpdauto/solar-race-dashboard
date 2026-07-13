@@ -96,6 +96,34 @@ a {
   color: #cfcfcf;
 }
 
+.race-tracker-page,
+.race-tracker-page * {
+  box-sizing: border-box;
+}
+
+.race-tracker-page {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.race-tracker-page img,
+.race-tracker-page svg,
+.race-tracker-page canvas,
+.race-tracker-page iframe {
+  max-width: 100%;
+}
+
+.race-tracker-page img {
+  height: auto;
+}
+
+.race-tracker-page .leaflet-container {
+  width: 100%;
+  max-width: 100%;
+}
+
 .course-map-marker {
   display: grid;
   width: 28px;
