@@ -6,12 +6,15 @@ import type {
   EfficiencyRunStatus,
   EfficiencyTestRun,
   TestRunChartPoint,
+  TestTelemetrySample,
 } from '@/types/efficiencyTest'
+import { nullableBoolean, nullableNumber } from '@/lib/testModeFormat'
 
 const runHistoryStorageKey = 'rx2-testmode-efficiency-runs-v1'
 
-// Below this speed we pause accumulation entirely (idle/stopped time should
-// not pollute a cruise-efficiency baseline).
+// Below this speed we pause the *efficiency* accumulation (distance/energy/
+// chart) entirely -- idle/stopped time should not pollute a cruise baseline.
+// Raw sample logging is NOT gated by this; it always runs while active.
 const lowSpeedThresholdMph = 5
 const rollingWindowMs = 15_000
 // Upper bound on chart-point cadence. Actual cadence also depends on how
@@ -29,6 +32,7 @@ type RollingSample = {
 
 type RunAccumulator = {
   id: string
+  name: string
   startedAtMs: number
   lastSampleAtMs: number | null
   totalDistanceMiles: number
@@ -46,6 +50,7 @@ type RunAccumulator = {
   latestControllerTempC?: number
   rollingBuffer: RollingSample[]
   chartPoints: TestRunChartPoint[]
+  samples: TestTelemetrySample[]
   lastChartPushAtMs: number
 }
 
@@ -54,6 +59,7 @@ export type EfficiencyLiveSnapshot = {
   distanceMiles: number
   rollingWhPerMile: number | null
   runAverageWhPerMile: number | null
+  sampleCount: number
 }
 
 const initialLiveSnapshot: EfficiencyLiveSnapshot = {
@@ -61,17 +67,19 @@ const initialLiveSnapshot: EfficiencyLiveSnapshot = {
   distanceMiles: 0,
   rollingWhPerMile: null,
   runAverageWhPerMile: null,
+  sampleCount: 0,
 }
 
 /**
- * Drives the Test Mode baseline-efficiency feature: accumulates energy/
- * distance from the existing telemetry stream (no separate polling),
- * derives a 15s rolling Wh/mi and a run-average Wh/mi, and persists
- * completed runs to localStorage.
+ * Drives the unified Test Mode "baseline efficiency" feature: one Start/End/
+ * Reset flow that both (a) logs every raw telemetry sample unconditionally,
+ * for later CSV/JSON export, and (b) accumulates energy/distance -- paused
+ * below 5 mph -- to derive a 15s rolling Wh/mi and a run-average Wh/mi.
  *
- * `packetUpdatedAt` should be the cloud packet's server-side updated_at
- * (from useTelemetry()'s cloudPacketStatus) so repeated polls of the same
- * still-fresh packet don't get double-integrated as if time had passed.
+ * Reuses the existing telemetry stream (no separate polling). `packetUpdatedAt`
+ * should be the cloud packet's server-side updated_at (from useTelemetry()'s
+ * cloudPacketStatus) so repeated polls of the same still-fresh packet don't
+ * get double-logged/double-integrated as if time had passed.
  */
 export function useEfficiencyTestRun(
   telemetry: TelemetryData | null,
@@ -110,8 +118,8 @@ export function useEfficiencyTestRun(
     setRunHistory(readRunHistory())
   }, [])
 
-  // Core accumulation loop. Runs whenever telemetry or its packet identity
-  // changes; no-ops unless a run is active (runRef.current !== null).
+  // Core loop. Runs whenever telemetry or its packet identity changes;
+  // no-ops unless a run is active (runRef.current !== null).
   useEffect(() => {
     const acc = runRef.current
     if (!telemetry || !acc) return
@@ -131,6 +139,9 @@ export function useEfficiencyTestRun(
         multiplyIfFinite(telemetry.batteryVoltage, telemetry.batteryCurrent),
         telemetry.batteryPowerWatts
       ) ?? 0
+
+    // 1. Raw sample logging -- unconditional, regardless of speed.
+    acc.samples.push(buildRawSample(telemetry, nowMs))
 
     if (acc.startingMotorTempC === undefined && Number.isFinite(telemetry.motorTempC)) {
       acc.startingMotorTempC = telemetry.motorTempC
@@ -153,30 +164,28 @@ export function useEfficiencyTestRun(
     acc.powerSumW += powerW
     acc.powerSampleCount += 1
 
+    // 2. Efficiency accumulation -- gated on speed and on having a real time
+    // delta to integrate over. Pauses (doesn't stop) below the low-speed
+    // threshold, per spec.
     if (previousSampleAtMs !== null) {
       const deltaMs = nowMs - previousSampleAtMs
+      const isLowSpeed = speedMph < lowSpeedThresholdMph
 
-      if (Number.isFinite(deltaMs) && deltaMs > 0) {
+      if (Number.isFinite(deltaMs) && deltaMs > 0 && !isLowSpeed) {
         const deltaHours = deltaMs / 3_600_000
-        const isLowSpeed = speedMph < lowSpeedThresholdMph
+        const deltaDistanceMiles = speedMph * deltaHours
+        const deltaEnergyWhNet = powerW * deltaHours
+        const deltaEnergyConsumedWh = Math.max(0, deltaEnergyWhNet)
 
-        // Pause accumulation (both distance and energy) below the low-speed
-        // threshold, per spec -- but never stop the run or drop prior data.
-        if (!isLowSpeed) {
-          const deltaDistanceMiles = speedMph * deltaHours
-          const deltaEnergyWhNet = powerW * deltaHours
-          const deltaEnergyConsumedWh = Math.max(0, deltaEnergyWhNet)
+        acc.totalDistanceMiles += deltaDistanceMiles
+        acc.netEnergyWh += deltaEnergyWhNet
+        acc.totalEnergyWh += deltaEnergyConsumedWh
 
-          acc.totalDistanceMiles += deltaDistanceMiles
-          acc.netEnergyWh += deltaEnergyWhNet
-          acc.totalEnergyWh += deltaEnergyConsumedWh
-
-          acc.rollingBuffer.push({
-            atMs: nowMs,
-            deltaEnergyWh: deltaEnergyConsumedWh,
-            deltaDistanceMiles,
-          })
-        }
+        acc.rollingBuffer.push({
+          atMs: nowMs,
+          deltaEnergyWh: deltaEnergyConsumedWh,
+          deltaDistanceMiles,
+        })
 
         const rollingCutoffMs = nowMs - rollingWindowMs
         while (
@@ -185,47 +194,53 @@ export function useEfficiencyTestRun(
         ) {
           acc.rollingBuffer.shift()
         }
+
+        // Only plot chart points once the efficiency conditions are
+        // actually met (moving, actively accumulating) -- never while
+        // paused below the low-speed threshold.
+        if (nowMs - acc.lastChartPushAtMs >= chartPointIntervalMs) {
+          acc.lastChartPushAtMs = nowMs
+
+          acc.chartPoints.push({
+            timestamp: nowMs,
+            elapsedSeconds: Math.max(0, Math.round((nowMs - acc.startedAtMs) / 1000)),
+            distanceMiles: acc.totalDistanceMiles,
+            speedMph,
+            powerW,
+            rollingWhPerMile: rollingWhPerMileFrom(acc),
+            runAverageWhPerMile:
+              acc.totalDistanceMiles > 0
+                ? acc.totalEnergyWh / acc.totalDistanceMiles
+                : null,
+          })
+          setLiveChartPoints([...acc.chartPoints])
+        }
       }
     }
 
-    const shouldPushChartPoint = nowMs - acc.lastChartPushAtMs >= chartPointIntervalMs
-    if (!shouldPushChartPoint) return
-
-    acc.lastChartPushAtMs = nowMs
-
-    const rollingWhPerMile = rollingWhPerMileFrom(acc)
-    const runAverageWhPerMile =
-      acc.totalDistanceMiles > 0 ? acc.totalEnergyWh / acc.totalDistanceMiles : null
-
-    const point: TestRunChartPoint = {
-      timestamp: nowMs,
+    // Live snapshot (status-strip + metric-card values) updates every
+    // processed sample regardless of low-speed pause, so elapsed time and
+    // sample count stay live even while efficiency accumulation is paused.
+    setLiveSnapshot({
       elapsedSeconds: Math.max(0, Math.round((nowMs - acc.startedAtMs) / 1000)),
       distanceMiles: acc.totalDistanceMiles,
-      speedMph,
-      powerW,
-      rollingWhPerMile,
-      runAverageWhPerMile,
-    }
-
-    acc.chartPoints.push(point)
-    setLiveChartPoints([...acc.chartPoints])
-    setLiveSnapshot({
-      elapsedSeconds: point.elapsedSeconds,
-      distanceMiles: acc.totalDistanceMiles,
-      rollingWhPerMile,
-      runAverageWhPerMile,
+      rollingWhPerMile: rollingWhPerMileFrom(acc),
+      runAverageWhPerMile:
+        acc.totalDistanceMiles > 0 ? acc.totalEnergyWh / acc.totalDistanceMiles : null,
+      sampleCount: acc.samples.length,
     })
     // Accumulation reads runRef/refs directly; only telemetry identity and
     // packet freshness should re-trigger this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telemetry, packetUpdatedAt])
 
-  const startRun = useCallback(() => {
+  const startRun = useCallback((name: string) => {
     const nowMs = Date.now()
     const currentTelemetry = telemetryRef.current
 
     runRef.current = {
       id: createRunId(),
+      name,
       startedAtMs: nowMs,
       lastSampleAtMs: null,
       totalDistanceMiles: 0,
@@ -241,6 +256,7 @@ export function useEfficiencyTestRun(
       latestControllerTempC: finiteOrUndefined(currentTelemetry?.controllerTempC),
       rollingBuffer: [],
       chartPoints: [],
+      samples: [],
       lastChartPushAtMs: 0,
     }
     lastProcessedUpdatedAtRef.current = null
@@ -266,6 +282,7 @@ export function useEfficiencyTestRun(
 
     const completed: EfficiencyTestRun = {
       id: acc.id,
+      name: acc.name,
       targetSpeedMph: targetSpeedRef.current,
       targetDistanceMiles: targetDistanceRef.current,
       startedAt: new Date(acc.startedAtMs).toISOString(),
@@ -282,6 +299,7 @@ export function useEfficiencyTestRun(
       startingControllerTempC: acc.startingControllerTempC,
       endingControllerTempC: acc.latestControllerTempC,
       chartPoints: acc.chartPoints,
+      samples: acc.samples,
     }
 
     runRef.current = null
@@ -350,6 +368,69 @@ function rollingWhPerMileFrom(acc: RunAccumulator): number | null {
   }
 
   return distanceMiles > 0 ? energyWh / distanceMiles : null
+}
+
+function buildRawSample(telemetry: TelemetryData, nowMs: number): TestTelemetrySample {
+  const location = telemetry.location
+
+  return {
+    timestamp: nowMs,
+    gpsLat: nullableNumber(location?.latitude ?? telemetry.gpsLat),
+    gpsLng: nullableNumber(location?.longitude ?? telemetry.gpsLng),
+    gpsLatitude: nullableNumber(location?.latitude ?? telemetry.gpsLat),
+    gpsLongitude: nullableNumber(location?.longitude ?? telemetry.gpsLng),
+    gpsSpeedMps: nullableNumber(location?.speedMps ?? telemetry.gpsSpeed),
+    gpsSpeedMph: nullableNumber(location?.speedMph ?? telemetry.speedMph),
+    gpsHeading: nullableNumber(location?.heading ?? telemetry.gpsHeading),
+    gpsAltitudeMeters: nullableNumber(location?.altitudeMeters),
+    gpsAltitudeFeet: nullableNumber(location?.altitudeFeet ?? telemetry.gpsElevationFt),
+    gpsAccuracyMeters: nullableNumber(location?.accuracyMeters ?? telemetry.gpsAccuracy),
+    gpsClientTimestamp: nullableNumber(location?.clientTimestamp),
+    gpsServerTimestamp: nullableNumber(location?.serverTimestamp),
+    gpsAgeMs: nullableNumber(location?.ageMs ?? telemetry.gpsAgeMs),
+    gpsStatus: location?.status ?? null,
+    gpsProviderName: location?.providerName ?? null,
+    gpsSource: location?.source ?? null,
+    speedMph: nullableNumber(telemetry.speedMph),
+    distanceMiles: nullableNumber(telemetry.distanceMiles ?? telemetry.odometerMiles),
+    batterySocPercent: nullableNumber(telemetry.batterySocPercent),
+    batteryVoltage: nullableNumber(telemetry.batteryVoltage),
+    batteryCurrent: nullableNumber(telemetry.batteryCurrent),
+    batteryPowerWatts: nullableNumber(telemetry.batteryPowerWatts),
+    whPerMile: nullableNumber(telemetry.efficiencyWhPerMile ?? telemetry.whPerMile),
+    motorTempC: nullableNumber(telemetry.motorTempC),
+    controllerTempC: nullableNumber(telemetry.controllerTempC),
+    controllerSpeedMph: nullableNumber(telemetry.controllerSpeedMph),
+    motorRpm: nullableNumber(telemetry.motorRpm),
+    throttlePercent: nullableNumber(telemetry.throttlePercent),
+    throttleVoltage: nullableNumber(telemetry.throttleVoltage),
+    phaseA: nullableNumber(telemetry.phaseA),
+    phaseC: nullableNumber(telemetry.phaseC),
+    modulation: nullableNumber(telemetry.modulation),
+    gear: nullableNumber(telemetry.gear),
+    controllerSerial: telemetry.controllerSerial ?? null,
+    controllerFaultCode: nullableNumber(telemetry.controllerFaultCode),
+    controllerState: telemetry.controllerState ?? null,
+    bleConnected: nullableBoolean(telemetry.bleConnected),
+    packetRateHz: nullableNumber(telemetry.packetRateHz),
+    solarPowerWatts: nullableNumber(telemetry.solarPowerWatts),
+    mpptPowerWatts: nullableNumber(
+      telemetry.mpptPowerWatts ?? telemetry.mpptPvPowerWatts ?? telemetry.mpptChargePowerWatts
+    ),
+    bmsConnected: nullableBoolean(telemetry.bmsConnected),
+    bmsAddress: telemetry.bmsAddress ?? null,
+    bmsVoltage: nullableNumber(telemetry.bmsVoltage),
+    bmsCurrent: nullableNumber(telemetry.bmsCurrent),
+    bmsPowerWatts: nullableNumber(telemetry.bmsPowerWatts),
+    bmsSocPercent: nullableNumber(telemetry.bmsSocPercent),
+    avgCellVoltage: nullableNumber(telemetry.avgCellVoltage),
+    cellMinVoltage: nullableNumber(telemetry.cellMinVoltage),
+    cellMaxVoltage: nullableNumber(telemetry.cellMaxVoltage),
+    cellDeltaMv: nullableNumber(telemetry.cellDeltaMv),
+    batteryTemp1C: nullableNumber(telemetry.batteryTemp1C),
+    batteryTemp2C: nullableNumber(telemetry.batteryTemp2C),
+    mosTempC: nullableNumber(telemetry.mosTempC),
+  }
 }
 
 export function firstFiniteNumber(...values: Array<number | undefined>) {
