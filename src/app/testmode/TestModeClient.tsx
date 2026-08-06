@@ -31,9 +31,34 @@ type TestTelemetrySample = {
   whPerMile?: number | null
   motorTempC?: number | null
   controllerTempC?: number | null
+  controllerSpeedMph?: number | null
+  motorRpm?: number | null
+  throttlePercent?: number | null
+  throttleVoltage?: number | null
+  phaseA?: number | null
+  phaseC?: number | null
+  modulation?: number | null
+  gear?: number | null
+  controllerSerial?: string | null
+  controllerFaultCode?: number | null
+  controllerState?: string | null
+  bleConnected?: boolean | null
   packetRateHz?: number | null
   solarPowerWatts?: number | null
   mpptPowerWatts?: number | null
+  bmsConnected?: boolean | null
+  bmsAddress?: string | null
+  bmsVoltage?: number | null
+  bmsCurrent?: number | null
+  bmsPowerWatts?: number | null
+  bmsSocPercent?: number | null
+  avgCellVoltage?: number | null
+  cellMinVoltage?: number | null
+  cellMaxVoltage?: number | null
+  cellDeltaMv?: number | null
+  batteryTemp1C?: number | null
+  batteryTemp2C?: number | null
+  mosTempC?: number | null
 }
 
 type TestSession = {
@@ -58,12 +83,15 @@ type ActiveRecording = {
 
 const storageKey = 'rx2-testmode-sessions-v1'
 const activeStorageKey = 'rx2-testmode-active-v1'
+const cloudNodeStorageKey = 'rx2-testmode-cloud-node-v1'
+const defaultTestCloudNode = 'vehicle-test'
 const sampleIntervalMs = 1000
 
 export default function TestModeClient() {
   const telemetryController = useTelemetry()
   const telemetry = telemetryController.telemetry
   const [testName, setTestName] = useState('')
+  const [cloudNodeInput, setCloudNodeInput] = useState(defaultTestCloudNode)
   const [sessions, setSessions] = useState<TestSession[]>([])
   const [activeRecording, setActiveRecording] = useState<ActiveRecording | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -91,7 +119,29 @@ export default function TestModeClient() {
       setActiveRecording(restored)
       activeRecordingRef.current = restored
     }
+
+    const storedNode = readCloudNode()
+    setCloudNodeInput(storedNode)
+    telemetryController.setCloudNode(storedNode)
+    // Test mode watches an isolated 'vehicle-test' node by default so recorded
+    // runs never collide with the live race-day 'vehicle' node.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    // setCloudNode() alone doesn't (re)start polling -- the hook only
+    // auto-connects once on mount. Reconnect explicitly whenever the watched
+    // node changes, including the very first time it's set above.
+    telemetryController.connect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telemetryController.cloudNode])
+
+  function applyCloudNode() {
+    const node = cloudNodeInput.trim() || defaultTestCloudNode
+    setCloudNodeInput(node)
+    writeCloudNode(node)
+    telemetryController.setCloudNode(node)
+  }
 
   useEffect(() => {
     telemetryRef.current = telemetry
@@ -195,6 +245,29 @@ export default function TestModeClient() {
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <label className="grid gap-2">
               <span className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
+                Cloud node (Redis)
+              </span>
+              <input
+                value={cloudNodeInput}
+                onChange={(event) => setCloudNodeInput(event.target.value)}
+                placeholder={defaultTestCloudNode}
+                disabled={Boolean(activeRecording)}
+                className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-[#ff3ea5]/50"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={applyCloudNode}
+              disabled={Boolean(activeRecording)}
+              className="h-11 rounded-md border border-white/10 bg-white/5 px-4 text-sm font-black text-white transition hover:border-[#ff3ea5]/35 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Watch node
+            </button>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <label className="grid gap-2">
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
                 Test name
               </span>
               <input
@@ -236,6 +309,7 @@ export default function TestModeClient() {
             <Metric label="Current SOC" value={formatNumber(telemetry?.batterySocPercent, '%', 1)} />
             <Metric label="Current Wh/mi" value={formatWhPerMile(telemetry)} />
             <Metric label="Telemetry source" value={telemetryController.source} />
+            <Metric label="Cloud node" value={telemetryController.cloudNode} />
           </div>
         </section>
 
@@ -329,6 +403,18 @@ function createSample(telemetry: TelemetryData | null): TestTelemetrySample {
     whPerMile: nullableNumber(telemetry?.efficiencyWhPerMile ?? telemetry?.whPerMile),
     motorTempC: nullableNumber(telemetry?.motorTempC),
     controllerTempC: nullableNumber(telemetry?.controllerTempC),
+    controllerSpeedMph: nullableNumber(telemetry?.controllerSpeedMph),
+    motorRpm: nullableNumber(telemetry?.motorRpm),
+    throttlePercent: nullableNumber(telemetry?.throttlePercent),
+    throttleVoltage: nullableNumber(telemetry?.throttleVoltage),
+    phaseA: nullableNumber(telemetry?.phaseA),
+    phaseC: nullableNumber(telemetry?.phaseC),
+    modulation: nullableNumber(telemetry?.modulation),
+    gear: nullableNumber(telemetry?.gear),
+    controllerSerial: telemetry?.controllerSerial ?? null,
+    controllerFaultCode: nullableNumber(telemetry?.controllerFaultCode),
+    controllerState: telemetry?.controllerState ?? null,
+    bleConnected: nullableBoolean(telemetry?.bleConnected),
     packetRateHz: nullableNumber(telemetry?.packetRateHz),
     solarPowerWatts: nullableNumber(telemetry?.solarPowerWatts),
     mpptPowerWatts: nullableNumber(
@@ -336,6 +422,19 @@ function createSample(telemetry: TelemetryData | null): TestTelemetrySample {
         telemetry?.mpptPvPowerWatts ??
         telemetry?.mpptChargePowerWatts
     ),
+    bmsConnected: nullableBoolean(telemetry?.bmsConnected),
+    bmsAddress: telemetry?.bmsAddress ?? null,
+    bmsVoltage: nullableNumber(telemetry?.bmsVoltage),
+    bmsCurrent: nullableNumber(telemetry?.bmsCurrent),
+    bmsPowerWatts: nullableNumber(telemetry?.bmsPowerWatts),
+    bmsSocPercent: nullableNumber(telemetry?.bmsSocPercent),
+    avgCellVoltage: nullableNumber(telemetry?.avgCellVoltage),
+    cellMinVoltage: nullableNumber(telemetry?.cellMinVoltage),
+    cellMaxVoltage: nullableNumber(telemetry?.cellMaxVoltage),
+    cellDeltaMv: nullableNumber(telemetry?.cellDeltaMv),
+    batteryTemp1C: nullableNumber(telemetry?.batteryTemp1C),
+    batteryTemp2C: nullableNumber(telemetry?.batteryTemp2C),
+    mosTempC: nullableNumber(telemetry?.mosTempC),
   }
 }
 
@@ -424,6 +523,22 @@ function readActiveRecording(): ActiveRecording | null {
   return readJson<ActiveRecording | null>(activeStorageKey, null)
 }
 
+function readCloudNode(): string {
+  try {
+    return localStorage.getItem(cloudNodeStorageKey)?.trim() || defaultTestCloudNode
+  } catch {
+    return defaultTestCloudNode
+  }
+}
+
+function writeCloudNode(node: string) {
+  try {
+    localStorage.setItem(cloudNodeStorageKey, node)
+  } catch {
+    // Ignore storage failures (e.g. private browsing).
+  }
+}
+
 function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
@@ -461,9 +576,34 @@ function downloadSessionCsv(session: TestSession) {
     'whPerMile',
     'motorTempC',
     'controllerTempC',
+    'controllerSpeedMph',
+    'motorRpm',
+    'throttlePercent',
+    'throttleVoltage',
+    'phaseA',
+    'phaseC',
+    'modulation',
+    'gear',
+    'controllerSerial',
+    'controllerFaultCode',
+    'controllerState',
+    'bleConnected',
     'packetRateHz',
     'solarPowerWatts',
     'mpptPowerWatts',
+    'bmsConnected',
+    'bmsAddress',
+    'bmsVoltage',
+    'bmsCurrent',
+    'bmsPowerWatts',
+    'bmsSocPercent',
+    'avgCellVoltage',
+    'cellMinVoltage',
+    'cellMaxVoltage',
+    'cellDeltaMv',
+    'batteryTemp1C',
+    'batteryTemp2C',
+    'mosTempC',
   ]
   const header = columns.join(',')
   const rows = session.samples.map((sample) =>
@@ -515,6 +655,10 @@ function csvCell(value: unknown) {
 
 function nullableNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function nullableBoolean(value: unknown) {
+  return typeof value === 'boolean' ? value : null
 }
 
 function formatNumber(value: unknown, suffix: string, digits = 0) {

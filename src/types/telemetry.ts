@@ -73,6 +73,22 @@ export type TelemetryData = {
   gpsSpeed?: number
   gpsHeading?: number
   gpsAccuracy?: number
+  controllerSpeedMph?: number
+  controllerFaultCode?: number
+  controllerState?: string
+  bmsConnected?: boolean
+  bmsAddress?: string
+  bmsVoltage?: number
+  bmsCurrent?: number
+  bmsPowerWatts?: number
+  bmsSocPercent?: number
+  avgCellVoltage?: number
+  cellMinVoltage?: number
+  cellMaxVoltage?: number
+  cellDeltaMv?: number
+  batteryTemp1C?: number
+  batteryTemp2C?: number
+  mosTempC?: number
 }
 
 export type NormalizedTelemetry = TelemetryData
@@ -178,6 +194,22 @@ export function normalizeTelemetry(input: TelemetryInput): TelemetryData {
     gpsSpeed: input.gpsSpeed,
     gpsHeading: input.gpsHeading,
     gpsAccuracy: input.gpsAccuracy,
+    controllerSpeedMph: input.controllerSpeedMph,
+    controllerFaultCode: input.controllerFaultCode,
+    controllerState: input.controllerState,
+    bmsConnected: input.bmsConnected,
+    bmsAddress: input.bmsAddress,
+    bmsVoltage: input.bmsVoltage,
+    bmsCurrent: input.bmsCurrent,
+    bmsPowerWatts: input.bmsPowerWatts,
+    bmsSocPercent: input.bmsSocPercent,
+    avgCellVoltage: input.avgCellVoltage,
+    cellMinVoltage: input.cellMinVoltage,
+    cellMaxVoltage: input.cellMaxVoltage,
+    cellDeltaMv: input.cellDeltaMv,
+    batteryTemp1C: input.batteryTemp1C,
+    batteryTemp2C: input.batteryTemp2C,
+    mosTempC: input.mosTempC,
   }
 }
 

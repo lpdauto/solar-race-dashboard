@@ -91,6 +91,22 @@ export type Esp32TelemetryPacket = {
   energyConsumedWh?: number
   energyRecoveredWh?: number
   batteryEnergyWh?: number
+  controllerSpeedMph?: number
+  controllerFaultCode?: number
+  controllerState?: string
+  bmsConnected?: boolean
+  bmsAddress?: string
+  bmsVoltage?: number
+  bmsCurrent?: number
+  bmsPowerWatts?: number
+  bmsSocPercent?: number
+  avgCellVoltage?: number
+  cellMinVoltage?: number
+  cellMaxVoltage?: number
+  cellDeltaMv?: number
+  batteryTemp1C?: number
+  batteryTemp2C?: number
+  mosTempC?: number
 }
 
 export const mockEsp32TelemetryPacket: Esp32TelemetryPacket = {
@@ -197,6 +213,22 @@ export function parseEsp32TelemetryPacket(
     energyConsumedWh: finiteNumber(packet.energyConsumedWh),
     energyRecoveredWh: finiteNumber(packet.energyRecoveredWh),
     batteryEnergyWh: finiteNumber(packet.batteryEnergyWh),
+    controllerSpeedMph: finiteNumber(packet.controllerSpeedMph),
+    controllerFaultCode: finiteNumber(packet.controllerFaultCode),
+    controllerState: stringValue(packet.controllerState),
+    bmsConnected: booleanValue(packet.bmsConnected),
+    bmsAddress: stringValue(packet.bmsAddress),
+    bmsVoltage: finiteNumber(packet.bmsVoltage),
+    bmsCurrent: finiteNumber(packet.bmsCurrent),
+    bmsPowerWatts: finiteNumber(packet.bmsPowerWatts),
+    bmsSocPercent: finiteNumber(packet.bmsSocPercent),
+    avgCellVoltage: finiteNumber(packet.avgCellVoltage),
+    cellMinVoltage: finiteNumber(packet.cellMinVoltage),
+    cellMaxVoltage: finiteNumber(packet.cellMaxVoltage),
+    cellDeltaMv: finiteNumber(packet.cellDeltaMv),
+    batteryTemp1C: finiteNumber(packet.batteryTemp1C),
+    batteryTemp2C: finiteNumber(packet.batteryTemp2C),
+    mosTempC: finiteNumber(packet.mosTempC),
   } satisfies TelemetryInput)
 }
 
