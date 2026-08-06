@@ -87,8 +87,15 @@ const cloudNodeStorageKey = 'rx2-testmode-cloud-node-v1'
 const defaultTestCloudNode = 'vehicle-test'
 const sampleIntervalMs = 1000
 
+// Test mode is a supervised, short recording session (not an unattended
+// race-day dashboard), so it's safe to poll Redis faster than the default
+// 10s -- gives 1s-resolution samples instead of ~10s-stale steps.
+const testModeCloudPollIntervalMs = 1_000
+
 export default function TestModeClient() {
-  const telemetryController = useTelemetry()
+  const telemetryController = useTelemetry({
+    cloudPollIntervalMs: testModeCloudPollIntervalMs,
+  })
   const telemetry = telemetryController.telemetry
   const [testName, setTestName] = useState('')
   const [cloudNodeInput, setCloudNodeInput] = useState(defaultTestCloudNode)

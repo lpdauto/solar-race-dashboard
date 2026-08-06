@@ -55,6 +55,14 @@ const emptyPacketStats: TelemetryPacketStats = {
 type UseTelemetryOptions = {
   currentMile?: number
   currentSegment?: RouteSegment | null
+  /**
+   * Overrides the cloud 'latest' poll interval (ms). Defaults to a
+   * conservative 10s to protect Upstash free-tier command limits during
+   * long race-day dashboard sessions -- only lower this for callers that
+   * aren't running unattended for hours (e.g. a supervised test-mode
+   * recording session).
+   */
+  cloudPollIntervalMs?: number
 }
 
 export type TelemetryHistorySample = {
@@ -79,6 +87,7 @@ const cloudTelemetryHealthPollIntervalMs = 30_000
 export function useTelemetry({
   currentMile,
   currentSegment,
+  cloudPollIntervalMs = cloudTelemetryLatestPollIntervalMs,
 }: UseTelemetryOptions = {}) {
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null)
   const [status, setStatus] =
@@ -459,7 +468,7 @@ export function useTelemetry({
     void pollCloudTelemetry()
     intervalRef.current = window.setInterval(
       pollCloudTelemetryIfVisible,
-      cloudTelemetryLatestPollIntervalMs
+      cloudPollIntervalMs
     )
     document.addEventListener('visibilitychange', handleVisibilityChange)
     cloudVisibilityCleanupRef.current = () => {
