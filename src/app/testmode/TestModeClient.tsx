@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTelemetry } from '@/hooks/useTelemetry'
+import EfficiencyTestPanel from '@/components/EfficiencyTestPanel'
 import type { TelemetryData } from '@/types/telemetry'
 
 type TestTelemetrySample = {
@@ -320,6 +321,11 @@ export default function TestModeClient() {
           </div>
         </section>
 
+        <EfficiencyTestPanel
+          telemetry={telemetry}
+          packetUpdatedAt={telemetryController.cloudPacketStatus?.updatedAt}
+        />
+
         <section className="grid gap-3 rounded-lg border border-white/10 bg-white/[0.045] p-4 shadow-xl shadow-black/20">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8fcb]">
@@ -490,7 +496,7 @@ function averageSampleValue(
   return values.reduce((total, value) => total + value, 0) / values.length
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+export function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-[#ff3ea5]/25 bg-black/35 p-3">
       <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#ff8fcb]">
@@ -668,7 +674,7 @@ function nullableBoolean(value: unknown) {
   return typeof value === 'boolean' ? value : null
 }
 
-function formatNumber(value: unknown, suffix: string, digits = 0) {
+export function formatNumber(value: unknown, suffix: string, digits = 0) {
   return typeof value === 'number' && Number.isFinite(value)
     ? `${value.toFixed(digits)}${suffix}`
     : '--'
@@ -696,7 +702,7 @@ function calculateRecordedDistance(samples: TestTelemetrySample[]) {
   return Math.max(0, distances[distances.length - 1] - distances[0])
 }
 
-function formatDuration(totalSeconds: number) {
+export function formatDuration(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.round(totalSeconds))
   const minutes = Math.floor(safeSeconds / 60)
   const seconds = safeSeconds % 60
