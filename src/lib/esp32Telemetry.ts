@@ -22,6 +22,8 @@ export type Esp32TelemetryPacket = {
   altitudeFt?: number
   elevationFt?: number
   gpsAltitudeM?: number
+  gpsAccuracyM?: number
+  accuracyMeters?: number
   gpsSpeedMph?: number
   gpsHeading?: number
   heading?: number
@@ -167,6 +169,7 @@ export function parseEsp32TelemetryPacket(
         packet.courseDeg ??
         packet.gpsCourseDeg
     ),
+    gpsAccuracy: finiteNumber(packet.gpsAccuracyM ?? packet.accuracyMeters),
     batteryVoltage: finiteNumber(packet.packVoltage ?? packet.batteryVoltage),
     batteryCurrent: finiteNumber(packet.packCurrent ?? packet.batteryCurrent),
     batterySocPercent: clampSoc(
