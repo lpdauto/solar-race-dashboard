@@ -781,9 +781,18 @@ function deriveEffectiveTelemetryStatus({
   }
 
   const selectedNodeHealth = findSelectedNodeHealth(cloudHealth, cloudNode)
-  const healthLastPacketAt = parseTimestamp(selectedNodeHealth?.updated_at)
+
+  // /api/telemetry/health only tracks a fixed set of nodes (telemetryNodeOptions).
+  // A custom node (e.g. Test Mode's 'vehicle-test') will never appear there, so
+  // fall back to the raw poll-derived status instead of reporting a bogus
+  // "connecting" status for a node that is actually receiving fresh data.
+  if (!selectedNodeHealth) {
+    return rawStatusResult
+  }
+
+  const healthLastPacketAt = parseTimestamp(selectedNodeHealth.updated_at)
   const healthPacketAgeSeconds =
-    selectedNodeHealth?.ageSeconds ?? getPacketAgeSeconds(healthLastPacketAt)
+    selectedNodeHealth.ageSeconds ?? getPacketAgeSeconds(healthLastPacketAt)
   const freshness = classifyTelemetryFreshness(healthPacketAgeSeconds)
 
   return {
