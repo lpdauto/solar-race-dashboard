@@ -54,7 +54,7 @@ export default function TestModeClient() {
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff8fcb]">
             Telemetry recorder
           </p>
-          <h1 className="mt-2 text-3xl font-black text-white">RX2 Test Mode</h1>
+          <h1 className="mt-2 text-3xl font-black text-white">RX2 Test Palmdale</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
             Record live vehicle telemetry locally during test sessions. Data stays in this browser.
           </p>
